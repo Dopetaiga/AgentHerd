@@ -4,9 +4,9 @@
 
 | ID | Name | Result | Exit criteria |
 | --- | --- | --- | --- |
-| M0 | Spec freeze | Specs 00–07 and ADRs 0001–0010 accepted | Baseline 0.1.0 marked Frozen |
+| M0 | Spec freeze | Specs 00–07 and ADRs 0001–0011 accepted | Baseline 0.1.0 marked Frozen |
 | M1 | Headless loop | `core` + `adapter-mock` + `channel-feishu`, run from a CLI | E2E-APPROVE-AWAY and E2E-DESK-DEFER pass with a fake channel; one manual run with real Feishu |
-| M2 | Claude Code + desktop shell | `adapter-claude-code` (attach), `hook`, desktop app with onboarding (QR), sessions list, inbox, mode and presence switches | A real Claude Code session is approved from Feishu |
+| M2 | Claude Code + desktop shell | `adapter-claude-code` (attach), `hook`, desktop app with onboarding (QR), sessions list, inbox, mode and presence switches, keep-awake switch | A real Claude Code session is approved from Feishu |
 | M3 | Herder | Guard list, L0 rules, "Always do this", L1, L2, observe metrics, decision memory | Observe mode reports agreement on a replayed event set |
 | M4 | More agents | `adapter-codex` (launch + attach observe), `adapter-acp`, `run` command from Feishu | One task each for Codex and one ACP agent runs end to end from Feishu |
 | M5 | Release | Signed macOS build, auto-update, README with GIF | Fresh-machine install to first card in < 5 minutes |

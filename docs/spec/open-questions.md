@@ -16,3 +16,4 @@ answer and the evidence (link, command output, date) and, if it changes a decisi
 | Q09 | Pi packages to depend on (`@earendil-works/pi-agent-core`, the AI provider package) and their stability policy | M3 | Open |
 | Q10 | Idle detection API for presence on macOS without extra permissions | M2 | Open |
 | Q11 | Windows support: named pipe for the local API, hook command quoting | after M5 | Open |
+| Q12 | `pmset -a disablesleep 1` on current macOS / Apple Silicon: does it keep the system awake with the lid closed on battery and on power? Best way to ask for admin rights from Electron (`osascript ... with administrator privileges` or a helper)? | M2 keep-awake | Open |

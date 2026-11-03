@@ -119,3 +119,22 @@ Secrets (Feishu App Secret, model API keys) are stored with Electron `safeStorag
   need no decision) are not routed to AgentHerd at all; only the hooks listed in
   [03-agent-adapters.md](03-agent-adapters.md) are installed.
 - The Herder calls a model only for L1 and L2. L0 rules cost nothing.
+
+## 7. Keep running with the lid closed
+
+Applied ADR: [0011](../adr/0011-keep-running-with-lid-closed.md). macOS only in v1.
+
+| Setting | Default | Meaning |
+| --- | --- | --- |
+| `keepAwake` | `false` | Opt-in switch in the tray and settings |
+| `keepAwakeIdleMinutes` | `15` | Restore normal sleep after this long with no active session |
+| `keepAwakeMinBattery` | `20` | On battery, restore normal sleep below this percent |
+
+Rules:
+
+- Before the first change, save the current `disablesleep` value in `config.json`.
+- Restore it when the switch is turned off, on idle, at the battery floor, on quit, and on the
+  next start after a crash.
+- The tray icon shows when keep-awake is on.
+- Every change and restore is logged, and the channel gets a short notice when keep-awake
+  stops for battery.

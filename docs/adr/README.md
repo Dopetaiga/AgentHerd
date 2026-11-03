@@ -14,3 +14,4 @@ Format and rules: [ADR 0001](0001-record-architecture-decisions.md).
 | [0008](0008-observe-first-rollout.md) | Observe-first rollout | Proposed |
 | [0009](0009-mit-license-reference-only.md) | MIT license, reference other projects without copying code | Proposed |
 | [0010](0010-typescript-pnpm-monorepo.md) | TypeScript pnpm monorepo | Proposed |
+| [0011](0011-keep-running-with-lid-closed.md) | Keep running with the lid closed (macOS) | Proposed |

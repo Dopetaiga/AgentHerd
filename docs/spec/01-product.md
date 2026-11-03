@@ -37,6 +37,7 @@ Tagline: **Herd your coding agents. Only get pinged when it matters.**
 | G4 | Start new agent tasks from Feishu and follow their progress. |
 | G5 | Set up in less than 5 minutes: install, scan one QR code, done. |
 | G6 | Supervise every supported agent through one adapter model ([03-agent-adapters.md](03-agent-adapters.md)). |
+| G7 | Keep agents and AgentHerd running when the laptop lid is closed (macOS, opt-in). See [02-architecture.md](02-architecture.md#7-keep-running-with-the-lid-closed). |
 
 ## 5. Non-goals for v1
 
@@ -44,6 +45,8 @@ Tagline: **Herd your coding agents. Only get pinged when it matters.**
 - AgentHerd is not an IDE or a chat UI that replaces the agents' own UIs.
 - No cloud service, account system or telemetry backend.
 - No team features: shared rules, multiple owners, role-based approval.
+- No remote host: AgentHerd and the agents run on the user's computer. Work does not continue
+  when that computer is shut down (ADR 0011, option B).
 - No mobile app. The chat app is the mobile UI.
 - No promise to bypass an agent's own safety settings. AgentHerd answers prompts that the
   agent already shows; it does not turn off the agent's sandbox.
