@@ -2,20 +2,37 @@
 
 > Herd your coding agents. Only get pinged when it matters.
 
-同时跑多个 Claude Code / Codex 会话时，AgentHerd 在桌面端常驻，替你看住它们：
-低风险、有先例的审批和提问由主管（Herder）自动处理，真正需要你拍板的事才通过飞书找你。
+English | [简体中文](README.zh-CN.md)
 
-> 状态：设计阶段，还没有可运行的代码。
+You run several coding agents at once — Claude Code, Codex, OpenCode, Gemini CLI. They keep
+stopping to ask for permission, to ask a question, or because they are done or stuck.
+AgentHerd watches them from your desktop. It handles the routine prompts that have a clear
+precedent, and it pings you in your chat app, one item at a time, only when a decision
+really needs you.
 
-## 设计要点（草案）
+> **Status:** design phase. There is no runnable code yet. Read the
+> [baseline spec](docs/spec/00-baseline.md).
 
-- **飞书是主界面**：审批卡片、提问卡片、派活、每日摘要。扫一次码即可接入，不需要手动创建和发布应用。
-- **桌面端（Electron）负责配置和观察**：扫码接入、一键安装 Hook、各会话实时状态、规则与决策历史、托盘常驻。
-- **主管基于 [Pi](https://github.com/earendil-works/pi)**：决策流水线 L0 规则 → L1 低成本分类 → L2 只读 Pi Agent → L3 找人。
-- **v1 被管的 Agent**：Claude Code（PermissionRequest / Notification / Stop Hook）和 Codex。
-- **少占注意力**：一次只问一件事；默认先只给建议（observe），确认可靠后再放开自动决策；所有决策可审计、可撤销。
+## How it works
 
-参考过的项目见 [docs/references.md](docs/references.md)。
+- **Chat app as the remote control.** Approve, deny or answer from a card on your phone.
+  Start new tasks with a message. Feishu (Lark) is the first channel; one QR scan sets it up.
+- **Every agent, one model.** Adapters attach to sessions you start yourself (through hooks)
+  or launch new ones (through app-server, ACP or SDKs).
+- **The Herder decides in tiers.** Guard list → your rules → a small model → a read-only
+  [Pi](https://github.com/earendil-works/pi) agent → you. When unsure or broken, it asks you
+  or lets the agent ask you. It never guesses "allow".
+- **Trust in steps.** It starts in `observe` mode: it only suggests and measures how often it
+  agrees with you. You turn on `assist` and `auto` when the numbers say so.
+- **Local only.** No AgentHerd server. Secrets stay in your OS keychain.
+
+## Docs
+
+- [Specs](docs/spec/00-baseline.md): what AgentHerd does
+- [ADRs](docs/adr/README.md): why it is built this way
+- [Plans](plans/README.md): how it is being built
+- [References](docs/references.md): projects we learned from
+- [AGENTS.md](AGENTS.md): rules for contributors and coding agents
 
 ## License
 
