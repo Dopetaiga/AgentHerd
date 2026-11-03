@@ -16,7 +16,8 @@ dsh-superagent prototype uses an observe mode for the same reason.
 - New installs start in `observe`.
 - The desktop app shows the agreement rate between suggestions and the owner's real answers
   next to the mode switch.
-- Separate from mode, presence (`desk`, `away`) decides where human decisions go.
+- Where human decisions go is separate from mode. (The presence state first described here
+  was removed by ADR 0012.)
 
 ## Alternatives
 

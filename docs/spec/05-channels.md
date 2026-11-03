@@ -40,13 +40,13 @@ inbound messages from anyone else are dropped and logged.
 | Item card | An item needs the owner. One card per item. At most one open card per session; newer items for the same session queue behind it. |
 | Final state | The card is updated in place: "Allowed by you", "Denied", "Expired (answered in terminal)". |
 | Task progress | For tasks started from the chat app: started, waiting, done (with a summary). |
+| Reminder | Every `remindMinutes` (default 30) while an item is open. |
 | Daily digest | Optional. Counts, automatic decisions with reasons, decisions marked wrong. |
 
 Commands the owner can send as plain text:
 
 | Text | Effect |
 | --- | --- |
-| `away` / `back` | Set presence |
 | `status` | List sessions and their states |
 | `run <dir> <prompt>` | Launch a task (launch-capable agent from settings) |
 | Reply to a card | Answer that item |

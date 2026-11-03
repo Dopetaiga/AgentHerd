@@ -22,7 +22,6 @@ new type, table, IPC channel or product string.
 | **Guard list** | Built-in matches that always escalate | blocklist |
 | **Precedent** | A past decision used to decide a new item | |
 | **Mode** | How much AgentHerd applies by itself: `observe`, `assist`, `auto` | level |
-| **Presence** | Where human decisions go: `desk` or `away` | status |
 | **Channel** | A chat app integration (Feishu first) | IM, notifier |
 | **Owner** | The one person allowed to act on items | admin, user (in code) |
 | **Card** | A channel message for one item | |

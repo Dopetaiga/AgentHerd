@@ -94,6 +94,9 @@ Launch mode: through the Claude Agent SDK or `claude -p --output-format stream-j
 
 ## 6. ACP agents
 
+First real agent (ADR 0014). Tested with DeepSeek Harness: `dsh acp` speaks ACP over stdio
+and answered `initialize` on 2026-11-04 (protocol version 1, session `close`/`list`/`resume`).
+
 AgentHerd acts as an ACP client and starts the agent (launch mode only). The agent sends
 `session/request_permission` and the client answers with one of the offered options.
 Capabilities: all except attach. One adapter serves every ACP agent; the agent command line

@@ -36,9 +36,13 @@ These defaults hold until an ADR changes them.
 4. Only the owner (the person who scanned the Feishu QR code) can approve, deny or answer.
 5. TypeScript everywhere. Node.js 22 or later. pnpm workspaces.
 6. Docs are in English. `README.zh-CN.md` mirrors `README.md`.
+7. macOS 14 or later only ([ADR 0013](../adr/0013-macos-only-for-v1.md)).
+8. Every escalated item goes to the channel; the desktop app manages, it does not decide
+   ([ADR 0012](../adr/0012-channel-is-the-only-decision-surface.md)).
+9. The Herder model is chosen by the user during onboarding; no default provider.
 
 ## Version history
 
 | Version | Date | Change |
 | --- | --- | --- |
-| 0.1.0 | 2026-11-04 | First draft |
+| 0.1.0 | 2026-11-04 | First draft; maintainer decisions on platform, decision surface, first real agent, model, rule scope, signing |

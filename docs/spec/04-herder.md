@@ -1,7 +1,7 @@
 # 04. Herder
 
 Applied ADRs: [0003](../adr/0003-herder-on-pi-agent-core.md), [0007](../adr/0007-tiered-decisions-fail-open-to-human.md),
-[0008](../adr/0008-observe-first-rollout.md).
+[0008](../adr/0008-observe-first-rollout.md), [0012](../adr/0012-channel-is-the-only-decision-surface.md).
 
 The Herder is the part of AgentHerd that decides. It is not a long-running chat agent. It is
 an event-driven pipeline: one event in, one decision out. It keeps no conversation between
@@ -14,7 +14,7 @@ Input for one event:
 - the `AgentEvent` that needs a decision;
 - a short summary of the session (task, recent turns, files changed), at most 2 000 tokens;
 - up to 5 past decisions from memory that look similar;
-- the rule set and the current mode and presence.
+- the rule set and the current mode.
 
 Output:
 
@@ -62,7 +62,8 @@ A rule is a match plus an action. Match fields: agent kind, event type, tool nam
 pattern (glob on the normalized command), path scope (inside the session `cwd` or a listed
 directory). Rules come from:
 
-- the "Always do this" button on a card (the user confirms the generated match before it is saved);
+- the "Always do this" button on a card. The generated rule is scoped to the session's project
+  directory by default; the owner can widen it later in the desktop rule editor;
 - the desktop rule editor;
 - import of the agent's own allowlist (for example Claude Code `permissions.allow`).
 
@@ -79,18 +80,19 @@ A Pi agent with read-only tools: read file, list, grep, `git status`, `git diff`
 session transcript. Budget per item: 8 tool calls, 60 seconds, a token limit set in
 configuration. It cannot write files or run other commands. It is used when L1 is unsure.
 
-## 3. Presence
+## 3. Where human decisions go
 
-Presence decides where human decisions go.
+Applied ADR: [0012](../adr/0012-channel-is-the-only-decision-surface.md).
 
-| Presence | Behavior |
-| --- | --- |
-| `desk` | The hook returns `defer`; the agent shows its own prompt in the terminal. The channel gets nothing unless the item waits longer than `deskTimeout` (default 5 min). |
-| `away` | Items go to the channel. The hook waits for the answer. |
-
-Presence is set from the tray, from the chat app ("I'm back"), or by idle detection
-(no keyboard or mouse input for 10 minutes sets `away`). **(verify: whether a waiting
-Claude Code hook still lets the user answer in the terminal.)**
+- Every escalated item goes to the channel. There is no "at the desk" state; the desktop app
+  manages AgentHerd but is not where the owner answers.
+- The item waits for the owner. A reminder is sent every `remindMinutes` (default 30) while
+  it is open. AgentHerd never decides for the owner because time passed.
+- Exceptions, where the item falls back to the agent's own UI (`defer`): the channel is
+  disconnected, or the core fails. In launch mode there is no agent UI, so the item stays in
+  the inbox, shows in the desktop app, and goes to the channel when it reconnects.
+- Attach mode: while a hook waits for the channel, the agent's own terminal prompt may not
+  show **(verify, Q04)**.
 
 ## 4. Modes
 
@@ -128,7 +130,8 @@ agent to stop or give it an instruction.
 
 ## 7. Model provider
 
-The Herder uses the model the user configures (any provider Pi supports). Suggested
-defaults: a fast model for L1 (for example DeepSeek V4 Flash) and a stronger model for L2
-(for example DeepSeek V4 Pro). Without a model, AgentHerd still works with guard list, rules
-and the human.
+- The user picks the provider and models during onboarding, from the providers Pi supports.
+  AgentHerd ships no default provider. L1 and L2 can use different models; the onboarding
+  page explains that L1 should be fast and cheap and L2 stronger.
+- The model step can be skipped. Without a model, AgentHerd works with the guard list, rules
+  and the owner; L1 and L2 are off.

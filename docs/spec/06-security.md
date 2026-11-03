@@ -11,7 +11,7 @@ a mistake with the user's shell. This spec lists the rules that keep that power 
 | Hook bridge → core | Unix socket with mode `600` in a directory with mode `700`. No TCP listener. |
 | Renderer → main → core | `contextIsolation: true`, `sandbox: true`, `nodeIntegration: false`. The preload exposes typed methods only. |
 | Herder model → decisions | Model output is data. It is parsed against a schema; on a parse error the item is escalated. The guard list runs before any model. |
-| Agent content → Herder prompt | Agent output (commands, files, transcripts) is untrusted. It is quoted as data in prompts and can never change rules, mode or presence. |
+| Agent content → Herder prompt | Agent output (commands, files, transcripts) is untrusted. It is quoted as data in prompts and can never change rules or mode. |
 
 ## 2. Secrets
 
@@ -27,8 +27,8 @@ a mistake with the user's shell. This spec lists the rules that keep that power 
 - Core not running, socket missing, timeout, crash, invalid model output: the hook returns
   `defer`, and the agent asks the user in its own UI. AgentHerd never answers "allow" because
   of an error.
-- Channel disconnected: items stay in the inbox and show in the desktop app; presence falls
-  back to `desk` behavior for new items.
+- Channel disconnected: new items in attach mode return `defer`, so the agent asks in its own
+  UI. Launch-mode items stay in the inbox and are sent when the channel reconnects.
 - Hooks are only written by an explicit user action in the desktop app, with a backup and a
   one-click removal.
 

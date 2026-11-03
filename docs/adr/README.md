@@ -15,3 +15,6 @@ Format and rules: [ADR 0001](0001-record-architecture-decisions.md).
 | [0009](0009-mit-license-reference-only.md) | MIT license, reference other projects without copying code | Proposed |
 | [0010](0010-typescript-pnpm-monorepo.md) | TypeScript pnpm monorepo | Proposed |
 | [0011](0011-keep-running-with-lid-closed.md) | Keep running with the lid closed (macOS) | Proposed |
+| [0012](0012-channel-is-the-only-decision-surface.md) | The channel is the only place where the owner decides | Proposed |
+| [0013](0013-macos-only-for-v1.md) | macOS only for v1 | Proposed |
+| [0014](0014-acp-first-real-agent.md) | ACP is the first real agent integration | Proposed |

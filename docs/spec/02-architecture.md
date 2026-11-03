@@ -94,7 +94,7 @@ Rules:
   - `event.report` (hook → core): one raw agent event. The reply is the decision, or
     `defer` when the hook must let the agent ask on its own.
   - `session.list`, `session.watch` (desktop → core).
-  - `item.list`, `item.resolve` (desktop → core).
+  - `item.list`, `item.watch` (desktop → core, read-only; owners decide in the channel).
 - The hook waits for at most `hookTimeoutMs` (default 600 000 ms, configurable per
   adapter). On timeout or on any error it returns `defer`.
 
