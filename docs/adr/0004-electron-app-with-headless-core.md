@@ -7,7 +7,7 @@
 ## Context
 
 AgentHerd needs a desktop window for onboarding (QR code), session overview, rules and
-history, plus a tray icon to stay running. The core logic (adapters, Herder, channels) is
+history, plus a tray icon to stay running. The core logic (ACP client, Herder, channels) is
 Node code, and both the Pi packages and the Feishu SDK are Node packages. The maintainer
 knows Electron + React from AgentRecall and PI-Desktop.
 

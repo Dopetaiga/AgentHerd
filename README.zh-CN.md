@@ -14,8 +14,11 @@
 
 - **用聊天软件当遥控器。** 在手机上通过卡片批准、拒绝或回答，也可以发一条消息派新任务。
   第一个支持的是飞书（Lark），扫一次码就能接入。
-- **所有 Agent 用同一套模型管理。** 适配器既能接入你自己启动的会话（通过 Hook），
-  也能由 AgentHerd 启动新会话（通过 app-server、ACP 或 SDK）。
+- **支持 ACP 的 Agent 都能接入。** AgentHerd 通过
+  [Agent Client Protocol](https://agentclientprotocol.com) 启动 Agent：Claude Code、Codex、
+  Gemini CLI、OpenCode、DeepSeek Harness 等。新加一个 Agent 只要写一行配置。
+- **一套规则，处处生效。** 你的规则还会编译成各个 Agent 自己的权限配置，
+  所以你在终端里自己开的会话也按这套规则走。
 - **主管（Herder）分层决策。** 防护清单 → 你的规则 → 小模型 → 只读的
   [Pi](https://github.com/earendil-works/pi) Agent → 你。拿不准或者出错时，它会问你，
   或者让 Agent 自己问你，绝不会猜“允许”。

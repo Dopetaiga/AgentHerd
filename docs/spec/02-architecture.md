@@ -1,66 +1,71 @@
 # 02. Architecture
 
 Applied ADRs: [0003](../adr/0003-herder-on-pi-agent-core.md), [0004](../adr/0004-electron-app-with-headless-core.md),
-[0005](../adr/0005-channel-abstraction-feishu-first.md), [0006](../adr/0006-agent-adapters-attach-and-launch.md),
-[0010](../adr/0010-typescript-pnpm-monorepo.md).
+[0005](../adr/0005-channel-abstraction-feishu-first.md), [0010](../adr/0010-typescript-pnpm-monorepo.md),
+[0015](../adr/0015-acp-is-the-only-runtime-protocol.md), [0016](../adr/0016-one-rule-source-exported-to-agents.md).
 
-## 1. Overview
+## 1. Layers
 
 ```mermaid
-flowchart LR
-  subgraph Agents["Coding agents (user's machine)"]
-    CC["Claude Code"]
-    CX["Codex"]
-    ACP["ACP agents<br/>(OpenCode, Gemini CLI, ...)"]
+flowchart TB
+  subgraph Top["Channels (top)"]
+    FS["Feishu"]
+    MORE["Slack, Telegram, ... (later)"]
   end
-  subgraph Herd["AgentHerd core (one process)"]
-    API["Local API<br/>(Unix socket)"]
-    AD["Agent adapters"]
+  subgraph Core["AgentHerd core (one process)"]
+    INB["Inbox"]
+    HD["Herder<br/>guard → rules → L1 → L2 Pi"]
+    RULES[("Rule set<br/>(single source)")]
     REG["Session registry"]
-    HD["Herder<br/>L0 rules → L1 classify → L2 Pi agent"]
-    INB["Inbox<br/>(items that need the owner)"]
-    DB[("herd.db<br/>SQLite")]
-    CH["Channels"]
+    ACPC["ACP client"]
+    EXP["Rule exporters"]
+    DB[("herd.db")]
   end
-  UI["Desktop app<br/>(Electron renderer)"]
-  FS["Feishu"]
-  CC -- "hooks via agentherd-hook" --> API
-  CX -- "app-server / hooks" --> AD
-  ACP -- "ACP (stdio)" --> AD
-  API --> AD
-  AD --> REG --> HD
-  HD -- "decide" --> AD
-  HD -- "escalate" --> INB --> CH --> FS
-  FS -- "card action / reply" --> CH --> INB --> AD
-  UI <-- "IPC" --> REG
+  subgraph Bottom["Agents (bottom)"]
+    A1["dsh acp"]
+    A2["claude-agent-acp"]
+    A3["codex-acp"]
+    A4["any ACP agent"]
+    CFG["Agents' own permission configs<br/>(for terminal sessions)"]
+  end
+  UI["Desktop app (manage only)"]
+  FS <--> INB
+  INB <--> HD
+  HD --> RULES
+  HD <--> REG <--> ACPC
+  ACPC <-- "ACP over stdio" --> A1 & A2 & A3 & A4
+  RULES --> EXP -- "write own block" --> CFG
+  UI <-- "local API" --> REG & RULES & INB
   REG & HD & INB --> DB
 ```
 
-The flow for one event:
+- **Top:** channels. The core never names a chat app ([05-channels.md](05-channels.md)).
+- **Middle:** the core. One rule set, one Herder, one inbox.
+- **Bottom:** agents, reached in two ways ([03-agents.md](03-agents.md)):
+  - **ACP runtime** for sessions AgentHerd starts. This is the only runtime protocol.
+  - **Rule export** for sessions the user starts outside AgentHerd. Exporters only write
+    config files; they do not run agents.
 
-1. An agent reaches a point that needs a decision, for example a permission prompt.
-2. The adapter for that agent turns the raw signal into an `AgentEvent` (see
-   [03-agent-adapters.md](03-agent-adapters.md#3-normalized-events)).
-3. The session registry updates the session state.
-4. If the event needs a decision, the Herder runs its pipeline
-   ([04-herder.md](04-herder.md)). The result is a `Decision`.
-5. If the decision is final and the mode allows it, the adapter applies it to the agent.
-6. Otherwise the event becomes an **item** in the inbox. The inbox sends it to the owner
-   through the active channel and waits.
-7. The owner's answer goes back through the adapter. The pair (item, answer) goes into
+The flow for one permission request on the ACP path:
+
+1. The agent sends `session/request_permission`.
+2. The registry records it as an item and updates the session state.
+3. The Herder runs its pipeline ([04-herder.md](04-herder.md)) and returns a `Decision`.
+4. If the decision is final and the mode allows it, the ACP client answers the request.
+5. Otherwise the inbox sends the item to the owner through the channel and waits.
+6. The owner's answer goes back as the ACP response. The pair (item, answer) goes into
    decision memory.
 
 ## 2. Processes
 
 | Process | What runs there | Notes |
 | --- | --- | --- |
-| Electron main | Window, tray, auto-update, OS keychain, starts the core | Thin. No business logic. |
-| Core (Electron `utilityProcess`) | Local API, adapters, registry, Herder, inbox, channels, store | Plain Node code. Must also run without Electron (tests, future headless mode). |
+| Electron main | Window, tray, auto-update, OS keychain, keep-awake, starts the core | Thin. No business logic. |
+| Core (Electron `utilityProcess`) | ACP client, registry, Herder, inbox, channels, exporters, store, local API | Plain Node code. Must also run without Electron (tests, CLI). |
 | Renderer | Desktop UI | Talks to main through a typed preload bridge only. No Node access. |
-| `agentherd-hook` | Short-lived process started by an agent hook | Forwards one event to the core and prints the agent-specific answer. |
-| Launched agents | Agents that AgentHerd starts (launch mode) | Child processes of the core. |
+| Agent processes | One per ACP session group, started from a profile command | Children of the core. |
 
-The core is the only process that holds state. The renderer and the hook bridge are clients.
+The core is the only process that holds state.
 
 ## 3. Packages
 
@@ -68,35 +73,33 @@ The core is the only process that holds state. The renderer and the hook bridge 
 apps/
   desktop/              Electron main, preload, renderer
 packages/
-  protocol/             Shared types and schemas: AgentEvent, Decision, Item, local API messages
-  core/                 Registry, Herder pipeline, inbox, store, local API server
-  hook/                 agentherd-hook CLI (no runtime dependencies besides Node)
-  adapter-claude-code/
-  adapter-codex/
-  adapter-acp/
-  adapter-mock/         Scripted fake agent for development and E2E tests
+  protocol/             AgentHerd types and schemas: Item, Decision, Rule, local API messages
+  core/                 Registry, Herder, inbox, store, local API server
+  acp-client/           Starts agents from profiles, maps ACP to registry events and back
+  rules/                Rule model, matcher, guard list, command normalization
+  exporter-claude-code/ exporter-codex/ exporter-gemini/ exporter-opencode/
   channel-feishu/
+  mock-agent/           Scripted fake ACP agent for development and E2E tests
 ```
 
 Rules:
 
-- `protocol` depends on nothing in the repo.
-- `core` depends on `protocol` only. Adapters and channels register through interfaces.
-- Adapters and channels depend on `protocol`, never on each other.
+- `protocol` and `rules` depend on nothing in the repo except `protocol`.
+- `core` depends on `protocol`, `rules` and `acp-client`. Channels and exporters register
+  through interfaces.
+- Channels and exporters depend on `protocol` and `rules`, never on each other.
+- ACP types come from `@agentclientprotocol/sdk` and are used only inside `acp-client`.
 - `apps/desktop` composes everything.
 
 ## 4. Local API
 
-- Transport: a Unix domain socket at `~/.agentherd/run/herd.sock` (a named pipe on
-  Windows). File mode `600`. No TCP port.
+- Used by the desktop app and the CLI. Agents do not use it.
+- Transport: a Unix domain socket at `~/.agentherd/run/herd.sock`, file mode `600`, in a
+  directory with mode `700`. No TCP port.
 - Framing: newline-delimited JSON. Each message has `v` (protocol version), `id`, `type`.
-- Main messages:
-  - `event.report` (hook → core): one raw agent event. The reply is the decision, or
-    `defer` when the hook must let the agent ask on its own.
-  - `session.list`, `session.watch` (desktop → core).
-  - `item.list`, `item.watch` (desktop → core, read-only; owners decide in the channel).
-- The hook waits for at most `hookTimeoutMs` (default 600 000 ms, configurable per
-  adapter). On timeout or on any error it returns `defer`.
+- Main messages: `session.list`, `session.watch`, `item.list`, `item.watch` (read-only;
+  owners decide in the channel), `rule.*`, `export.plan`, `export.apply`, `export.remove`,
+  `task.run`.
 
 ## 5. Storage
 
@@ -104,21 +107,20 @@ All state is under `~/.agentherd/` (overridable by `AGENTHERD_HOME`):
 
 | Path | Content |
 | --- | --- |
-| `config.json` | Settings without secrets |
-| `herd.db` | SQLite: sessions, events, items, decisions, rules |
+| `config.json` | Settings and agent profiles, without secrets |
+| `herd.db` | SQLite: sessions, items, decisions, rules |
 | `run/herd.sock` | Local API socket |
 | `logs/` | Rotated logs. Secrets redacted. |
-| `bin/agentherd-hook` | Hook bridge installed by the desktop app |
+| `backups/` | Copies of agent config files before each export |
 
 Secrets (Feishu App Secret, model API keys) are stored with Electron `safeStorage`
 (OS keychain). They are never written to `config.json`, logs or `herd.db`.
 
-## 6. What a supervised session costs
+## 6. Cost
 
-- Attach mode adds one short process start per hook call. Most hook calls (tool calls that
-  need no decision) are not routed to AgentHerd at all; only the hooks listed in
-  [03-agent-adapters.md](03-agent-adapters.md) are installed.
-- The Herder calls a model only for L1 and L2. L0 rules cost nothing.
+- ACP sessions cost one agent process each, as they would without AgentHerd.
+- Rule export costs nothing at run time; the agent enforces its own config.
+- The Herder calls a model only for L1 and L2. The guard list and rules cost nothing.
 
 ## 7. Keep running with the lid closed
 

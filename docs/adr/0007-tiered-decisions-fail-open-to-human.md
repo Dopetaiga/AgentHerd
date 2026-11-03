@@ -15,9 +15,8 @@ slow and costs money; a rule cannot judge new situations. A supervisor that hang
 - Pipeline: guard list → L0 rules → L1 small-model classification → L2 read-only Pi agent →
   the owner. Each step can stop the pipeline.
 - The guard list runs first and can only escalate.
-- Any error, timeout or unreadable model output gives `escalate`, or `defer` at the hook,
-  never `allow`.
-- If AgentHerd is not running, hooks return at once and the agent asks the user itself.
+- Any error, timeout or unreadable model output gives `escalate`, never `allow`.
+- Sessions outside AgentHerd follow exported rules and ask in their own UI (ADR 0016).
 
 ## Alternatives
 
@@ -26,6 +25,6 @@ slow and costs money; a rule cannot judge new situations. A supervisor that hang
 
 ## Consequences
 
-- AgentHerd can be turned off or crash without blocking agents.
+- A Herder failure never turns into an automatic allow.
 - Every decision carries its source, so mistakes can be traced to a rule, a precedent or a
   model call.

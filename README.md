@@ -17,8 +17,11 @@ really needs you.
 
 - **Chat app as the remote control.** Approve, deny or answer from a card on your phone.
   Start new tasks with a message. Feishu (Lark) is the first channel; one QR scan sets it up.
-- **Every agent, one model.** Adapters attach to sessions you start yourself (through hooks)
-  or launch new ones (through app-server, ACP or SDKs).
+- **Any agent that speaks ACP.** AgentHerd starts agents through the
+  [Agent Client Protocol](https://agentclientprotocol.com): Claude Code, Codex, Gemini CLI,
+  OpenCode, DeepSeek Harness and more. Adding one is a line of config.
+- **One rule set, everywhere.** Your rules also compile into each agent's own permission
+  config, so sessions you start in a terminal follow them too.
 - **The Herder decides in tiers.** Guard list → your rules → a small model → a read-only
   [Pi](https://github.com/earendil-works/pi) agent → you. When unsure or broken, it asks you
   or lets the agent ask you. It never guesses "allow".

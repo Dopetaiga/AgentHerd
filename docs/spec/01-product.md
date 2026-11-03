@@ -36,7 +36,7 @@ Tagline: **Herd your coding agents. Only get pinged when it matters.**
 | G3 | Let AgentHerd decide routine items by rules and precedent, and show why it decided. |
 | G4 | Start new agent tasks from Feishu and follow their progress. |
 | G5 | Set up in less than 5 minutes: install, scan one QR code, done. |
-| G6 | Supervise every supported agent through one adapter model ([03-agent-adapters.md](03-agent-adapters.md)). |
+| G6 | Supervise any agent that speaks ACP, with no agent-specific code, and apply the same rules to terminal sessions by exporting them ([03-agents.md](03-agents.md)). |
 | G7 | Keep agents and AgentHerd running when the laptop lid is closed (macOS, opt-in). See [02-architecture.md](02-architecture.md#7-keep-running-with-the-lid-closed). |
 
 ## 5. Non-goals for v1

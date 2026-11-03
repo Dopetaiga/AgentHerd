@@ -9,14 +9,13 @@ new type, table, IPC channel or product string.
 | **Herder** | The decision pipeline inside AgentHerd | supervisor, manager, brain |
 | **Agent** | A coding agent product (Claude Code, Codex, an ACP agent) | bot, worker |
 | **Session** | One conversation of one agent, identified by the agent's own session id | thread, chat |
-| **Adapter** | The package that connects one agent kind to the core | driver, plugin, runtime |
-| **Attach mode** | AgentHerd joins a session the user started | |
-| **Launch mode** | AgentHerd starts the session | spawn mode |
-| **Event** | A normalized `AgentEvent` | message, signal |
+| **ACP** | Agent Client Protocol; the only runtime protocol between AgentHerd and agents | |
+| **Agent profile** | Config that says how to start one ACP agent (command, env) | adapter, driver |
+| **Exporter** | Code that writes AgentHerd rules into one agent's own permission config | adapter, sync |
+| **Export status** | Per rule and agent: `exact`, `narrowed` or `not exported` | |
 | **Item** | An event that needs the owner, or a notification for the owner, in the inbox | ticket, task, request |
 | **Inbox** | The queue of open items | |
-| **Decision** | The result for one item: allow, deny, answer, continue, escalate, defer | verdict |
-| **Defer** | Let the agent ask the user in its own UI | skip, pass |
+| **Decision** | The result for one item: allow, deny, answer, continue, escalate | verdict |
 | **Escalate** | Send the item to the owner | |
 | **Rule** | A deterministic match + action (L0) | policy |
 | **Guard list** | Built-in matches that always escalate | blocklist |

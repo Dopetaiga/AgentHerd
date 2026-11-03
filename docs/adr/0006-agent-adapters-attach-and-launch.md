@@ -1,8 +1,8 @@
 # ADR 0006: Agent adapters with attach and launch modes
 
-- Status: Proposed
+- Status: Superseded by [ADR 0015](0015-acp-is-the-only-runtime-protocol.md)
 - Date: 2026-11-04
-- Related: [03-agent-adapters.md](../spec/03-agent-adapters.md)
+- Related: [03-agents.md](../spec/03-agents.md)
 
 ## Context
 

@@ -11,7 +11,8 @@ events; context comes from the session summary and decision memory.
 
 Input for one event:
 
-- the `AgentEvent` that needs a decision;
+- the item that needs a decision (from an ACP `session/request_permission`, a stopped turn or
+  a loop);
 - a short summary of the session (task, recent turns, files changed), at most 2 000 tokens;
 - up to 5 past decisions from memory that look similar;
 - the rule set and the current mode.
@@ -21,11 +22,11 @@ Output:
 ```ts
 interface Decision {
   itemId: string;
-  action: "allow" | "deny" | "answer" | "continue" | "escalate" | "defer";
+  action: "allow" | "deny" | "answer" | "continue" | "escalate";
   text?: string;           // the answer, or the instruction for "continue"
   confidence: number;      // 0..1; 1 for rules
   risk: "low" | "medium" | "high";
-  source: "rule" | "l1" | "l2" | "human" | "timeout";
+  source: "rule" | "l1" | "l2" | "human";
   reason: string;          // one sentence, shown to the user
   precedents: string[];    // ids of past decisions used
 }
@@ -54,7 +55,7 @@ Thresholds are configuration; the values above are defaults.
 Built in, can be extended, cannot be overridden by rules or models. Examples: recursive
 delete outside the session's working directory, `git push --force` to a default branch,
 piping a download into a shell, reading `~/.ssh`, keychains or `.env` files, changing
-AgentHerd's own files or the agent's hook settings.
+AgentHerd's own files or the agents' permission configs.
 
 ### L0: rules
 
@@ -88,11 +89,10 @@ Applied ADR: [0012](../adr/0012-channel-is-the-only-decision-surface.md).
   manages AgentHerd but is not where the owner answers.
 - The item waits for the owner. A reminder is sent every `remindMinutes` (default 30) while
   it is open. AgentHerd never decides for the owner because time passed.
-- Exceptions, where the item falls back to the agent's own UI (`defer`): the channel is
-  disconnected, or the core fails. In launch mode there is no agent UI, so the item stays in
-  the inbox, shows in the desktop app, and goes to the channel when it reconnects.
-- Attach mode: while a hook waits for the channel, the agent's own terminal prompt may not
-  show **(verify, Q04)**.
+- If the channel is disconnected, the item stays in the inbox, shows in the desktop app, and
+  is sent when the channel reconnects. The agent keeps waiting.
+- Sessions started outside AgentHerd never reach the Herder; they follow exported rules and
+  ask in their own UI ([03-agents.md](03-agents.md#2-rule-export)).
 
 ## 4. Modes
 

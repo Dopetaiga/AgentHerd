@@ -6,7 +6,7 @@
 
 ## Context
 
-Desktop app, core, hook bridge, adapters and channels share types and must change together.
+Desktop app, core, ACP client, exporters and channels share types and must change together.
 
 ## Decision
 
@@ -17,11 +17,11 @@ Desktop app, core, hook bridge, adapters and channels share types and must chang
 
 ## Alternatives
 
-- Separate repos per adapter: version skew between protocol and adapters.
+- Separate repos per exporter or channel: version skew with the protocol.
 - npm or Bun workspaces: pnpm has the strictest dependency isolation and is what the
   maintainer uses daily.
 
 ## Consequences
 
-- `packages/protocol` is the contract; changing it needs the spec and all adapters updated
+- `packages/protocol` is the contract; changing it needs the spec, ACP client, exporters and channels updated
   in the same change.

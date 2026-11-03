@@ -15,8 +15,7 @@ the desktop app is only for management, and that every decision goes to the chat
 - Remove presence. Every escalated item goes to the channel.
 - An open item waits for the owner and gets a reminder every `remindMinutes` (default 30).
   No timeout ever decides for the owner.
-- The item falls back to the agent's own UI (`defer`) only when the channel is disconnected
-  or the core fails.
+- If the channel is disconnected, items wait in the inbox until it reconnects.
 - The desktop app shows items read-only and links to them; it has no allow/deny buttons in v1.
 
 ## Alternatives

@@ -15,7 +15,7 @@ baseline is frozen, a change to a frozen decision needs a new ADR and a baseline
 | --- | --- |
 | [01-product.md](01-product.md) | Problem, users, goals, non-goals, success metrics |
 | [02-architecture.md](02-architecture.md) | Processes, packages, data flow, local API |
-| [03-agent-adapters.md](03-agent-adapters.md) | How AgentHerd observes and controls each coding agent |
+| [03-agents.md](03-agents.md) | ACP runtime and rule export to agents' own configs |
 | [04-herder.md](04-herder.md) | The decision pipeline, modes, decision memory |
 | [05-channels.md](05-channels.md) | How AgentHerd reaches the user; Feishu is the first channel |
 | [06-security.md](06-security.md) | Trust boundaries, secrets, failure behavior |
@@ -30,8 +30,10 @@ Accepted decisions are in [../adr/README.md](../adr/README.md).
 These defaults hold until an ADR changes them.
 
 1. The Herder runs on the user's machine. AgentHerd has no server of its own.
-2. When AgentHerd cannot decide, or is not running, the agent falls back to its own prompt.
-   AgentHerd never blocks an agent forever. See [ADR 0007](../adr/0007-tiered-decisions-fail-open-to-human.md).
+2. When AgentHerd cannot decide, it asks the owner. It never answers "allow" because of an
+   error. See [ADR 0007](../adr/0007-tiered-decisions-fail-open-to-human.md).
+10. ACP is the only runtime protocol to agents; terminal sessions get exported rules
+   ([ADR 0015](../adr/0015-acp-is-the-only-runtime-protocol.md), [ADR 0016](../adr/0016-one-rule-source-exported-to-agents.md)).
 3. A new install starts in `observe` mode. AgentHerd suggests decisions and applies none.
 4. Only the owner (the person who scanned the Feishu QR code) can approve, deny or answer.
 5. TypeScript everywhere. Node.js 22 or later. pnpm workspaces.

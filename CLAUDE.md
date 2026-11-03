@@ -2,16 +2,16 @@
 
 Short mirror of [AGENTS.md](AGENTS.md). AGENTS.md wins if they differ.
 
-Policy-Sync: 2026-11-04.1
+Policy-Sync: 2026-11-04.2
 
 Non-negotiable:
 
-- Fail toward the human: errors give `escalate` / `defer`, never `allow`.
+- Fail toward the human: errors give `escalate`, never `allow`.
 - Guard list runs first and can only escalate. Owner-only channel actions.
 - No secrets in logs, db, cards, prompts, fixtures.
-- Hooks change only through explicit install with backup; uninstall removes only what install wrote.
+- Agent configs change only through explicit export with backup; own block only; never widen a rule.
 - Do not copy code from PI-Desktop or OpenBot.
-- `packages/protocol` changes update spec, adapters, channels and tests together.
+- `packages/protocol` changes update spec, ACP client, exporters, channels and tests together.
 - Commit only, never push. Author `zszz3`. No `reset --hard`, force push, `--no-verify`.
 
 Defaults:

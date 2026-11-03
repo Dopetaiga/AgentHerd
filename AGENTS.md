@@ -4,21 +4,22 @@ Instructions for coding agents (and humans) who change this repo. This file is t
 `CLAUDE.md` is a short mirror; both carry the same `Policy-Sync` line. Change both in the
 same commit.
 
-Policy-Sync: 2026-11-04.1
+Policy-Sync: 2026-11-04.2
 
 ## 1. Non-negotiable
 
 These rules protect the user's machine, data and trust. Never set them aside.
 
 1. **Fail toward the human.** On any error, timeout or unclear model output, the result is
-   `escalate` (or `defer` at the hook), never `allow`. See ADR 0007.
+   `escalate`, never `allow`. See ADR 0007.
 2. **The guard list runs before rules and models** and can only escalate.
 3. **Owner only.** Inbound channel actions from anyone but the owner are dropped.
 4. **No secrets in logs, `herd.db`, cards, prompts or fixtures.** Use the redaction helper.
-5. **Hooks and agent settings are only changed by an explicit install action**, with a backup,
-   and `uninstall` removes exactly what `install` wrote.
+5. **Agent config files are only changed by an explicit export action**, with a backup.
+   AgentHerd writes only its own block, `remove` deletes exactly that block, and a rule
+   export may narrow a rule but never widen it.
 6. **Do not copy code from PI-Desktop or OpenBot** (LGPL / noncommercial). See ADR 0009.
-7. **`packages/protocol` is a contract.** A change updates the spec, every adapter and channel,
+7. **`packages/protocol` is a contract.** A change updates the spec, the ACP client, every exporter and channel,
    and the tests in the same change.
 8. **Git:** commit only; never `git push`. Commit author is `zszz3`
    (configured in the repo). Never use `git reset --hard`, `git push --force`, `--no-verify`.
@@ -52,7 +53,7 @@ in your report.
   that explains why.
 - Keep files under about 400 lines. Split by responsibility, not by layer.
 - `core` has no Electron imports. The renderer has no Node access.
-- Prefer E2E tests with `adapter-mock` and `channel-fake`. Add unit tests for pure logic
+- Prefer E2E tests with `mock-agent` and `channel-fake`. Add unit tests for pure logic
   (rules, guard list, redaction, normalization, parsing).
 - Run the narrow checks for what you changed. Do not claim a check passed if you did not run it.
 
@@ -82,7 +83,7 @@ in your report.
 | `docs/adr/` | Why it is built this way |
 | `plans/` | Executable implementation plans and their states |
 | `apps/desktop/` | Electron app (not yet created) |
-| `packages/*` | Core, protocol, hook, adapters, channels (not yet created) |
+| `packages/*` | Core, protocol, rules, ACP client, exporters, channels, mock agent (not yet created) |
 
 ## 4. Maintaining this file
 

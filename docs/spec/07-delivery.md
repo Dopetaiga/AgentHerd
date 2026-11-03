@@ -5,10 +5,10 @@
 | ID | Name | Result | Exit criteria |
 | --- | --- | --- | --- |
 | M0 | Spec freeze | Specs 00–07 and ADRs 0001–0014 accepted | Baseline 0.1.0 marked Frozen |
-| M1 | Headless loop | `core` + `adapter-mock` + `channel-feishu`, run from a CLI | E2E-APPROVE and E2E-OWNER-ONLY pass with a fake channel; one manual run with real Feishu |
-| M2 | ACP + desktop shell | `adapter-acp` (launch, tested with `dsh acp`), `run` command from Feishu, desktop app with onboarding (QR, model choice), sessions list, read-only inbox, mode switch, keep-awake switch | A DSH task started from Feishu asks for approval and is approved from Feishu |
-| M3 | Herder | Guard list, L0 rules, "Always do this", L1, L2, observe metrics, decision memory | Observe mode reports agreement on a replayed event set |
-| M4 | More agents | `adapter-claude-code` (attach) with `hook`, `adapter-codex` (launch + attach observe) | Verified on a machine where Claude Code and Codex can run |
+| M1 | Headless loop | `core`, `rules` (guard list + matcher), `acp-client`, `mock-agent`, `channel-feishu`, run from a CLI | E2E-APPROVE and E2E-OWNER-ONLY pass with `mock-agent` and a fake channel; one manual run with real Feishu |
+| M2 | DSH + desktop shell | DSH profile (`dsh acp`), `run` command from Feishu, desktop app with onboarding (QR, model choice), sessions list, read-only inbox, mode switch, keep-awake switch | A DSH task started from Feishu asks for approval and is approved from Feishu |
+| M3 | Herder + rule export | Guard list, L0 rules, "Always do this", L1, L2, observe metrics, decision memory; exporters for Claude Code and Codex, with export status per rule | Observe mode reports agreement on a replayed item set; exported Claude Code config passes `plan()` tests for every rule shape |
+| M4 | More agents | Built-in profiles for Claude Code (`claude-agent-acp`), Codex (`codex-acp`), Gemini CLI, OpenCode; exporters for Gemini CLI and OpenCode | Verified on a machine where these agents can run |
 | M5 | Release | Signed and notarized macOS build, auto-update, README with GIF | Fresh-machine install to first card in < 5 minutes |
 
 Each milestone is split into plans under [`plans/`](../../plans/README.md).
@@ -22,7 +22,7 @@ Each milestone is split into plans under [`plans/`](../../plans/README.md).
 
 ## 3. Testing
 
-- **E2E first.** Scenarios run the real core with `adapter-mock` and `channel-fake` (an
+- **E2E first.** Scenarios run the real core with `mock-agent` (a real ACP server) and `channel-fake` (an
   in-memory channel that records what it sent and lets the test click buttons).
 - **Channel contract tests** run against every channel. Feishu runs them against recorded
   payloads; a manual checklist covers the real service.
@@ -30,9 +30,8 @@ Each milestone is split into plans under [`plans/`](../../plans/README.md).
   normalization, schema parsing.
 - **Real agents.** On some development machines, endpoint-security software blocks Claude
   Code and Codex from starting (seen on 2026-11-04: the process is killed by SIGKILL at
-  exec). Adapters for real agents therefore must be developed against recorded hook payloads
-  and protocol transcripts stored under `fixtures/`, and verified on a machine where the
-  agent can run.
+  exec). Work for those agents is therefore developed against recorded ACP transcripts and
+  config files stored under `fixtures/`, and verified on a machine where the agent can run.
 
 ## 4. E2E scenarios
 
@@ -40,10 +39,11 @@ Each milestone is split into plans under [`plans/`](../../plans/README.md).
 | --- | --- | --- |
 | E2E-APPROVE | Mock agent requests approval; card is sent; owner taps Allow; the agent receives allow; card shows final state | M1 |
 | E2E-REMIND | An open item gets a reminder after `remindMinutes`; nothing is decided by time | M1 |
-| E2E-CHANNEL-DOWN | Channel disconnected; an attach-mode request returns `defer`; a launch-mode item is sent after reconnect | M2 |
+| E2E-CHANNEL-DOWN | Channel disconnected; a new item waits in the inbox and is sent after reconnect | M2 |
 | E2E-OWNER-ONLY | A non-owner taps a button; nothing changes; event is logged | M1 |
 | E2E-DUPLICATE-ACTION | Owner taps Allow twice; the decision is applied once | M1 |
-| E2E-CORE-DOWN | Core is not running; the hook returns `defer` within 1 s | M4 |
+| E2E-EXPORT-NARROW | A rule the target cannot express exactly is exported narrower or skipped, never wider, and shows its export status | M3 |
+| E2E-EXPORT-REMOVE | `remove` restores the agent config byte-for-byte except for content the user added | M3 |
 | E2E-ALWAYS-RULE | Owner taps "Always do this"; the next equal request is allowed by rule in `assist` mode | M3 |
 | E2E-GUARD | A guarded command is never auto-allowed in any mode | M3 |
 | E2E-OBSERVE-AGREEMENT | Observe mode stores suggestions and computes agreement | M3 |

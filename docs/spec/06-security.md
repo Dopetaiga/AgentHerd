@@ -8,7 +8,8 @@ a mistake with the user's shell. This spec lists the rules that keep that power 
 | Boundary | Rule |
 | --- | --- |
 | Chat app → core | Only the owner's id is accepted. Every inbound action names an existing open item; anything else is dropped. |
-| Hook bridge → core | Unix socket with mode `600` in a directory with mode `700`. No TCP listener. |
+| Desktop / CLI → core | Unix socket with mode `600` in a directory with mode `700`. No TCP listener. |
+| Core → agent configs | Exporters write only their own block, after a backup; a rule is never widened. |
 | Renderer → main → core | `contextIsolation: true`, `sandbox: true`, `nodeIntegration: false`. The preload exposes typed methods only. |
 | Herder model → decisions | Model output is data. It is parsed against a schema; on a parse error the item is escalated. The guard list runs before any model. |
 | Agent content → Herder prompt | Agent output (commands, files, transcripts) is untrusted. It is quoted as data in prompts and can never change rules or mode. |
@@ -24,12 +25,12 @@ a mistake with the user's shell. This spec lists the rules that keep that power 
 
 ## 3. Failure behavior
 
-- Core not running, socket missing, timeout, crash, invalid model output: the hook returns
-  `defer`, and the agent asks the user in its own UI. AgentHerd never answers "allow" because
-  of an error.
-- Channel disconnected: new items in attach mode return `defer`, so the agent asks in its own
-  UI. Launch-mode items stay in the inbox and are sent when the channel reconnects.
-- Hooks are only written by an explicit user action in the desktop app, with a backup and a
+- Timeout, invalid model output, Herder crash: the item is escalated to the owner. AgentHerd
+  never answers "allow" because of an error.
+- Core stops: its ACP agent processes stop with it. Sessions that support `session/load` or
+  `resume` can be reopened. Terminal sessions are not affected; their exported rules keep working.
+- Channel disconnected: items stay in the inbox and are sent when the channel reconnects.
+- Agent configs are only written by an explicit export in the desktop app, with a backup and a
   one-click removal.
 
 ## 4. What is logged
