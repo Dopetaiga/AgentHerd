@@ -41,7 +41,7 @@ scenarios in [07-delivery.md §4](../docs/spec/07-delivery.md#4-e2e-scenarios).
 
 **Out of scope:**
 
-- The resident Herder and the pre-filter (M3). In M1, an item that no rule decides is
+- The Herder (M2) and the Reviewer (M3). In M1, an item that no rule decides is
   escalated with `source: "human"` once the owner answers.
 - "Always do this" (M3). Cards offer Allow and Deny only.
 - Local API socket, desktop app, exporters.
@@ -88,7 +88,7 @@ agent exit with a non-zero code, `ended` on close. Every change is stored and em
 ### Step 3: Decision pipeline (M1 subset)
 
 `packages/core/src/pipeline.ts`: `decide(item, ctx): Decision` per
-[04-herder.md §1](../docs/spec/04-herder.md#1-pipeline):
+[04-herder.md §3](../docs/spec/04-herder.md#3-approval-pipeline):
 
 1. `guardCheck` hit → `{ action: "escalate", risk: "high", source: "rule", reason: <guard reason> }`.
 2. `matchRules` hit → `{ action: rule.action, confidence: 1, risk: "low", source: "rule" }`.

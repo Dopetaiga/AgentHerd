@@ -47,13 +47,13 @@ The desktop app ships built-in profiles for these and lets the user add any ACP 
 | ACP | AgentHerd |
 | --- | --- |
 | `initialize` → `agentCapabilities` | Stored per profile; the UI hides actions the agent does not support |
-| `session/new` (with `cwd`), `session/prompt` | Start a task (`run` from the channel) |
+| `session/new` (with `cwd`, `mcpServers`), `session/prompt` | Start a task (the Herder's `session_start`). `mcpServers` carries AgentHerd's `herd_report` tool where the agent supports MCP **(verify, Q14)** |
 | `session/update` notifications (message chunks, tool calls, plan) | Session state, progress messages, loop detection |
 | `session/request_permission` (tool call + options) | An item that needs a decision ([04-herder.md](04-herder.md)) |
 | Answer with the selected `optionId`, or `cancelled` | Apply the decision. `allow` / `deny` map to the agent's `allow_once` / `reject_once` options; "Always do this" creates an AgentHerd rule, never the agent's `allow_always` |
-| End of `session/prompt` with a stop reason | `turn.stopped`; the Herder may send a follow-up prompt (`continue`) |
+| End of `session/prompt` with a stop reason | `turn.stopped`; without a `herd_report`, the last message is the fallback report |
 | `session/cancel` | Interrupt |
-| Follow-up `session/prompt` | Steer or continue from the channel |
+| Follow-up `session/prompt` | A relayed owner message, or a Herder prompt |
 | `session/load` / `resume` (if supported) | Reopen after an AgentHerd restart |
 
 How each agent asks the user a question over ACP (permission request, or a message that ends
@@ -62,7 +62,7 @@ the turn) is open **(verify, Q03)**.
 ### Session states
 
 `starting`, `working`, `waiting-approval`, `idle` (turn ended), `looping`, `error`, `ended`.
-`looping` is set by the registry ([04-herder.md](04-herder.md#6-loop-detection)).
+`looping` is set by the watchdog ([04-herder.md](04-herder.md#watchdog)).
 
 ### Restarts
 

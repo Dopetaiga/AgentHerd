@@ -20,7 +20,7 @@
 Every later package imports the shared types in `packages/protocol` and the deterministic
 decision code in `packages/rules` (guard list, rule matcher, command normalization,
 redaction). These are the parts that must never be wrong, because they run before any model
-and decide what is safe ([04-herder.md §1](../docs/spec/04-herder.md#1-pipeline),
+and decide what is safe ([04-herder.md §3](../docs/spec/04-herder.md#3-approval-pipeline),
 [06-security.md](../docs/spec/06-security.md)).
 
 ## Current state
@@ -91,10 +91,10 @@ Define, with names from [glossary.md](../docs/spec/glossary.md):
 - `ToolCallInfo` `{ kind: string; title: string; command?: string; paths: string[]; rawInput?: unknown }`
   — channel-neutral description of what the agent wants to do. No ACP types.
 - `Item` `{ id; sessionId; profileId; cwd; kind: "permission" | "notification"; state: "open" | "decided" | "expired"; createdAt; toolCall?: ToolCallInfo; title; body; risk; decision?: Decision }`.
-- `Decision` exactly as in [04-herder.md §2 Output](../docs/spec/04-herder.md#output).
+- `Decision` exactly as in [04-herder.md §3 Output](../docs/spec/04-herder.md#output).
 - `Rule` `{ id; action: "allow" | "deny"; match: RuleMatch; createdAt; createdBy: "owner" | "always-button" }`
   and `RuleMatch` `{ profileId?; eventType?: "permission"; toolKind?; command?: string /* glob on normalized command */; pathScope?: { kind: "cwd" } | { kind: "dir"; path: string } }`
-  ([04-herder.md §1 L0](../docs/spec/04-herder.md#l0-rules)).
+  ([04-herder.md §3 Rules](../docs/spec/04-herder.md#rules)).
 - `ItemView`, `Channel`, `ChannelCapability`, `ChannelBinding`, `InboundSink`, `Inbound`,
   `MessageRef`, `SetupUI` exactly as in [05-channels.md §1](../docs/spec/05-channels.md#1-channel-interface).
   `ChannelBinding` holds `{ channelId; ownerId; data: Record<string, string> }` and **no secrets**
@@ -122,7 +122,7 @@ Unit tests: `packages/rules/test/normalize.test.ts`, at least 10 cases.
 
 `guardCheck(call: ToolCallInfo, ctx: { cwd: string; home: string }): { hit: true; reason: string } | { hit: false }`.
 
-Built-in entries (from [04-herder.md](../docs/spec/04-herder.md#guard-list-always-escalate)), each with an id and a reason string:
+Built-in entries (from [04-herder.md](../docs/spec/04-herder.md#guard-list-always-to-the-owner)), each with an id and a reason string:
 
 | Id | Hits when |
 | --- | --- |

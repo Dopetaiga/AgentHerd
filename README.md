@@ -22,9 +22,12 @@ really needs you.
   OpenCode, DeepSeek Harness and more. Adding one is a line of config.
 - **One rule set, everywhere.** Your rules also compile into each agent's own permission
   config, so sessions you start in a terminal follow them too.
-- **The Herder decides in tiers.** Guard list → your rules → a small model → a read-only
-  [Pi](https://github.com/earendil-works/pi) agent → you. When unsure or broken, it asks you
-  or lets the agent ask you. It never guesses "allow".
+- **A secretary for your agents.** The Herder, a light-model
+  [Pi](https://github.com/earendil-works/pi) agent, takes your messages, starts tasks, puts you
+  through to any task, keeps a pinned task board and tells you what each agent did when it
+  finishes. Your words reach the agent unchanged.
+- **Approvals in tiers.** Guard list → your rules → a Reviewer on your strongest model → you.
+  When unsure or broken, it asks you. It never guesses "allow". The Herder cannot approve.
 - **Trust in steps.** It starts in `observe` mode: it only suggests and measures how often it
   agrees with you. You turn on `assist` and `auto` when the numbers say so.
 - **Local only.** No AgentHerd server. Secrets stay in your OS keychain.

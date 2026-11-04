@@ -2,7 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-11-04
-- Related: [04-herder.md](../spec/04-herder.md#3-where-human-decisions-go), [ADR 0008](0008-observe-first-rollout.md)
+- Related: [04-herder.md](../spec/04-herder.md#where-owner-decisions-go), [ADR 0008](0008-observe-first-rollout.md)
 
 ## Context
 

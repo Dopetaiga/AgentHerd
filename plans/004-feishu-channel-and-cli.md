@@ -43,7 +43,7 @@ channel and a small CLI so the loop can be run before the desktop app exists.
 
 **Out of scope:**
 
-- Desktop onboarding UI (M2). `run` from a chat message (M2, E2E-RUN-FROM-CHAT).
+- Desktop onboarding UI (M2). Starting tasks from a chat message through the Herder (M2, E2E-RUN-FROM-CHAT); relay, board, reports (M2).
 - Reconnect queueing (E2E-CHANNEL-DOWN, M2).
 
 ## Commands you will need

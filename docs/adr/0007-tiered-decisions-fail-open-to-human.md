@@ -1,6 +1,6 @@
 # ADR 0007: Tiered decisions that fail toward the human
 
-- Status: Accepted, amended by [ADR 0017](0017-resident-herder-per-project.md)
+- Status: Accepted, amended by [ADR 0017](0017-resident-herder-per-project.md) and [ADR 0018](0018-one-herder-as-secretary-separate-approvals.md)
 - Date: 2026-11-04
 - Related: [04-herder.md](../spec/04-herder.md), [06-security.md](../spec/06-security.md)
 

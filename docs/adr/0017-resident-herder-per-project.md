@@ -1,6 +1,6 @@
 # ADR 0017: A resident Herder per project, on the strongest model, that manages agents
 
-- Status: Accepted
+- Status: Superseded by [ADR 0018](0018-one-herder-as-secretary-separate-approvals.md)
 - Date: 2026-11-04
 - Related: [04-herder.md](../spec/04-herder.md), amends [ADR 0003](0003-herder-on-pi-agent-core.md) and [ADR 0007](0007-tiered-decisions-fail-open-to-human.md)
 

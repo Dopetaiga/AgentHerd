@@ -1,6 +1,6 @@
 # ADR 0003: Build the Herder on Pi agent core
 
-- Status: Accepted, amended by [ADR 0017](0017-resident-herder-per-project.md)
+- Status: Accepted, amended by [ADR 0017](0017-resident-herder-per-project.md) and [ADR 0018](0018-one-herder-as-secretary-separate-approvals.md)
 - Date: 2026-11-04
 - Related: [04-herder.md](../spec/04-herder.md)
 

@@ -20,4 +20,6 @@ Format and rules: [ADR 0001](0001-record-architecture-decisions.md).
 | [0014](0014-acp-first-real-agent.md) | ACP is the first real agent integration | Accepted |
 | [0015](0015-acp-is-the-only-runtime-protocol.md) | ACP is the only runtime protocol to agents | Accepted |
 | [0016](0016-one-rule-source-exported-to-agents.md) | One rule source, exported to each agent's own config | Accepted |
-| [0017](0017-resident-herder-per-project.md) | A resident Herder per project, on the strongest model, that manages agents | Accepted |
+| [0017](0017-resident-herder-per-project.md) | A resident Herder per project, on the strongest model, that manages agents | Superseded by 0018 |
+| [0018](0018-one-herder-as-secretary-separate-approvals.md) | One Herder for all projects as a light-model secretary; approvals in a separate pipeline | Accepted |
+| [0019](0019-relay-verbatim-board-and-reports.md) | Relay, verbatim messages, pinned board and completion reports | Accepted |

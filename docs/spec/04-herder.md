@@ -1,43 +1,200 @@
-# 04. Herder
+# 04. Herder and approvals
 
 Applied ADRs: [0003](../adr/0003-herder-on-pi-agent-core.md), [0007](../adr/0007-tiered-decisions-fail-open-to-human.md),
 [0008](../adr/0008-observe-first-rollout.md), [0012](../adr/0012-channel-is-the-only-decision-surface.md),
-[0017](../adr/0017-resident-herder-per-project.md).
+[0018](../adr/0018-one-herder-as-secretary-separate-approvals.md), [0019](../adr/0019-relay-verbatim-board-and-reports.md).
 
-The Herder is the supervisor. There is **one resident Herder per project directory**: a Pi
-agent session that runs the strongest model the user picked, keeps the project's context
-across events, and manages the agent sessions working in that project. It does not write
-code itself; the agents do.
+AgentHerd has three roles:
 
-Cheap, deterministic checks run before it, so most events never reach the model.
+| Role | What it does | Model |
+| --- | --- | --- |
+| **Herder** (the secretary) | Talks with the owner, starts and steers sessions, relays the owner to a task, keeps the board, writes missing reports, acts on watchdog alarms | One resident session, light model |
+| **Approval pipeline** | Decides permission requests: guard list → rules → Reviewer → owner | Reviewer: strongest model, one call per item |
+| **Agents** | Do the work | Their own models |
 
-## 1. Pipeline
+The Herder manages communication and scheduling, the approval pipeline decides what may run,
+the agents do the work. The Herder never approves anything.
 
 ```mermaid
 flowchart TD
-  E["Event: permission request, stopped turn, loop, error, owner message"] --> G{"Guard list match?"}
-  G -- yes --> H["Escalate to owner, risk = high"]
-  G -- no --> L0{"Owner rule match?"}
-  L0 -- yes --> D["Decision (source = rule)"]
-  L0 -- no --> PF{"Pre-filter on?<br/>(off by default)"}
-  PF -- "on, confident" --> D1["Decision (source = prefilter)"]
-  PF -- "off, or unsure" --> HD["Resident Herder<br/>(strongest model)"]
-  HD -- "decides" --> D2["Decision (source = herder)"]
-  HD -- "unsure or high risk" --> H2["Escalate with suggestion"]
+  U["Owner (channel)"] -- "direct message" --> H["Herder<br/>one for all projects, light model"]
+  U -- "message during a relay" --> A
+  U -- "card action" --> AP
+  H -- "start / prompt / cancel" --> A["Agent sessions (ACP)"]
+  A -- "permission request" --> AP["Approval pipeline<br/>guard → rules → Reviewer → owner"]
+  A -- "herd_report, turn end, exit" --> W["Core: states, stages, watchdog<br/>(no model)"]
+  W -- "task ended, alarm" --> H
+  W -- "board update in place" --> U
+  H & AP & W --> DB[("herd.db")]
 ```
 
-Thresholds are configuration. Events of the same project are delivered to its Herder in
-order; events that arrive while it is busy are batched into its next turn.
+## 1. Herder
 
-### Guard list (always escalate)
+### Inbound
+
+| Owner sends | Goes to | Model? |
+| --- | --- | --- |
+| A direct message, no relay active | The Herder | Yes |
+| A direct message, relay active | The relayed session, verbatim | No |
+| A card action (allow, deny, answer, always) | The approval pipeline / the item | No |
+| `/herder <text>` during a relay | The Herder | Yes |
+| `/end` or the "End relay" button | Ends the relay | No |
+| `/interrupt <text>` during a relay | Cancels the current turn, then sends the text | No |
+| `status` | Sends the board | No |
+
+### What the Herder does with a direct message
+
+1. **Not a task** (a question about state, small talk): it answers from the store.
+2. **About a running task:** it asks the owner whether to relay, or sends the message to that
+   session if the owner said so.
+3. **A new task:** it resolves the project directory and the agent profile from the message,
+   the owner's defaults and the last choice. If one of them stays unclear, it asks one
+   question with a suggested answer.
+4. **Capacity:** if `maxConcurrentSessions` (default 3) are running, the task is queued and
+   the owner is told its place.
+5. **Start:** `session/new` in the project directory, then the prompt (below). The board gets a
+   new row.
+
+### Verbatim rule
+
+The Herder may add, never rewrite.
+
+- The owner's words go to the agent unchanged; the agent's words go to the owner unchanged.
+- Context the Herder adds is a separate, labeled block:
+
+  ```text
+  [Owner's message]
+  Apply the login timeout fix to PI-Desktop too.
+
+  [Context added by the Herder, for reference]
+  - Project: /Users/.../PI-Desktop
+  - "the login timeout fix" is task #12 (AgentRecall), done, PR #42
+  - Report of #12: ...
+  ```
+
+- If the Herder cannot tell which task or project the owner means, it asks with buttons. It
+  does not guess.
+
+### Relay
+
+- Start: the owner asks the Herder ("put me through to the login fix") or picks a task on the
+  board. If the request matches more than one task, the Herder asks with buttons.
+- During a relay, direct messages go to the session without the Herder. Agent messages come
+  back with a task-name prefix. Items and reports from other tasks still arrive, each labeled
+  with its task.
+- A message sent while the agent is working is queued and sent as the next prompt.
+  `/interrupt` cancels the current turn first.
+- End: `/end`, the button, the task ends, or `relayIdleMinutes` (default 30) with no owner
+  message. The owner is told "Back to the Herder".
+- The active relay is stored per channel chat in `herd.db`.
+
+### Tools
+
+| Group | Tools |
+| --- | --- |
+| Sessions | `session_start(project, profile, ownerText, addedContext)`, `session_prompt(sessionId, text)`, `session_cancel(sessionId)`, `session_list()` |
+| Owner | `ask(text, options)`, `notify(text)`, `relay_start(sessionId)`, `relay_end()`, `report_write(taskId, report)` |
+| Read | `task_get`, `task_list`, `session_transcript`, `decisions_list`, `read`, `grep`, `list`, `git_log`, `git_diff` (read tools only inside known project directories) |
+
+There is no tool to approve an item, write files or run shell commands. Every Herder tool call
+is checked by the guard list first; a match goes to the owner instead of running. Every call is
+written to the audit log.
+
+### When the Herder runs
+
+The Herder is idle until one of these arrives: a direct message for it, a task ended (`ready`,
+`blocked`, `failed`, `dropped`, or the session exited), a watchdog alarm, a scheduled job
+(daily digest). Events that arrive while it is busy are batched into its next turn.
+
+### Context and restarts
+
+- The session holds the conversation with the owner and short notes. Task state is read from
+  `herd.db` with the read tools; after a compaction the Herder must re-read it.
+- Compaction keeps unresolved owner instructions verbatim.
+- The session is saved and reloaded across restarts.
+- Agent output is untrusted data. It is quoted, and it cannot change rules, mode or the
+  Herder's instructions ([06-security.md](06-security.md)).
+- If the Herder fails (model error, invalid output), the owner gets a plain message and the
+  fixed commands (`status`, relay buttons on the board) still work.
+
+## 2. Following tasks
+
+Following tasks is code, not model work. The Herder is woken only at the end of a task or by
+an alarm.
+
+### Sources
+
+| Source | How AgentHerd gets it |
+| --- | --- |
+| Session state (`working`, `waiting-approval`, `idle`, `error`, `ended`) | ACP events ([03-agents.md](03-agents.md)) |
+| Agent report | MCP tool `herd_report`, offered in `session/new` |
+| Fallback report | The agent's last message when a turn ends without `herd_report` |
+| Watchdog | Timer, every `watchdogSeconds` (default 60) |
+
+`herd_report(state, summary, changes?, tests?, risks?, links?)`, with `state` one of
+`progress`, `waiting`, `ready`, `blocked`, `failed`, `dropped`. `summary` ≤ 600 characters.
+`progress` only updates the board; the other states end or pause the task and wake the Herder.
+
+### Stages
+
+The core computes one stage per task from session state and the last report. It is shown on the
+board.
+
+| Stage | When |
+| --- | --- |
+| `queued` | Waiting for a free slot |
+| `working` | Session is working |
+| `needs-owner` | An open item or an agent question |
+| `stuck` | Watchdog alarm, or last report `blocked` |
+| `done` | Last report `ready`, or `dropped` |
+| `failed` | Last report `failed`, or the session ended with an error |
+
+### Watchdog
+
+A session raises an alarm when:
+
+- the same tool call with the same arguments happens 3 times in one turn;
+- 3 turns in a row end with no file change and almost the same last message;
+- it is `working` for longer than `maxQuietMinutes` (default 30) with no new event;
+- the agent process exits unexpectedly.
+
+The Herder handles the alarm: it may prompt the agent, cancel the turn, or tell the owner. In
+`observe` mode it only tells the owner.
+
+### Completion report
+
+When a task ends, the owner always gets a report ([05-channels.md](05-channels.md#2-what-the-owner-sees)):
+title (task, project, agent, duration, result), what was done, what was verified, outputs
+(files, commits, PR), risks, automatic decisions during the task. The text comes from
+`herd_report`. Without it, the Herder writes the report from the last message and it is
+labeled as written by the Herder, with a link to the original.
+
+## 3. Approval pipeline
+
+```mermaid
+flowchart TD
+  E["Permission request or agent question"] --> G{"Guard list match?"}
+  G -- yes --> O["Owner, risk = high"]
+  G -- no --> R{"Owner rule match?"}
+  R -- yes --> D["Decision (source = rule)"]
+  R -- no --> RV{"Reviewer configured?"}
+  RV -- no --> O2["Owner"]
+  RV -- yes --> M["Reviewer: strongest model,<br/>one call with a project snapshot"]
+  M -- "confident, risk low or medium" --> D2["Decision (source = reviewer)"]
+  M -- "unsure or high risk" --> O3["Owner, with the suggestion"]
+```
+
+Items from different sessions are processed in parallel. The Herder is not on this path.
+
+### Guard list (always to the owner)
 
 Built in, can be extended, cannot be overridden by rules or models. It applies to agent
-requests **and to the Herder's own actions**. Examples: recursive delete outside the session's
-working directory, `git push --force` to a default branch, piping a download into a shell,
-reading `~/.ssh`, keychains or `.env` files, changing AgentHerd's own files or the agents'
-permission configs.
+requests **and to the Herder's own tool calls**. Examples: recursive delete outside the
+session's working directory, `git push --force` to a default branch, piping a download into
+a shell, reading `~/.ssh`, keychains or `.env` files, changing AgentHerd's own files or the
+agents' permission configs.
 
-### L0: rules
+### Rules
 
 A rule is a match plus an action. Match fields: agent profile, event type, tool name, command
 pattern (glob on the normalized command), path scope (inside the session `cwd` or a listed
@@ -47,94 +204,60 @@ directory). Rules come from:
   directory by default; the owner can widen it later in the desktop rule editor;
 - the desktop rule editor.
 
-### Pre-filter (optional, off by default)
+### Reviewer
 
-One call to a small, cheap model with structured output: category, risk, proposed action and
-confidence. It may decide only `low` risk items with confidence ≥ 0.9 and a named precedent;
-everything else goes to the Herder. It exists to save cost for users who want it.
-
-## 2. The resident Herder
-
-### Context
-
-The Herder's session holds, per project:
-
-- the open tasks and the agent sessions working on them (state, last report, files changed);
-- recent decisions and the owner's answers (decision memory, [§5](#5-decision-memory));
-- the rule set and the current mode;
-- the project's own instructions (`AGENTS.md` / `CLAUDE.md`, if present).
-
-Agent output in events is untrusted data. It is quoted, and it cannot change rules, mode or
-the Herder's instructions ([06-security.md](06-security.md)). The session is compacted when it
-grows past a configured budget; a compaction keeps open tasks, open items and unresolved
-owner instructions verbatim.
-
-### Tools
-
-| Group | Tools | Notes |
-| --- | --- | --- |
-| Decide | `decide(itemId, action, text?, reason)` | Answers a pending item |
-| Manage agents | `session_prompt` (continue, steer), `session_cancel`, `session_start` (new task in this project), `session_list` | Goes through the ACP client |
-| Talk to the owner | `escalate(itemId, suggestion)`, `notify(text)` | Through the inbox and channel |
-| Read | `read`, `grep`, `list`, `git_diff`, `git_log`, `session_transcript` | Inside the project directory only |
-
-The Herder has no tool to write files or run arbitrary shell commands. Every tool call it
-makes is checked by the guard list first; a match escalates to the owner instead of running.
-Every tool call is written to the audit log.
+- One structured-output call to the strongest model the user configured. No resident session.
+- Input: the request (tool, command, paths), the task's owner text and last report, a project
+  snapshot (git status, diff stat, `AGENTS.md` / `CLAUDE.md` excerpt), and up to 5 precedents
+  ([§5](#5-decision-memory)). Agent content is quoted as untrusted data.
+- Read tools (`read`, `grep`, `git_diff`) inside the project directory may be offered for hard
+  cases, with a step limit.
+- Output: a `Decision`. A parse error, timeout or model error sends the item to the owner.
 
 ### Output
 
 ```ts
 interface Decision {
   itemId: string;
-  action: "allow" | "deny" | "answer" | "continue" | "escalate";
-  text?: string;           // the answer, or the instruction for "continue"
+  action: "allow" | "deny" | "answer" | "escalate";
+  text?: string;           // the answer
   confidence: number;      // 0..1; 1 for rules
   risk: "low" | "medium" | "high";
-  source: "rule" | "prefilter" | "herder" | "human";
+  source: "rule" | "reviewer" | "human";
   reason: string;          // one sentence, shown to the owner
   precedents: string[];    // ids of past decisions used
 }
 ```
 
-### Lifecycle
-
-- A project's Herder starts with the first session in that project and stops after
-  `herderIdleMinutes` (default 60) with no open sessions or items. Its context is saved and
-  reloaded on the next start.
-- If the Herder fails (model error, timeout, invalid output), pending items escalate to the
-  owner. It never turns a failure into `allow`.
-- Like the Watchdog in dsh-superagent, the Herder also handles loops and agent errors
-  ([§6](#6-loop-detection)).
-
-## 3. Where human decisions go
+### Where owner decisions go
 
 Applied ADR: [0012](../adr/0012-channel-is-the-only-decision-surface.md).
 
-- Every escalated item goes to the channel. There is no "at the desk" state; the desktop app
-  manages AgentHerd but is not where the owner answers.
+- Every item for the owner goes to the channel. The desktop app manages AgentHerd but is not
+  where the owner answers.
 - The item waits for the owner. A reminder is sent every `remindMinutes` (default 30) while
   it is open. AgentHerd never decides for the owner because time passed.
 - If the channel is disconnected, the item stays in the inbox, shows in the desktop app, and
   is sent when the channel reconnects. The agent keeps waiting.
-- Sessions started outside AgentHerd never reach the Herder; they follow exported rules and
+- Sessions started outside AgentHerd never reach the pipeline; they follow exported rules and
   ask in their own UI ([03-agents.md](03-agents.md#2-rule-export)).
 
 ## 4. Modes
 
 | Mode | What AgentHerd applies by itself | Use |
 | --- | --- | --- |
-| `observe` | Nothing. It records its suggestion and later compares it with the real answer. | Default for a new install. Builds the agreement metric. |
-| `assist` | L0 rule decisions only | After the user has rules they trust |
-| `auto` | L0, and pre-filter / Herder decisions above threshold with risk `low` or `medium` | After agreement ≥ 90% |
+| `observe` | Nothing. It records the Reviewer's suggestion and later compares it with the real answer. | Default for a new install. Builds the agreement metric. |
+| `assist` | Rule decisions only | After the user has rules they trust |
+| `auto` | Rules, and Reviewer decisions above threshold with risk `low` or `medium` | After agreement ≥ 90% |
 
 Mode can be set globally and overridden per project directory. The desktop app shows the
-agreement metric next to the mode switch, so the user can see when `auto` is safe.
+agreement metric next to the mode switch. Modes apply to approvals; the Herder's management
+actions follow §1 in every mode, except that in `observe` it does not act on watchdog alarms.
 
 ## 5. Decision memory
 
-- Every item is stored with the final decision, who made it, and the suggestion the Herder
-  made (also in `observe` mode).
+- Every item is stored with the final decision, who made it, and the Reviewer's suggestion
+  (also in `observe` mode).
 - Similarity for precedents in v1: the same agent kind, the same tool, the same normalized
   command head (for example `pnpm test`, `git status`) and the same project. No embeddings in
   v1.
@@ -143,21 +266,10 @@ agreement metric next to the mode switch, so the user can see when `auto` is saf
 - An executed command cannot be undone. "Undo" means: remove the rule, mark the precedent
   wrong, and tell the agent in the next turn if it is still running.
 
-## 6. Loop detection
+## 6. Model providers
 
-The registry marks a session `looping` when one of these happens:
-
-- the same tool call with the same arguments 3 times in one turn;
-- 3 `turn.stopped` events in a row with no file change and almost the same last message;
-- `working` for longer than `maxQuietMinutes` (default 30) with no new event.
-
-A looping session or an agent error goes to the Herder first. It may steer the agent, cancel
-the turn, or escalate. In `observe` mode it only suggests.
-
-## 7. Model provider
-
-- The user picks the provider and model during onboarding, from the providers Pi supports.
-  AgentHerd ships no default provider. The onboarding page recommends the strongest model the
-  user has access to for the Herder, and a cheap one if the pre-filter is turned on.
-- The model step can be skipped. Without a model, AgentHerd works with the guard list, rules
-  and the owner; the Herder is off.
+- During onboarding the user picks two models from the providers Pi supports: a fast one for
+  the Herder and the strongest available one for the Reviewer. AgentHerd ships no default
+  provider.
+- Both steps can be skipped. Without a Herder model, the owner uses fixed commands and the
+  board; without a Reviewer model, items that no rule decides go to the owner.

@@ -10,4 +10,4 @@ AgentHerd learns from these projects. It does not copy their code (see
 | [dsh-superagent-prototype](https://github.com/deepseek-ai/dsh-superagent-prototype) | MIT | "Take as little human attention as possible"; observe mode; a panel that shows only what needs a person |
 | [Feishu one-scan agent app](https://open.feishu.cn/document/mcp_open_tools/integrating-agents-with-feishu/overview) | — | `registerApp` in `@larksuiteoapi/node-sdk`: one scan returns App ID, App Secret and the owner's `open_id`; long connection for messages and card callbacks |
 | [botmux](https://github.com/deepcoldy/botmux), [cc-connect](https://github.com/chenhg5/cc-connect) | — | Setup experience for Feishu bots that bridge to coding agents |
-| [Pi](https://github.com/earendil-works/pi) | MIT | Agent core for the Herder's L2 step |
+| [Pi](https://github.com/earendil-works/pi) | MIT | Agent core for the Herder (resident secretary session) and the Reviewer |

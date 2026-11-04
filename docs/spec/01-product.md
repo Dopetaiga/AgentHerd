@@ -56,7 +56,7 @@ Tagline: **Herd your coding agents. Only get pinged when it matters.**
 | Metric | Definition | v1 target |
 | --- | --- | --- |
 | Interruptions per agent-hour | Items sent to the human, divided by agent working hours | Show the number; reduce it by 50% against `observe` mode |
-| Suggestion agreement | Share of observe-mode suggestions that match the human's real answer | ≥ 90% for items the Herder marks high-confidence |
+| Suggestion agreement | Share of observe-mode suggestions that match the human's real answer | ≥ 90% for items the Reviewer marks high-confidence |
 | Wrong auto decisions | Auto decisions that the owner undoes or marks wrong | < 1% |
 | Time to first card | From first launch to the first Feishu card | < 5 minutes |
 | Time a waiting item waits | From an agent prompt to a decision | Median < 1 minute when the owner is reachable |

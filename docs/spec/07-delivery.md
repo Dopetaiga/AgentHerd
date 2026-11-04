@@ -4,10 +4,10 @@
 
 | ID | Name | Result | Exit criteria |
 | --- | --- | --- | --- |
-| M0 | Spec freeze | Specs 00–07 and ADRs 0001–0017 accepted | Done 2026-11-04: baseline 0.1.0 Frozen |
+| M0 | Spec freeze | Specs 00–07 and ADRs 0001–0019 accepted | Done 2026-11-04: baseline 0.2.0 Frozen |
 | M1 | Headless loop | `core`, `rules` (guard list + matcher), `acp-client`, `mock-agent`, `channel-feishu`, run from a CLI | E2E-APPROVE and E2E-OWNER-ONLY pass with `mock-agent` and a fake channel; one manual run with real Feishu |
-| M2 | DSH + desktop shell | DSH profile (`dsh acp`), `run` command from Feishu, desktop app with onboarding (QR, model choice), sessions list, read-only inbox, mode switch, keep-awake switch | A DSH task started from Feishu asks for approval and is approved from Feishu |
-| M3 | Herder + rule export | Guard list, L0 rules, "Always do this", resident Herder per project (tools, compaction, restore), optional pre-filter, observe metrics, decision memory; exporters for Claude Code and Codex, with export status per rule | Observe mode reports agreement on a replayed item set; exported Claude Code config passes `plan()` tests for every rule shape |
+| M2 | DSH + Herder + desktop shell | DSH profile (`dsh acp`), the Herder (light model: start tasks from Feishu, relay, verbatim rule), board and completion reports, `herd_report`, watchdog, desktop app with onboarding (QR, two models), sessions list, read-only inbox, mode switch, keep-awake switch | A DSH task started from a Feishu message asks for approval, is approved from Feishu, and ends with a report; the board shows each stage |
+| M3 | Reviewer + rule export | "Always do this", Reviewer (strongest model, project snapshot), observe metrics, decision memory, Herder compaction and restore; exporters for Claude Code and Codex, with export status per rule | Observe mode reports agreement on a replayed item set; exported Claude Code config passes `plan()` tests for every rule shape |
 | M4 | More agents | Built-in profiles for Claude Code (`claude-agent-acp`), Codex (`codex-acp`), Gemini CLI, OpenCode; exporters for Gemini CLI and OpenCode | Verified on a machine where these agents can run |
 | M5 | Release | Signed and notarized macOS build, auto-update, README with GIF | Fresh-machine install to first card in < 5 minutes |
 
@@ -47,5 +47,9 @@ Each milestone is split into plans under [`plans/`](../../plans/README.md).
 | E2E-ALWAYS-RULE | Owner taps "Always do this"; the next equal request is allowed by rule in `assist` mode | M3 |
 | E2E-GUARD | A guarded command is never auto-allowed in any mode | M3 |
 | E2E-OBSERVE-AGREEMENT | Observe mode stores suggestions and computes agreement | M3 |
-| E2E-LOOP | Three identical stops mark the session `looping` and send one notification | M3 |
-| E2E-RUN-FROM-CHAT | `run <dir> <prompt>` starts a launch-mode session and reports completion | M2 |
+| E2E-LOOP | Three identical stops raise a watchdog alarm; the board shows `stuck` | M2 |
+| E2E-RUN-FROM-CHAT | A direct message starts a session; the agent receives the owner's text verbatim plus a labeled context block; a completion report is sent | M2 |
+| E2E-RELAY | Owner starts a relay; messages reach the session without the Herder; `/end` and `relayIdleMinutes` end it | M2 |
+| E2E-BOARD | A stage change updates the pinned board in place; no new message is sent | M2 |
+| E2E-REPORT-FALLBACK | A turn ends without `herd_report`; the report is written from the last message and labeled as written by the Herder | M2 |
+| E2E-HERDER-NO-APPROVE | The Herder has no way to allow an item; a Herder tool call that matches the guard list goes to the owner | M2 |

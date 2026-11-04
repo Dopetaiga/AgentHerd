@@ -2,7 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-11-04
-- Related: [03-agents.md](../spec/03-agents.md#2-rule-export), [04-herder.md](../spec/04-herder.md#l0-rules)
+- Related: [03-agents.md](../spec/03-agents.md#2-rule-export), [04-herder.md](../spec/04-herder.md#rules)
 
 ## Context
 

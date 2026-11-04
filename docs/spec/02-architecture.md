@@ -14,7 +14,7 @@ flowchart TB
   end
   subgraph Core["AgentHerd core (one process)"]
     INB["Inbox"]
-    HD["Herder<br/>guard → rules → resident Pi agent per project"]
+    HD["Herder (secretary, light model)<br/>+ approval pipeline: guard → rules → Reviewer"]
     RULES[("Rule set<br/>(single source)")]
     REG["Session registry"]
     ACPC["ACP client"]
@@ -120,8 +120,9 @@ Secrets (Feishu App Secret, model API keys) are stored with Electron `safeStorag
 
 - ACP sessions cost one agent process each, as they would without AgentHerd.
 - Rule export costs nothing at run time; the agent enforces its own config.
-- The Herder calls a model only for events that pass the guard list and rules (and the
-  pre-filter, if on). The guard list and rules cost nothing.
+- The Reviewer calls a model only for items that pass the guard list and rules; the guard
+  list and rules cost nothing. The Herder calls its light model only for direct messages,
+  ended tasks, watchdog alarms and the digest.
 
 ## 7. Keep running with the lid closed
 

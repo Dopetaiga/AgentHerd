@@ -17,3 +17,5 @@ answer and the evidence (link, command output, date) and, if it changes a decisi
 | Q10 | Idle detection for presence | — | Closed 2026-11-04: presence removed (ADR 0012) |
 | Q11 | Windows support: named pipe for the local API, agent config paths | after v1 | Deferred: macOS only (ADR 0013) |
 | Q12 | `pmset -a disablesleep 1` on current macOS / Apple Silicon: does it keep the system awake with the lid closed on battery and on power? Best way to ask for admin rights from Electron (`osascript ... with administrator privileges` or a helper)? | M2 keep-awake | Open |
+| Q13 | Feishu: does an in-place card update (`im.v1.message.patch`) make a sound or badge on the phone? How does a pinned bot message show in a direct chat, and does pinning add a system message? Can a bot open topics in a direct chat? | M2 board, relay | Open (prototype sent, pinned and updated a board on 2026-11-04) |
+| Q14 | Which agents accept `mcpServers` (stdio or http) in ACP `session/new`, so `herd_report` can be offered? DSH reports `mcp http` | M2 reports | Open |
