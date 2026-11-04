@@ -1,10 +1,12 @@
 // The app shell: a sidebar on the window frame, and the page on a rounded card beside it.
 
-import { Boxes, ListTodo, Loader2, type LucideIcon, Settings, WifiOff } from "lucide-react";
+import { Bot, Boxes, ListTodo, Loader2, type LucideIcon, Settings, WifiOff } from "lucide-react";
 import { useEffect } from "react";
 import { Logo } from "./components/Logo";
+import { SidebarStatus } from "./components/SidebarStatus";
 import { Dot, Toasts } from "./components/ui";
 import { FirstRun } from "./firstrun/FirstRun";
+import { HerdersPage } from "./pages/HerdersPage";
 import { ModelsPage } from "./pages/ModelsPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { TasksPage } from "./pages/TasksPage";
@@ -12,24 +14,28 @@ import { type Page, startStore, useApp } from "./store";
 
 const NAV: { page: Page; label: string; icon: LucideIcon }[] = [
   { page: "tasks", label: "任务", icon: ListTodo },
+  { page: "herders", label: "主管", icon: Bot },
   { page: "models", label: "模型", icon: Boxes },
   { page: "settings", label: "设置", icon: Settings },
 ];
 
 const HEADERS: Record<Page, { title: string; hint: string }> = {
-  tasks: { title: "任务", hint: "Agent 的进度，以及等你在飞书里处理的请求" },
-  models: { title: "模型", hint: "给每个用途选一个模型，管理模型服务和 Key" },
-  settings: { title: "设置", hint: "飞书、工作模式、电源和数据目录" },
+  tasks: { title: "任务", hint: "Agent 在做什么，哪些在等你" },
+  herders: {
+    title: "主管",
+    hint: "在飞书里回答你、帮你开任务、跟进进度；不会替你批准任何请求",
+  },
+  models: { title: "模型", hint: "管理模型服务和 Key，选审查用的模型" },
+  settings: { title: "设置", hint: "飞书、Agent、工作模式、电源和数据目录" },
 };
 
 function Sidebar() {
   const page = useApp((s) => s.page);
   const setPage = useApp((s) => s.setPage);
   const waiting = useApp((s) => s.tasks?.items.length ?? 0);
-  const version = useApp((s) => s.status?.version);
-  const connected = useApp((s) => s.connected);
+  const herderOff = useApp((s) => s.status?.herder.on === false);
   return (
-    <aside className="flex w-(--ah-sidebar-width) shrink-0 flex-col">
+    <aside className="relative z-10 flex w-(--ah-sidebar-width) shrink-0 flex-col">
       {/* The traffic lights of the hiddenInset title bar sit in this strip. */}
       <div className="app-drag h-(--ah-titlebar-height) shrink-0" />
       <div className="app-drag flex items-center gap-2.5 px-4 pt-1 pb-5">
@@ -66,17 +72,12 @@ function Sidebar() {
                   {waiting}
                 </span>
               )}
+              {p === "herders" && herderOff && <Dot tone="amber" />}
             </button>
           );
         })}
       </nav>
-      <div className="mt-auto flex items-center gap-2 px-5 py-4 text-ink-muted text-sm">
-        <Dot tone={connected ? "green" : "amber"} pulse={!connected} />
-        <span className="flex-1">{connected ? "服务运行中" : "正在连接…"}</span>
-        {version !== undefined && (
-          <span className="font-mono text-ink-dim text-xs">v{version}</span>
-        )}
-      </div>
+      <SidebarStatus />
     </aside>
   );
 }
@@ -85,7 +86,7 @@ function ConnectionBanner() {
   const connected = useApp((s) => s.connected);
   if (connected) return null;
   return (
-    <div className="px-8 pb-3">
+    <div className="shrink-0 overflow-hidden px-8 pb-3 [scrollbar-gutter:stable]">
       <div className="mx-auto flex max-w-[760px] items-center gap-2 rounded-lg bg-warning-soft px-3 py-2 text-md text-warning-text">
         <WifiOff size={14} />
         正在连接 AgentHerd 服务…
@@ -108,6 +109,8 @@ function CurrentPage() {
   switch (page) {
     case "tasks":
       return <TasksPage />;
+    case "herders":
+      return <HerdersPage />;
     case "models":
       return <ModelsPage />;
     case "settings":
@@ -133,14 +136,15 @@ export function App() {
         <div className="flex min-w-0 flex-1 flex-col pr-2 pb-2">
           <div className="app-drag h-2 shrink-0" />
           <main className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-card border border-line bg-canvas">
-            <header className="app-drag flex min-h-[88px] shrink-0 flex-col justify-end px-8 pb-5">
+            {/* Both reserve the scrollbar's width, so the title lines up with the content. */}
+            <header className="app-drag flex min-h-[88px] shrink-0 flex-col justify-end overflow-hidden px-8 pb-5 [scrollbar-gutter:stable]">
               <div className="mx-auto w-full max-w-[760px]">
                 <h1 className="font-semibold text-ink text-xl tracking-[-0.2px]">{header.title}</h1>
                 <p className="mt-0.5 text-ink-muted text-md">{header.hint}</p>
               </div>
             </header>
             <ConnectionBanner />
-            <div className="min-h-0 flex-1 overflow-y-auto px-8 pb-10">
+            <div className="min-h-0 flex-1 overflow-y-auto px-8 pb-10 [scrollbar-gutter:stable]">
               <div className="mx-auto flex min-h-full w-full max-w-[760px] flex-col">
                 <CurrentPage />
               </div>

@@ -171,6 +171,45 @@ export function Dot({ tone = "gray", pulse = false }: { tone?: Tone; pulse?: boo
   );
 }
 
+/** A light segmented control: one choice out of a few, for filtering a page. */
+export function Segmented<T extends string>({
+  label,
+  options,
+  value,
+  onChange,
+}: {
+  label: string;
+  options: readonly { value: T; label: string }[];
+  value: T;
+  onChange: (value: T) => void;
+}) {
+  return (
+    <div
+      role="radiogroup"
+      aria-label={label}
+      className="inline-flex gap-0.5 self-start rounded-md bg-control-hover p-0.5"
+    >
+      {options.map((o) => (
+        // biome-ignore lint/a11y/useSemanticElements: styled as a segment, not a radio dot
+        <button
+          key={o.value}
+          type="button"
+          role="radio"
+          aria-checked={value === o.value}
+          onClick={() => onChange(o.value)}
+          className={`h-6 rounded-sm px-2.5 text-sm transition-colors ${
+            value === o.value
+              ? "bg-surface-raised font-medium text-ink shadow-[0_0_0_1px_var(--ah-border-strong)]"
+              : "text-ink-muted hover:text-ink"
+          }`}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 /** Class for text fields, text areas and selects (see `.ah-input` in styles.css). */
 export const inputClass = "ah-input";
 

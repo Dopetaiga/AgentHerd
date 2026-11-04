@@ -106,7 +106,7 @@ export function parseModelList(text: string): string[] {
 /** The host explains in English (shared with the CLI); show the known reasons in Chinese. */
 export function herderReasonLabel(reason: string | undefined): string | undefined {
   if (reason === undefined) return undefined;
-  if (reason === "no model chosen for the Herder") return "还没给主管选模型，去「模型」页选一个";
+  if (reason === "no model chosen for the Herder") return "还没给主管选模型";
   const key = /^no key for service "(.+)"$/.exec(reason);
   if (key) return `服务「${key[1]}」没有 Key`;
   return reason;

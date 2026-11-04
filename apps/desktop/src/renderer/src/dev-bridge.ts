@@ -5,6 +5,9 @@
 //   bound            bound and connected, no Herder model
 //   keychain         bound, but reading the keychain was cancelled; 重新连接 then works
 //   ready            bound, connected, Herder chosen
+//   empty            like ready, with no tasks
+//   no-agent         like empty, with no agent profiles
+//   offline          like ready, then the connection to the host drops
 
 import type {
   HostEvent,
@@ -30,15 +33,18 @@ function minutesAgo(n: number): string {
   return new Date(Date.now() - n * 60_000).toISOString();
 }
 
-type Sim = "fresh" | "bound" | "keychain" | "ready";
+const SIMS = ["fresh", "bound", "keychain", "ready", "empty", "no-agent", "offline"] as const;
+
+type Sim = (typeof SIMS)[number];
 
 function simulation(): Sim {
   const value = new URLSearchParams(window.location.search).get("sim");
-  return value === "bound" || value === "keychain" || value === "ready" ? value : "fresh";
+  return SIMS.find((s) => s === value) ?? "fresh";
 }
 
 function installFakeBridge(): void {
   const sim = simulation();
+  const herderChosen = sim !== "fresh" && sim !== "bound" && sim !== "keychain";
   const eventListeners = new Set<Listener<HostEvent>>();
   const connectionListeners = new Set<Listener<boolean>>();
   const keys = new Map<string, string>([["deepseek", "sk-fake"]]);
@@ -58,55 +64,92 @@ function installFakeBridge(): void {
               error: "Platform failure: User canceled the operation.",
             }
           : { bound: true, appId: "cli_fake123", connected: true },
-    herder:
-      sim === "ready"
-        ? { on: true, ref: "deepseek/deepseek-chat" }
-        : { on: false, reason: "no model chosen for the Herder" },
+    herder: herderChosen
+      ? { on: true, ref: "deepseek/deepseek-chat" }
+      : { on: false, reason: "no model chosen for the Herder" },
     mode: "observe",
     locale: "zh-CN",
     keepAwake: true,
-    profiles: ["dsh"],
+    profiles: sim === "no-agent" ? [] : ["dsh"],
   };
 
-  const tasks: TasksView = {
-    tasks: [
-      {
-        id: "s1",
-        title: "修复登录页在 Safari 上的白屏",
-        project: "web-portal",
-        agent: "dsh",
-        stage: "needs-owner",
-        lastReport: "想执行 npm publish，等你批准",
-        startedAt: minutesAgo(42),
-        updatedAt: minutesAgo(3),
-        automaticDecisions: [],
-      },
-      {
-        id: "s2",
-        title: "给订单服务补单元测试",
-        project: "order-service",
-        agent: "dsh",
-        stage: "working",
-        lastReport: "已写完 12 个测试，正在跑 npm test",
-        startedAt: minutesAgo(25),
-        updatedAt: minutesAgo(1),
-        automaticDecisions: ["按规则 r1 自动批准：npm test"],
-      },
-    ],
-    items: [
-      {
-        id: "i1",
-        sessionId: "s1",
-        title: "执行命令",
-        body: "npm publish --access public --tag next ./packages/web-portal",
-        risk: "high",
-        createdAt: minutesAgo(3),
-        cwd: "/Users/me/code/web-portal",
-        profileId: "dsh",
-        taskTitle: "修复登录页在 Safari 上的白屏",
-      },
-    ],
-  };
+  const task = (
+    id: string,
+    title: string,
+    project: string,
+    stage: TasksView["tasks"][number]["stage"],
+    lastReport: string,
+    updated: number,
+  ): TasksView["tasks"][number] => ({
+    id,
+    title,
+    project,
+    agent: "dsh",
+    stage,
+    lastReport,
+    startedAt: minutesAgo(updated + 30),
+    updatedAt: minutesAgo(updated),
+    automaticDecisions: [],
+  });
+
+  const tasks: TasksView =
+    sim === "empty" || sim === "no-agent"
+      ? { tasks: [], items: [] }
+      : {
+          tasks: [
+            task(
+              "s1",
+              "修复登录页在 Safari 上的白屏",
+              "web-portal",
+              "needs-owner",
+              "修好了，想发一个 next 版本验证，等你批准",
+              3,
+            ),
+            task(
+              "s2",
+              "给订单服务补单元测试",
+              "order-service",
+              "working",
+              "已写完 12 个测试，正在跑 npm test",
+              1,
+            ),
+            task("s3", "把日志库换成 pino", "order-service", "queued", "", 6),
+            task(
+              "s4",
+              "升级 Node 到 24",
+              "infra",
+              "stuck",
+              "CI 里的镜像拉不下来，已经重试 3 次",
+              18,
+            ),
+            task("s5", "整理 README 的安装步骤", "web-portal", "done", "已提交 PR #128", 55),
+            task("s6", "迁移旧的用户表", "order-service", "failed", "迁移脚本报错：外键冲突", 120),
+            task("s7", "给首页加骨架屏", "web-portal", "done", "已提交 PR #127", 240),
+          ],
+          items: [
+            {
+              id: "i1",
+              sessionId: "s1",
+              title: "执行命令",
+              body: "npm publish --access public --tag next ./packages/web-portal",
+              risk: "high",
+              createdAt: minutesAgo(3),
+              cwd: "/Users/me/code/web-portal",
+              profileId: "dsh",
+              taskTitle: "修复登录页在 Safari 上的白屏",
+            },
+            {
+              id: "i2",
+              sessionId: "s0",
+              title: "写入文件",
+              body: "~/.npmrc: registry=https://npm.example.com/",
+              risk: "medium",
+              createdAt: minutesAgo(9),
+              cwd: "/Users/me/code/scratch",
+              profileId: "dsh",
+            },
+          ],
+        };
 
   let models: ModelsView = {
     services: [
@@ -119,7 +162,7 @@ function installFakeBridge(): void {
         hasKey: true,
       },
     ],
-    roles: sim === "ready" ? { herder: { serviceId: "deepseek", model: "deepseek-chat" } } : {},
+    roles: herderChosen ? { herder: { serviceId: "deepseek", model: "deepseek-chat" } } : {},
   };
 
   const providers: ProviderView[] = [
@@ -304,6 +347,7 @@ function installFakeBridge(): void {
     onConnection: (listener) => {
       connectionListeners.add(listener);
       setTimeout(() => listener(true), 0);
+      if (sim === "offline") setTimeout(() => listener(false), 1000);
       return () => connectionListeners.delete(listener);
     },
   };

@@ -1,7 +1,17 @@
-// 设置: the Feishu channel, mode, keep awake, the first run, and where AgentHerd keeps its files.
+// 设置: the Feishu channel, the available agents, mode, keep awake, the first run, and where AgentHerd keeps its files.
 
 import type { SettingsPatch } from "@agentherd/host/api";
-import { Check, Eye, FolderOpen, Hand, Info, MoonStar, Rocket } from "lucide-react";
+import {
+  Check,
+  Eye,
+  FolderOpen,
+  Hand,
+  Info,
+  MoonStar,
+  Rocket,
+  SquareTerminal,
+  TriangleAlert,
+} from "lucide-react";
 import { useState } from "react";
 import { FeishuSection } from "../components/FeishuSection";
 import { Button, Group, IconTile, Row, Section, Switch } from "../components/ui";
@@ -29,6 +39,33 @@ export function SettingsPage() {
   return (
     <div className="flex flex-col gap-7">
       <FeishuSection />
+
+      <Section title="Agent" hint="在飞书里用 /run 开始任务时可以用的 Agent">
+        <Group>
+          {status.profiles.map((id) => (
+            <Row
+              key={id}
+              icon={
+                <IconTile>
+                  <SquareTerminal size={15} strokeWidth={1.75} />
+                </IconTile>
+              }
+              title={<span className="selectable font-mono">{id}</span>}
+            />
+          ))}
+          {status.profiles.length === 0 && (
+            <Row
+              icon={
+                <IconTile tone="amber">
+                  <TriangleAlert size={15} strokeWidth={1.75} />
+                </IconTile>
+              }
+              title="没有可用的 Agent"
+              description="请安装 DeepSeek Harness"
+            />
+          )}
+        </Group>
+      </Section>
 
       <Section title="模式">
         <Group>

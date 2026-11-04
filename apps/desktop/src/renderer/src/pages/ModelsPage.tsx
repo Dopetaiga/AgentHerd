@@ -1,4 +1,5 @@
-// 模型: choose a model per role, then manage the list of model services (ADR 0021).
+// 模型: the model used for reviews, and the list of model services (ADR 0021).
+// The Herder's model is chosen on the 主管 page.
 
 import { Boxes, Plus } from "lucide-react";
 import { useState } from "react";
@@ -48,7 +49,7 @@ export function ServiceList() {
 export function ModelsPage() {
   return (
     <div className="flex flex-col gap-7">
-      <Section title="用途" hint="从下面的模型列表里选">
+      <Section title="用途" hint="主管用的模型在「主管」页选">
         <RolePicker />
       </Section>
       <ServiceList />
