@@ -147,6 +147,22 @@ describe("local API socket", () => {
       models: ["qwen3"],
     });
     await until(() => events.some((e) => e.topic === "models"));
+    // Editing a service without a new key: JSON sends the undefined key as null.
+    await client.host.setKey("local", "sk-local");
+    const edited = await client.host.putService(
+      {
+        id: "local",
+        name: "Ollama 2",
+        kind: "openai-compatible",
+        baseUrl: "http://127.0.0.1:11434/v1",
+        models: ["qwen3"],
+      },
+      undefined,
+    );
+    expect(edited.services.find((s) => s.id === "local")).toMatchObject({
+      name: "Ollama 2",
+      hasKey: true,
+    });
     await expect(client.host.removeService("nope")).rejects.toThrow(/no service "nope"/);
     expect((await client.host.providers()).some((p) => p.provider === "deepseek")).toBe(true);
   });

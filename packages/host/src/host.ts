@@ -264,7 +264,7 @@ export class Host implements HostApi {
 
   async putService(service: ModelService, key?: string): Promise<ModelsView> {
     const next = putService(this.settings(), cleanService(service));
-    if (key !== undefined) this.writeKey(service.id, key);
+    if (typeof key === "string") this.writeKey(service.id, key);
     this.saveSettings(next);
     await this.applyModels();
     return this.models();
