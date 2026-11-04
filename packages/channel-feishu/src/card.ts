@@ -285,6 +285,12 @@ export function renderCard(view: View, locale: Locale = DEFAULT_LOCALE): Record<
         elements,
       );
     }
+    case "ask": {
+      const elements: Record<string, unknown>[] = [markdown(view.text)];
+      if (view.final !== undefined) elements.push(markdown(t.askAnswered(view.final)));
+      else for (const o of view.options) elements.push(actionRow(view.askId, o.action, o.label));
+      return makeCard(undefined, elements);
+    }
     case "relay": {
       const elements: Record<string, unknown>[] = [];
       if (view.active) {

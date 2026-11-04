@@ -6,6 +6,9 @@ import type { Locale, ReportResult } from "@agentherd/protocol";
 export interface CoreTexts {
   help: string;
   noHerder: string;
+  runAccepted: (title: string) => string;
+  herderFailed: (message: string) => string;
+  herderGuardHit: (path: string, reason: string) => string;
   usage(usage: string): string;
   noMatch(query: string): string;
   manyMatches(query: string, list: string): string;
@@ -73,6 +76,10 @@ const HELP_EN = `status — show the task board
 const zh: CoreTexts = {
   help: HELP_ZH,
   noHerder: `还没有配置主管模型，现在只能用命令：\n${HELP_ZH}`,
+  runAccepted: (title) => `已收到，正在启动：${title}`,
+  herderFailed: (message) => `主管这次没能回答（${message}）。固定命令仍然可用，发 /help 查看。`,
+  herderGuardHit: (path, reason) =>
+    `主管想在 ${path} 操作，已被拦下（${reason}）。如果确实要做，请你自己用 /run。`,
   usage: (u) => `用法：${u}`,
   noMatch: (q) => `没有找到和"${q}"匹配的进行中任务。`,
   manyMatches: (q, list) => `有多个任务和"${q}"匹配：\n${list}`,
@@ -123,6 +130,11 @@ const zh: CoreTexts = {
 const en: CoreTexts = {
   help: HELP_EN,
   noHerder: `No Herder model is configured yet. Commands:\n${HELP_EN}`,
+  runAccepted: (title) => `Received, starting: ${title}`,
+  herderFailed: (message) =>
+    `The Herder could not answer (${message}). Commands still work; send /help.`,
+  herderGuardHit: (path, reason) =>
+    `The Herder tried to work in ${path} and was stopped (${reason}). To do it anyway, use /run yourself.`,
   usage: (u) => `Usage: ${u}`,
   noMatch: (q) => `No open task matches "${q}".`,
   manyMatches: (q, list) => `More than one task matches "${q}":\n${list}`,

@@ -1,0 +1,25 @@
+{
+  "name": "@agentherd/herder",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p .",
+    "test": "vitest run --root ../.. packages/herder"
+  },
+  "dependencies": {
+    "@agentherd/core": "workspace:*",
+    "@agentherd/herder-loop": "workspace:*",
+    "@agentherd/rules": "workspace:*",
+    "@earendil-works/pi-ai": "1.5.0",
+    "@earendil-works/pi-schema": "1.5.0"
+  },
+  "devDependencies": {
+    "@agentherd/channel-fake": "workspace:*",
+    "@agentherd/mock-agent": "workspace:*",
+    "@agentherd/protocol": "workspace:*"
+  }
+}

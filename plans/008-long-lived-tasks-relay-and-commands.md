@@ -130,3 +130,10 @@ Feishu card tests; the manual run.
 - The owner asked for Chinese texts in the channel (2026-11-04). Next change.
 - `parseCommand`, the `state` table and the Feishu buttons and text folding were written by
   DeepSeek V4 Pro subagents and reviewed.
+- 2026-11-04 15:15 manual run after the Chinese texts: one tap on 批准 showed Feishu's
+  "服务不在线" toast and nothing reached AgentHerd (no audit row, socket still open, no SDK
+  error); the same tap a minute later worked. Cause not found. If it happens again, capture the
+  SDK debug log around the tap before restarting.
+- `/run` gave no answer for about 47 s (until the first card), so the owner sent it twice.
+  Plan 009 adds an immediate "已收到，正在启动：…" reply.
+- A plain message during a relay was still not tried by hand; only E2E-RELAY covers it.

@@ -59,9 +59,15 @@ importers:
       '@agentherd/core':
         specifier: workspace:*
         version: link:../core
+      '@agentherd/herder':
+        specifier: workspace:*
+        version: link:../herder
       '@agentherd/protocol':
         specifier: workspace:*
         version: link:../protocol
+      '@earendil-works/pi-ai':
+        specifier: 1.5.0
+        version: 1.5.0(@aws-sdk/credential-provider-node@3.972.92)(@smithy/signature-v4@5.7.5)(ws@8.22.1)(zod@4.6.7)
       '@napi-rs/keyring':
         specifier: ^2.1.2
         version: 2.1.2
@@ -94,6 +100,34 @@ importers:
       '@agentherd/mock-agent':
         specifier: workspace:*
         version: link:../mock-agent
+
+  packages/herder:
+    dependencies:
+      '@agentherd/core':
+        specifier: workspace:*
+        version: link:../core
+      '@agentherd/herder-loop':
+        specifier: workspace:*
+        version: link:../herder-loop
+      '@agentherd/rules':
+        specifier: workspace:*
+        version: link:../rules
+      '@earendil-works/pi-ai':
+        specifier: 1.5.0
+        version: 1.5.0(@aws-sdk/credential-provider-node@3.972.92)(@smithy/signature-v4@5.7.5)(ws@8.22.1)(zod@4.6.7)
+      '@earendil-works/pi-schema':
+        specifier: 1.5.0
+        version: 1.5.0
+    devDependencies:
+      '@agentherd/channel-fake':
+        specifier: workspace:*
+        version: link:../channel-fake
+      '@agentherd/mock-agent':
+        specifier: workspace:*
+        version: link:../mock-agent
+      '@agentherd/protocol':
+        specifier: workspace:*
+        version: link:../protocol
 
   packages/herder-loop:
     dependencies:

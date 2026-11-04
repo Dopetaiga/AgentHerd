@@ -20,6 +20,7 @@ export interface CardTexts {
   relayActive: (label: string) => string;
   endRelay: string;
   backToHerder: string;
+  askAnswered: (answer: string) => string;
   toast: string;
   appName: string;
   appDesc: string;
@@ -55,6 +56,7 @@ export const CARD_TEXTS: Record<Locale, CardTexts> = {
       `正在和 **${label}** 对话。直接发的消息都会转给这个任务，发 /end 结束。`,
     endRelay: "结束转接",
     backToHerder: "已回到主管",
+    askAnswered: (answer) => `你选了：**${answer}**`,
     toast: "已收到",
     appName: "AgentHerd",
     appDesc: "只在你的 Agent 需要你时才打扰你",
@@ -88,6 +90,7 @@ export const CARD_TEXTS: Record<Locale, CardTexts> = {
       `Now talking to **${label}**. Plain messages go to this task. /end to stop.`,
     endRelay: "End relay",
     backToHerder: "Back to the Herder",
+    askAnswered: (answer) => `You chose: **${answer}**`,
     toast: "Received",
     appName: "AgentHerd",
     appDesc: "Only pings you when your agents need you",

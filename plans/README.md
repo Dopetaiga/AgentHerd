@@ -21,5 +21,5 @@ States: `TODO`, `IN PROGRESS`, `DONE`, `BLOCKED: <reason>`, `REJECTED: <reason>`
 | [006](006-dsh-session-through-acp.md) | A DSH session runs through ACP and its permission requests reach the owner (Q07) | M2 | M | 004 | DONE |
 | [007](007-stages-watchdog-board-reports.md) | Tasks have stages, a watchdog, a pinned board and completion reports | M2 | L | 006 | DONE |
 | [008](008-long-lived-tasks-relay-and-commands.md) | Tasks stay open, the owner starts and relays to them from chat with fixed commands | M2 | L | 007 | DONE |
-| 009 | The Herder answers the owner, starts tasks from chat, and never approves | M2 | L | 005, 008 | TODO (plan not written) |
+| [009](009-herder-answers-and-starts-tasks.md) | The Herder answers the owner, starts tasks from chat, and never approves | M2 | L | 005, 008 | DONE (manual run pending) |
 | 010 | The desktop app does onboarding and shows sessions and the read-only inbox | M2 | L | 009 | TODO (plan not written) |

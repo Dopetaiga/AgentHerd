@@ -172,7 +172,17 @@ export interface TextView {
   text: string;
 }
 
-export type View = ItemView | BoardView | ReportView | RelayView | TextView;
+/** A question from the Herder with suggested answers. */
+export interface AskView {
+  kind: "ask";
+  askId: string;
+  text: string;
+  options: ItemOption[];
+  /** The answer the owner chose; the card then shows no buttons. */
+  final?: string;
+}
+
+export type View = ItemView | BoardView | ReportView | RelayView | TextView | AskView;
 
 export type Inbound =
   | { kind: "action"; target: string; action: string; text?: string; from: string }

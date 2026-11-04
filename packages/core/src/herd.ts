@@ -7,11 +7,13 @@ import { join, resolve } from "node:path";
 import { type AgentConnection, type PermissionRequest, startAgent } from "@agentherd/acp-client";
 import type {
   AgentProfile,
+  AskView,
   Channel,
   ChannelBinding,
   Inbound,
   Item,
   Locale,
+  MessageRef,
   Mode,
   Rule,
   View,
@@ -21,6 +23,7 @@ import type { ExtraGuard } from "@agentherd/rules";
 import { Board } from "./board.ts";
 import { type Clock, systemClock, type Timer } from "./clock.ts";
 import { parseCommand } from "./commands.ts";
+import type { HerderFactory, HerderHost, HerderPort } from "./herder-port.ts";
 import { Inbox } from "./inbox.ts";
 import { decide } from "./pipeline.ts";
 import { Registry } from "./registry.ts";
@@ -63,6 +66,8 @@ export interface HerdOptions {
   sessionIdleMinutes?: number;
   /** Language of the texts the owner reads. Default: Chinese. */
   locale?: Locale;
+  /** Creates the Herder. Without it, plain messages get the list of commands. */
+  herder?: HerderFactory;
 }
 
 /** Per-task state that only the Herd and its listeners use. */
@@ -120,6 +125,9 @@ export class Herd {
   private readonly texts: CoreTexts;
   private started = false;
   private relayTimer: Timer | undefined;
+  private readonly herder: HerderPort | undefined;
+  /** Open questions from the Herder, by ask id. */
+  private readonly asks = new Map<string, { ref: MessageRef; view: AskView }>();
 
   private readonly opts: HerdOptions;
 
@@ -159,6 +167,35 @@ export class Herd {
       const f = this.following.get(row.id);
       if (f !== undefined) this.restage(f);
     });
+    this.herder = opts.herder?.(this.herderHost());
+  }
+
+  private herderHost(): HerderHost {
+    return {
+      locale: this.opts.locale ?? DEFAULT_LOCALE,
+      texts: this.texts,
+      userHome: this.opts.userHome,
+      profiles: () => this.opts.profiles.map((p) => ({ id: p.id, name: p.name })),
+      tasks: () => this.tasks(),
+      openTasks: () => this.openTasks(),
+      recentProjects: () => [...new Set(this.store.recentSessions(50).map((s) => s.cwd))],
+      relayTaskId: () => this.relay()?.taskId,
+      decisions: (limit) => this.store.recentDecisions(limit),
+      startTask: async (profileId, cwd, title, prompt) => {
+        const { taskId, turn } = await this.startTask(profileId, cwd, title, prompt);
+        turn.catch(() => {});
+        return taskId;
+      },
+      promptTask: (taskId, text) => void this.promptTask(taskId, text).catch(() => {}),
+      cancelTurn: (taskId) => this.cancelTurn(taskId),
+      startRelay: (taskId) => this.startRelay(taskId),
+      endRelay: () => this.endRelay("ended by the Herder"),
+      say: (text) => this.say(text),
+      ask: (text, options) => this.ask(text, options),
+      audit: (type, data) => this.store.audit(type, data),
+      getState: (key) => this.store.getState(key),
+      setState: (key, value) => this.store.setState(key, value),
+    };
   }
 
   /** All tasks this Herd follows or followed. */
@@ -200,6 +237,8 @@ export class Herd {
         return;
       }
       if (inbound.kind === "action") {
+        if (this.asks.has(inbound.target))
+          return await this.onAskAnswer(inbound.target, inbound.action);
         if (inbound.action === "relay") return await this.startRelay(inbound.target);
         if (inbound.action === "end-relay") return await this.endRelay("ended by you");
         await this.inbox.handle(inbound);
@@ -253,11 +292,11 @@ export class Herd {
         void this.interruptTask(relay.taskId, command.text).catch(() => {});
         return;
       case "herder":
-        await this.say(this.texts.noHerder);
+        await this.toHerder(command.text);
         return;
       case "text": {
         if (relay === undefined) {
-          await this.say(this.texts.noHerder);
+          await this.toHerder(command.text);
           return;
         }
         const f = this.following.get(relay.taskId);
@@ -267,6 +306,37 @@ export class Herd {
         return;
       }
     }
+  }
+
+  private async toHerder(text: string): Promise<void> {
+    if (this.herder === undefined) await this.say(this.texts.noHerder);
+    else this.herder.ownerMessage(text);
+  }
+
+  private async ask(text: string, options: string[]): Promise<void> {
+    const askId = `ask-${randomUUID()}`;
+    const view: AskView = {
+      kind: "ask",
+      askId,
+      text,
+      options: options.map((label, i) => ({ action: String(i), label })),
+    };
+    const ref = await this.opts.channel.send(view);
+    this.asks.set(askId, { ref, view });
+  }
+
+  private async onAskAnswer(askId: string, action: string): Promise<void> {
+    const ask = this.asks.get(askId);
+    const option = ask?.view.options.find((o) => o.action === action);
+    if (ask === undefined || option === undefined) return;
+    this.asks.delete(askId);
+    this.store.audit("herder.answer", { askId, answer: option.label });
+    try {
+      await this.opts.channel.update(ask.ref, { ...ask.view, final: option.label });
+    } catch (error) {
+      this.store.audit("send.error", { kind: "ask", message: (error as Error).message });
+    }
+    this.herder?.ownerAnswer(ask.view.text, option.label);
   }
 
   private async runCommand(agent: string, dir: string, text: string): Promise<void> {
@@ -282,6 +352,7 @@ export class Herd {
       await this.say(this.texts.notDirectory(cwd));
       return;
     }
+    await this.say(this.texts.runAccepted(taskTitle(text)));
     try {
       const { turn } = await this.startTask(agent, cwd, text);
       turn.catch(() => {});
@@ -376,6 +447,7 @@ export class Herd {
     profileId: string,
     cwd: string,
     ownerText: string,
+    prompt: string = ownerText,
   ): Promise<{ taskId: string; turn: Promise<RunResult> }> {
     const profile = this.opts.profiles.find((p) => p.id === profileId);
     if (profile === undefined) throw new Error(`unknown agent profile "${profileId}"`);
@@ -429,7 +501,7 @@ export class Herd {
     });
     this.watchdog.track(sessionId);
     this.listen(f, f.connection, f.agentSessionId);
-    return { taskId: sessionId, turn: this.promptTask(sessionId, ownerText) };
+    return { taskId: sessionId, turn: this.promptTask(sessionId, prompt) };
   }
 
   /** Sends a prompt to an open task. Queued while a turn runs; settles when its turn ends. */
@@ -452,6 +524,15 @@ export class Herd {
       await f.connection.cancel(f.agentSessionId);
     }
     return next;
+  }
+
+  /** Cancels the current turn of a task, if one is running. */
+  async cancelTurn(taskId: string): Promise<void> {
+    const f = this.following.get(taskId);
+    if (f === undefined || f.ended) throw new Error(`task ${taskId} is not open`);
+    if (f.busy && f.connection !== undefined && f.agentSessionId !== undefined) {
+      await f.connection.cancel(f.agentSessionId);
+    }
   }
 
   /** Closes the agent of a task. The task stays on the board. */
@@ -611,6 +692,12 @@ export class Herd {
       this.store.audit("report.error", { taskId: f.task.id, message: (error as Error).message });
     }
     this.setReport(f, this.texts.reported(firstLine(body.body)));
+    this.herder?.event({
+      kind: "task-reported",
+      taskId: f.task.id,
+      title: f.task.title,
+      text: body.body,
+    });
   }
 
   private async onAlarm(alarm: Alarm): Promise<void> {
@@ -628,6 +715,12 @@ export class Herd {
     } catch (error) {
       this.store.audit("watchdog.error", { message: (error as Error).message });
     }
+    this.herder?.event({
+      kind: "watchdog",
+      taskId: f.task.id,
+      title: f.task.title,
+      text: alarm.detail,
+    });
   }
 
   private setReport(f: Following, text: string): void {
@@ -725,6 +818,7 @@ export class Herd {
   }
 
   async stop(): Promise<void> {
+    await this.herder?.stop();
     this.board.stop();
     this.watchdog.stop();
     this.relayTimer?.cancel();

@@ -1,0 +1,11 @@
+{
+  "extends": "../../tsconfig.base.json",
+  // tsc also checks the herder-loop sources this package imports, and those keep Pi's settings
+  // (see packages/herder-loop/tsconfig.json).
+  "compilerOptions": {
+    "types": ["node"],
+    "exactOptionalPropertyTypes": false,
+    "noUncheckedIndexedAccess": false
+  },
+  "include": ["src", "test"]
+}

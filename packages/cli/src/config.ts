@@ -6,6 +6,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import type { AgentProfile, ChannelBinding, Locale, Mode } from "@agentherd/protocol";
 import { Entry } from "@napi-rs/keyring";
+import type { HerderConfig } from "./herder.ts";
 
 export const KEYCHAIN_SERVICE = "agentherd";
 
@@ -16,6 +17,8 @@ export interface CliConfig {
   locale?: Locale;
   /** Agent profiles in addition to the built-in `mock` profile. */
   profiles?: AgentProfile[];
+  /** The Herder's model. The key is in the environment or the keychain. */
+  herder?: HerderConfig;
 }
 
 export function agentherdHome(env: NodeJS.ProcessEnv = process.env): string {
@@ -53,4 +56,20 @@ export async function getSecret(appId: string): Promise<string> {
     throw new Error(`no App Secret for ${appId} in the keychain; run "agentherd setup feishu"`);
   }
   return secret;
+}
+
+function herderEntry(provider: string): Entry {
+  return new Entry(KEYCHAIN_SERVICE, `herder:${provider}`);
+}
+
+export function saveHerderKey(provider: string, key: string): void {
+  herderEntry(provider).setPassword(key);
+}
+
+export function getHerderKey(provider: string): string | undefined {
+  try {
+    return herderEntry(provider).getPassword() ?? undefined;
+  } catch {
+    return undefined;
+  }
 }

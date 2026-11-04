@@ -1,0 +1,71 @@
+// A HerderHost that records what the Herder does, for unit tests.
+
+import type { HerderHost, Task } from "@agentherd/core";
+import { CORE_TEXTS } from "@agentherd/core";
+
+export interface Recorded {
+  said: string[];
+  asked: { text: string; options: string[] }[];
+  started: { profileId: string; cwd: string; title: string; prompt: string }[];
+  prompted: { taskId: string; text: string }[];
+  cancelled: string[];
+  relays: string[];
+  audits: { type: string; data: Record<string, unknown> }[];
+  state: Map<string, unknown>;
+}
+
+export function task(id: string, title: string): Task {
+  return {
+    id,
+    title,
+    project: "app",
+    agent: "Mock",
+    stage: "working",
+    lastReport: "",
+    startedAt: "2026-11-04T07:00:00.000Z",
+    updatedAt: "2026-11-04T07:00:00.000Z",
+    automaticDecisions: [],
+  };
+}
+
+export function fakeHost(opts: { tasks?: Task[]; projects?: string[] } = {}): {
+  host: HerderHost;
+  rec: Recorded;
+} {
+  const rec: Recorded = {
+    said: [],
+    asked: [],
+    started: [],
+    prompted: [],
+    cancelled: [],
+    relays: [],
+    audits: [],
+    state: new Map(),
+  };
+  const tasks = opts.tasks ?? [];
+  const host: HerderHost = {
+    locale: "zh-CN",
+    texts: CORE_TEXTS["zh-CN"],
+    userHome: "/Users/me",
+    profiles: () => [{ id: "mock", name: "Mock" }],
+    tasks: () => tasks,
+    openTasks: () => tasks,
+    recentProjects: () => opts.projects ?? [],
+    relayTaskId: () => undefined,
+    decisions: () => [],
+    startTask: async (profileId, cwd, title, prompt) => {
+      rec.started.push({ profileId, cwd, title, prompt });
+      return `task-${rec.started.length}-0000-0000`;
+    },
+    promptTask: (taskId, text) => void rec.prompted.push({ taskId, text }),
+    cancelTurn: async (taskId) => void rec.cancelled.push(taskId),
+    startRelay: async (taskId) => void rec.relays.push(taskId),
+    endRelay: async () => void rec.relays.push("end"),
+    say: async (text) => void rec.said.push(text),
+    ask: async (text, options) => void rec.asked.push({ text, options }),
+    audit: (type, data) => void rec.audits.push({ type, data }),
+    getState: <T>(key: string) => rec.state.get(key) as T | undefined,
+    setState: (key, value) => void rec.state.set(key, structuredClone(value)),
+  };
+  return { host, rec };
+}

@@ -6,15 +6,25 @@ import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { FeishuChannel } from "@agentherd/channel-feishu";
 import { Herd, Store } from "@agentherd/core";
-import type { AgentProfile, Locale, Mode } from "@agentherd/protocol";
+import type { Locale, Mode } from "@agentherd/protocol";
 import QRCode from "qrcode";
-import { agentherdHome, getSecret, readConfig, saveSecret, writeConfig } from "./config.ts";
+import {
+  agentherdHome,
+  getHerderKey,
+  getSecret,
+  readConfig,
+  saveHerderKey,
+  saveSecret,
+  writeConfig,
+} from "./config.ts";
+import { DEFAULT_HERDER, herderSetup } from "./herder.ts";
 import { availableProfiles, resolveProfile } from "./profiles.ts";
 
 export const USAGE = `Usage: agentherd <command>
 
 Commands:
   setup feishu                 Create a Feishu bot with one QR scan and bind it to you
+  setup herder [provider]      Save the Herder's model key in the keychain (read from stdin)
   run [options] <dir> <prompt> Run one task with an agent; approvals go to Feishu
       --profile <id>           Agent profile: mock, dsh, or one from config.json (default: mock)
       --script <yaml>          Script for the mock profile
@@ -26,6 +36,7 @@ Commands:
 
 Environment:
   AGENTHERD_HOME               Default: ~/.agentherd
+  DEEPSEEK_API_KEY             The Herder's key (or the variable of the configured provider)
 `;
 
 type Out = (line: string) => void;
@@ -35,11 +46,10 @@ export async function main(argv: string[], out: Out = console.log): Promise<numb
   const home = agentherdHome();
   switch (command) {
     case "setup":
-      if (rest[0] !== "feishu") {
-        out(USAGE);
-        return 2;
-      }
-      return setupFeishu(home, out);
+      if (rest[0] === "feishu") return setupFeishu(home, out);
+      if (rest[0] === "herder") return setupHerder(home, rest[1], out);
+      out(USAGE);
+      return 2;
     case "run":
       return run(home, rest, out);
     case "start":
@@ -91,6 +101,31 @@ async function setupFeishu(home: string, out: Out): Promise<number> {
   const config = readConfig(home);
   writeConfig(home, { ...config, channel: binding });
   out(`Bound to Feishu app ${binding.data.appId}. The App Secret is in the keychain.`);
+  return 0;
+}
+
+async function readStdin(): Promise<string> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of process.stdin) chunks.push(chunk as Buffer);
+  return Buffer.concat(chunks).toString("utf8").trim();
+}
+
+async function setupHerder(
+  home: string,
+  providerArg: string | undefined,
+  out: Out,
+): Promise<number> {
+  const config = readConfig(home);
+  const provider = providerArg ?? config.herder?.provider ?? DEFAULT_HERDER.provider;
+  if (process.stdin.isTTY) out(`Paste the ${provider} API key, then press Enter and Ctrl-D:`);
+  const key = await readStdin();
+  if (key === "") {
+    out("No key given.");
+    return 1;
+  }
+  saveHerderKey(provider, key);
+  writeConfig(home, { ...config, herder: { ...config.herder, provider } });
+  out(`Saved the ${provider} key in the keychain.`);
   return 0;
 }
 
@@ -178,6 +213,9 @@ async function start(home: string, args: string[], out: Out): Promise<number> {
     );
     return 1;
   }
+  const herder = herderSetup(config.herder, getHerderKey);
+  if ("reason" in herder) out(`[herder] off: ${herder.reason}. Only commands work.`);
+  else out(`[herder] ${herder.provider}/${herder.model} (key from ${herder.keySource})`);
   const herd = new Herd({
     home,
     userHome: homedir(),
@@ -186,6 +224,7 @@ async function start(home: string, args: string[], out: Out): Promise<number> {
     mode,
     ...(config.locale === undefined ? {} : { locale: config.locale }),
     profiles,
+    ...("factory" in herder ? { herder: herder.factory } : {}),
   });
   herd.registry.onChange((row, previous) =>
     out(`[session] ${row.id.slice(0, 8)} ${previous ?? "new"} → ${row.state}`),
