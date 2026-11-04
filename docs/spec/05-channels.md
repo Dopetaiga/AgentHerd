@@ -52,6 +52,10 @@ The owner talks to one bot in a direct chat. What it sends there:
 | Reminder | Every `remindMinutes` (default 30) while an item is open | Yes |
 | Daily digest | On by default, can be turned off. Done today, still running, automatic decisions with reasons, decisions marked wrong | Yes |
 
+Long messages are folded, never shortened: over `foldChars` (default 600) the card shows the
+first lines and puts the rest in a collapsible panel; code blocks and logs are collapsed; over
+the card size limit the text is stored as a file and sent as a link.
+
 Tool-call activity of agents is stored, not sent. Nothing the agent says to the owner is
 filtered ([ADR 0019](../adr/0019-relay-verbatim-board-and-reports.md)).
 

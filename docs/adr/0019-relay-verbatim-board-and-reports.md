@@ -42,17 +42,28 @@ the Herder may change when it passes messages on. Inputs:
   - A **task board** card lists all tasks, the ones that need the owner first. It is pinned
     in the chat and updated in place by code when a stage changes, not by the model.
   - When a task ends (done, blocked, failed), the owner always gets a **completion report**:
-    what was done, what was verified, outputs, risks, automatic decisions taken. The source
-    is the agent's own `herd_report`; if there is none, the Herder writes it from the
-    agent's last message and labels it as written by the Herder, with a link to the original.
+    what was done, what was verified, outputs, risks, automatic decisions taken.
+  - **The agent summarizes itself, based on size.** If the agent's final reply is at most
+    `reportMaxChars` (default 600), it is the report, verbatim. If it is longer, AgentHerd
+    sends the same session one more prompt: summarize what you did for the owner in at most
+    `reportMaxChars`, no tool calls. The answer is the report; the full reply stays one tap
+    away. The summary is the agent's own words, so the verbatim rule holds. It is asked once;
+    if it fails or is still too long, the report is the folded original.
   - During work, the owner is contacted only for approvals and for questions from the agent.
   - A daily digest is on by default and can be turned off.
+- **Length.** At session start AgentHerd adds a labeled note to the first prompt: replies go
+  to a phone, keep each under `replyHintChars` (default 300), conclusion first, details in
+  files or commit messages, no long code or logs. In the channel, a message over
+  `foldChars` (default 600) shows its first lines and folds the rest; code blocks and logs
+  are folded; a message over the card limit is stored as a file and sent as a link. Nothing
+  is shortened by the Herder.
 - **No importance filter.** The Herder does not decide whether a message is worth the
   owner's time. Everything the agent says to the owner, every stage change, approval and
   alarm is delivered. Tool-call activity is recorded, not sent; the owner can ask for it.
 - **`herd_report`.** AgentHerd offers an MCP tool `herd_report(state, summary, ...)` to each
   session it starts (through `mcpServers` in `session/new`, where the agent supports it).
-  States as in dsh-superagent.
+  States as in dsh-superagent. It sets the stage (`blocked`, `failed`, ...); it is optional,
+  because the report text comes from the final reply or the summary prompt.
 
 ## Alternatives
 
@@ -68,4 +79,7 @@ the Herder may change when it passes messages on. Inputs:
 
 - The channel interface needs pin and in-place update of any message, not only item cards.
 - A store field per channel chat holds the active relay.
-- Agents without MCP support in `session/new` fall back to the last message for reports.
+- Agents without MCP support in `session/new` still get reports; their stage is taken from
+  the stop reason and the reply.
+- A long final reply costs one extra short agent turn.
+- Rejected: the Herder shortens long replies. That breaks the verbatim rule.

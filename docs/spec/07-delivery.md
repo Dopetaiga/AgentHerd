@@ -51,5 +51,7 @@ Each milestone is split into plans under [`plans/`](../../plans/README.md).
 | E2E-RUN-FROM-CHAT | A direct message starts a session; the agent receives the owner's text verbatim plus a labeled context block; a completion report is sent | M2 |
 | E2E-RELAY | Owner starts a relay; messages reach the session without the Herder; `/end` and `relayIdleMinutes` end it | M2 |
 | E2E-BOARD | A stage change updates the pinned board in place; no new message is sent | M2 |
-| E2E-REPORT-FALLBACK | A turn ends without `herd_report`; the report is written from the last message and labeled as written by the Herder | M2 |
+| E2E-REPORT-SHORT | A task ends with a reply ≤ `reportMaxChars`; the report body is the reply verbatim | M2 |
+| E2E-REPORT-LONG | A task ends with a longer reply; one summary prompt is sent to the same session; its answer is the body and the full reply is attached; no second summary prompt | M2 |
+| E2E-FOLD | A relayed agent message over `foldChars` is sent folded and complete | M2 |
 | E2E-HERDER-NO-APPROVE | The Herder has no way to allow an item; a Herder tool call that matches the guard list goes to the owner | M2 |

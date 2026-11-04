@@ -8,7 +8,7 @@ AgentHerd has three roles:
 
 | Role | What it does | Model |
 | --- | --- | --- |
-| **Herder** (the secretary) | Talks with the owner, starts and steers sessions, relays the owner to a task, keeps the board, writes missing reports, acts on watchdog alarms | One resident session, light model |
+| **Herder** (the secretary) | Talks with the owner, starts and steers sessions, relays the owner to a task, keeps the board, acts on watchdog alarms | One resident session, light model |
 | **Approval pipeline** | Decides permission requests: guard list → rules → Reviewer → owner | Reviewer: strongest model, one call per item |
 | **Agents** | Do the work | Their own models |
 
@@ -93,7 +93,7 @@ The Herder may add, never rewrite.
 | Group | Tools |
 | --- | --- |
 | Sessions | `session_start(project, profile, ownerText, addedContext)`, `session_prompt(sessionId, text)`, `session_cancel(sessionId)`, `session_list()` |
-| Owner | `ask(text, options)`, `notify(text)`, `relay_start(sessionId)`, `relay_end()`, `report_write(taskId, report)` |
+| Owner | `ask(text, options)`, `notify(text)`, `relay_start(sessionId)`, `relay_end()` |
 | Read | `task_get`, `task_list`, `session_transcript`, `decisions_list`, `read`, `grep`, `list`, `git_log`, `git_diff` (read tools only inside known project directories) |
 
 There is no tool to approve an item, write files or run shell commands. Every Herder tool call
@@ -128,12 +128,13 @@ an alarm.
 | --- | --- |
 | Session state (`working`, `waiting-approval`, `idle`, `error`, `ended`) | ACP events ([03-agents.md](03-agents.md)) |
 | Agent report | MCP tool `herd_report`, offered in `session/new` |
-| Fallback report | The agent's last message when a turn ends without `herd_report` |
+| Final reply | The agent's last message when the task's turn ends |
 | Watchdog | Timer, every `watchdogSeconds` (default 60) |
 
 `herd_report(state, summary, changes?, tests?, risks?, links?)`, with `state` one of
 `progress`, `waiting`, `ready`, `blocked`, `failed`, `dropped`. `summary` ≤ 600 characters.
 `progress` only updates the board; the other states end or pause the task and wake the Herder.
+Without `herd_report`, the stage comes from the stop reason and session state.
 
 ### Stages
 
@@ -164,10 +165,32 @@ The Herder handles the alarm: it may prompt the agent, cancel the turn, or tell 
 ### Completion report
 
 When a task ends, the owner always gets a report ([05-channels.md](05-channels.md#2-what-the-owner-sees)):
-title (task, project, agent, duration, result), what was done, what was verified, outputs
-(files, commits, PR), risks, automatic decisions during the task. The text comes from
-`herd_report`. Without it, the Herder writes the report from the last message and it is
-labeled as written by the Herder, with a link to the original.
+a title (task, project, agent, duration, result) added by code, the body, and the automatic
+decisions during the task.
+
+The body is chosen by size:
+
+1. Final reply ≤ `reportMaxChars` (default 600): the reply, verbatim.
+2. Longer: AgentHerd sends the session one more prompt, labeled as from AgentHerd:
+
+   ```text
+   [AgentHerd] Summarize for the owner what you did in this task, in at most 600 characters:
+   what changed, what you verified, outputs (files, commits, PR), risks or open parts.
+   Do not call tools.
+   ```
+
+   The answer is the body. The full final reply is attached ("Full reply").
+3. The summary turn is asked once. If it fails, calls tools, or is still too long, the body
+   is the original reply, folded.
+
+The Herder never writes or shortens the body.
+
+### Reply length
+
+- The first prompt of every session AgentHerd starts gets a labeled note: replies go to a
+  phone; keep each under `replyHintChars` (default 300); conclusion first; details in files
+  or commit messages; no long code or logs.
+- Messages are folded in the channel, not shortened ([05-channels.md](05-channels.md#2-what-the-owner-sees)).
 
 ## 3. Approval pipeline
 

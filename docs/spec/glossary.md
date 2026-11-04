@@ -12,7 +12,7 @@ new type, table, IPC channel or product string.
 | **Relay** | The owner talks directly to one task's session; the Herder steps out | transfer, attach |
 | **Board** | The pinned card that lists all tasks and their stages | dashboard |
 | **Stage** | A task's place on the board: `queued`, `working`, `needs-owner`, `stuck`, `done`, `failed` | status (for tasks) |
-| **Report** | What an agent did, from `herd_report` or written by the Herder at task end | summary |
+| **Report** | What an agent did, sent at task end: its final reply, or its own summary when the reply is long | summary |
 | **Watchdog** | Code that raises alarms for loops, silence and crashes | |
 | **Agent** | A coding agent product (Claude Code, Codex, an ACP agent) | bot, worker |
 | **Session** | One conversation of one agent, identified by the agent's own session id | thread, chat |

@@ -45,8 +45,8 @@ These defaults hold until an ADR changes them.
 10. ACP is the only runtime protocol to agents; terminal sessions get exported rules
     ([ADR 0015](../adr/0015-acp-is-the-only-runtime-protocol.md), [ADR 0016](../adr/0016-one-rule-source-exported-to-agents.md)).
 11. The owner's and the agents' words pass verbatim; the Herder only adds labeled context.
-    Progress is a pinned board; every finished task sends a report; nothing agents say to the
-    owner is filtered ([ADR 0019](../adr/0019-relay-verbatim-board-and-reports.md)).
+    Progress is a pinned board; every finished task sends a report, summarized by the agent
+    itself when its reply is long; nothing agents say to the owner is filtered or shortened ([ADR 0019](../adr/0019-relay-verbatim-board-and-reports.md)).
 
 ## Version history
 

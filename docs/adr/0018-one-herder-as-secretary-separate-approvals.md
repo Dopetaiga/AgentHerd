@@ -27,8 +27,8 @@ The maintainer described the Herder as "like a secretary".
 
 - **One Herder for all projects.** It is a resident Pi agent session on a light model chosen
   by the user. It is the owner's secretary: it reads the owner's direct messages, starts and
-  steers sessions, relays the owner to a task, keeps the task board, writes completion
-  reports when an agent did not, and acts on watchdog alarms.
+  steers sessions, relays the owner to a task, keeps the task board, and acts on
+  watchdog alarms.
 - **The Herder never approves.** It has no `decide` tool for permission requests. It can only
   pass an item on.
 - **Approvals go through a separate approval pipeline:** guard list → owner rules →
