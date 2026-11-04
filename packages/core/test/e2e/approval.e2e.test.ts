@@ -42,6 +42,7 @@ async function setup(script: string, opts: { remindMinutes?: number; clock?: Fak
     channel,
     binding: { channelId: "fake", ownerId: "owner", data: {} },
     mode: "assist",
+    locale: "en",
     profiles: [profile(script)],
     store,
     ...(opts.clock === undefined ? {} : { clock: opts.clock }),

@@ -6,10 +6,12 @@ import type {
   ChannelBinding,
   ChannelCapability,
   InboundSink,
+  Locale,
   MessageRef,
   SetupUI,
   View,
 } from "@agentherd/protocol";
+import { DEFAULT_LOCALE } from "@agentherd/protocol";
 import * as lark from "@larksuiteoapi/node-sdk";
 import {
   type Brand,
@@ -20,6 +22,7 @@ import {
 } from "./api.ts";
 import { renderCard } from "./card.ts";
 import { parseCardAction, parseMessage } from "./inbound.ts";
+import { CARD_TEXTS } from "./texts.ts";
 
 export const CHANNEL_ID = "feishu";
 
@@ -62,6 +65,8 @@ export interface FeishuChannelOptions {
   verify?: (creds: FeishuCredentials) => Promise<void>;
   /** Called when a sink throws; the channel never throws back into Feishu. */
   onError?: (error: Error) => void;
+  /** Language of owner-facing text. Default: Chinese. */
+  locale?: Locale;
 }
 
 export class FeishuChannel implements Channel {
@@ -78,9 +83,11 @@ export class FeishuChannel implements Channel {
   private readonly callbacks = new Map<string, PendingCallback>();
 
   private readonly opts: FeishuChannelOptions;
+  private readonly locale: Locale;
 
   constructor(opts: FeishuChannelOptions) {
     this.opts = opts;
+    this.locale = opts.locale ?? DEFAULT_LOCALE;
   }
 
   async setup(ui: SetupUI): Promise<ChannelBinding> {
@@ -89,7 +96,7 @@ export class FeishuChannel implements Channel {
     const result = await register({
       source: "agentherd",
       createOnly: true,
-      appPreset: { name: "{user}'s AgentHerd", desc: "Only pings you when your agents need you" },
+      appPreset: { name: CARD_TEXTS[this.locale].appName, desc: CARD_TEXTS[this.locale].appDesc },
       addons: {
         scopes: { tenant: SCOPES },
         events: { items: { tenant: EVENTS } },
@@ -141,7 +148,7 @@ export class FeishuChannel implements Channel {
   }
 
   async send(view: View): Promise<MessageRef> {
-    const id = await this.requireApi().sendCard(this.ownerId, renderCard(view));
+    const id = await this.requireApi().sendCard(this.ownerId, renderCard(view, this.locale));
     return { channelId: CHANNEL_ID, id };
   }
 
@@ -151,17 +158,17 @@ export class FeishuChannel implements Channel {
     // into the callback response instead.
     const pending = this.callbacks.get(ref.id);
     if (pending !== undefined && !pending.answered) {
-      pending.card = renderCard(view);
+      pending.card = renderCard(view, this.locale);
       return;
     }
-    await this.requireApi().patchCard(ref.id, renderCard(view));
+    await this.requireApi().patchCard(ref.id, renderCard(view, this.locale));
   }
 
   private async onCardAction(
     payload: unknown,
     deliver: (inbound: ReturnType<typeof parseCardAction>) => Promise<void>,
   ): Promise<Record<string, unknown>> {
-    const toast = { type: "info", content: "Received" };
+    const toast = { type: "info", content: CARD_TEXTS[this.locale].toast };
     const messageId = openMessageId(payload);
     if (messageId === null) {
       void deliver(parseCardAction(payload));

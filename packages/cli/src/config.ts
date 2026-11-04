@@ -4,7 +4,7 @@
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import type { AgentProfile, ChannelBinding, Mode } from "@agentherd/protocol";
+import type { AgentProfile, ChannelBinding, Locale, Mode } from "@agentherd/protocol";
 import { Entry } from "@napi-rs/keyring";
 
 export const KEYCHAIN_SERVICE = "agentherd";
@@ -12,6 +12,8 @@ export const KEYCHAIN_SERVICE = "agentherd";
 export interface CliConfig {
   channel?: ChannelBinding;
   mode?: Mode;
+  /** Language of channel texts: "zh-CN" (default) or "en". */
+  locale?: Locale;
   /** Agent profiles in addition to the built-in `mock` profile. */
   profiles?: AgentProfile[];
 }

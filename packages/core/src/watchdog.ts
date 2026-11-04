@@ -3,6 +3,7 @@
 // owner is told).
 
 import type { Clock, Timer } from "./clock.ts";
+import { CORE_TEXTS, type CoreTexts } from "./texts.ts";
 
 /** Default `watchdogSeconds`. */
 export const WATCHDOG_SECONDS = 60;
@@ -24,6 +25,7 @@ export interface WatchdogOptions {
   onAlarm: (alarm: Alarm) => void;
   watchdogSeconds?: number;
   maxQuietMinutes?: number;
+  texts?: CoreTexts;
 }
 
 interface Watched {
@@ -38,6 +40,10 @@ export class Watchdog {
   private readonly sessions = new Map<string, Watched>();
   private readonly opts: WatchdogOptions;
   private timer: Timer | undefined;
+
+  private get texts(): CoreTexts {
+    return this.opts.texts ?? CORE_TEXTS.en;
+  }
 
   constructor(opts: WatchdogOptions) {
     this.opts = opts;
@@ -99,7 +105,7 @@ export class Watchdog {
     const n = (w.calls.get(key) ?? 0) + 1;
     w.calls.set(key, n);
     if (n >= REPEAT_LIMIT) {
-      this.raise(sessionId, w, "repeated-tool-call", `the same tool call ran ${n} times: ${label}`);
+      this.raise(sessionId, w, "repeated-tool-call", this.texts.repeatedToolCall(n, label));
     }
   }
 
@@ -142,7 +148,7 @@ export class Watchdog {
     for (const [id, w] of this.sessions) {
       if (w.working && !w.waiting && now - w.lastEventAt >= quietMs) {
         const minutes = Math.round((now - w.lastEventAt) / 60_000);
-        this.raise(id, w, "quiet", `no event from the agent for ${minutes} minutes`);
+        this.raise(id, w, "quiet", this.texts.quiet(minutes));
       }
     }
   }

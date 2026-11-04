@@ -41,6 +41,7 @@ async function setup(script: string) {
     channel,
     binding: { channelId: "fake", ownerId: "owner", data: {} },
     mode: "assist",
+    locale: "en",
     profiles: [profile(script)],
     store,
     boardDebounceMs: 10,

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { HELP_TEXT, parseCommand } from "../src/commands.ts";
+import { parseCommand } from "../src/commands.ts";
+import { CORE_TEXTS } from "../src/texts.ts";
 
 describe("parseCommand", () => {
   describe("status", () => {
@@ -249,18 +250,23 @@ describe("parseCommand", () => {
   });
 });
 
-describe("HELP_TEXT", () => {
-  it("lists every command on its own line", () => {
-    expect(HELP_TEXT).toBe(
-      [
-        "status — show the task board",
-        "/run <agent> <dir> <task> — start a task",
-        "/relay <task> — talk to a task directly",
-        "/end — end the relay",
-        "/interrupt <text> — stop the current turn and send text",
-        "/herder <text> — talk to the Herder during a relay",
-        "/help — this list",
-      ].join("\n"),
-    );
+describe("help text", () => {
+  it("lists every command on its own line, in both locales", () => {
+    for (const texts of Object.values(CORE_TEXTS)) {
+      const lines = texts.help.split("\n");
+      expect(lines.map((l) => l.split(" ")[0])).toEqual([
+        "status",
+        "/run",
+        "/relay",
+        "/end",
+        "/interrupt",
+        "/herder",
+        "/help",
+      ]);
+    }
+  });
+
+  it("is Chinese by default", () => {
+    expect(CORE_TEXTS["zh-CN"].help).toContain("/run <agent> <目录> <任务> — 开始一个任务");
   });
 });

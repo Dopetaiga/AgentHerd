@@ -2,8 +2,9 @@
 // agent's own words: its final reply, or its own summary when the reply is long. AgentHerd adds
 // only the title and the list of automatic decisions.
 
-import type { ReportView, Stage } from "@agentherd/protocol";
+import type { ReportResult, ReportView, Stage } from "@agentherd/protocol";
 import type { Task } from "./tasks.ts";
+import { CORE_TEXTS, type CoreTexts } from "./texts.ts";
 
 /** Default `reportMaxChars`. */
 export const REPORT_MAX_CHARS = 600;
@@ -12,21 +13,13 @@ export const REPORT_MAX_CHARS = 600;
 export const REPLY_HINT_CHARS = 300;
 
 /** The extra prompt for a long final reply. Labeled, so the agent knows who asks. */
-export function summaryPrompt(maxChars: number): string {
-  return [
-    `[AgentHerd] Summarize for the owner what you did in this task, in at most ${maxChars} characters:`,
-    "what changed, what you verified, outputs (files, commits, PR), risks or open parts.",
-    "Do not call tools.",
-  ].join("\n");
+export function summaryPrompt(maxChars: number, texts: CoreTexts = CORE_TEXTS.en): string {
+  return texts.summaryPrompt(maxChars);
 }
 
 /** The note added before the owner's words in the first prompt of a session. */
-export function replyHint(hintChars: number): string {
-  return [
-    "[AgentHerd] Your replies are read on a phone. Keep each reply under",
-    `${hintChars} characters, conclusion first. Put details in files or commit messages;`,
-    "do not paste long code or logs. The owner's task follows.",
-  ].join(" ");
+export function replyHint(hintChars: number, texts: CoreTexts = CORE_TEXTS.en): string {
+  return texts.replyHint(hintChars);
 }
 
 /** Answer of the summary turn. */
@@ -52,10 +45,10 @@ export async function reportBody(
   finalReply: string,
   askSummary: () => Promise<SummaryAnswer>,
   maxChars: number = REPORT_MAX_CHARS,
+  noReply: string = CORE_TEXTS.en.noReply,
 ): Promise<ReportBody> {
   const reply = finalReply.trim();
-  if (reply.length <= maxChars)
-    return { body: reply === "" ? "(no reply)" : reply, summarized: false };
+  if (reply.length <= maxChars) return { body: reply === "" ? noReply : reply, summarized: false };
   try {
     const answer = await askSummary();
     const text = answer.text.trim();
@@ -68,13 +61,13 @@ export async function reportBody(
   return { body: reply, summarized: false };
 }
 
-const RESULT: Record<Stage, string> = {
-  done: "Done",
-  failed: "Failed",
-  stuck: "Blocked",
-  "needs-owner": "Blocked",
-  working: "Stopped",
-  queued: "Stopped",
+const RESULT: Record<Stage, ReportResult> = {
+  done: "done",
+  failed: "failed",
+  stuck: "blocked",
+  "needs-owner": "blocked",
+  working: "stopped",
+  queued: "stopped",
 };
 
 /** "1h 5m", "12m", "40s". */
@@ -90,12 +83,19 @@ export function formatDuration(ms: number): string {
  * Builds the report card for a finished task.
  * @param now End time of the task.
  */
-export function reportView(task: Task, body: ReportBody, now: Date): ReportView {
+export function reportView(
+  task: Task,
+  body: ReportBody,
+  now: Date,
+  texts: CoreTexts = CORE_TEXTS.en,
+): ReportView {
   const duration = formatDuration(now.getTime() - new Date(task.startedAt).getTime());
+  const result = RESULT[task.stage];
   const view: ReportView = {
     kind: "report",
     taskId: task.id,
-    title: `${RESULT[task.stage]}: ${task.title} · ${task.project} · ${task.agent} · ${duration}`,
+    result,
+    title: `${texts.result[result]}${texts.titleSep}${task.title} · ${task.project} · ${task.agent} · ${duration}`,
     body: body.body,
     summarized: body.summarized,
     automaticDecisions: [...task.automaticDecisions],

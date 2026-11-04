@@ -11,14 +11,16 @@ import type {
   ChannelBinding,
   Inbound,
   Item,
+  Locale,
   Mode,
   Rule,
   View,
 } from "@agentherd/protocol";
+import { DEFAULT_LOCALE } from "@agentherd/protocol";
 import type { ExtraGuard } from "@agentherd/rules";
 import { Board } from "./board.ts";
 import { type Clock, systemClock, type Timer } from "./clock.ts";
-import { HELP_TEXT, parseCommand } from "./commands.ts";
+import { parseCommand } from "./commands.ts";
 import { Inbox } from "./inbox.ts";
 import { decide } from "./pipeline.ts";
 import { Registry } from "./registry.ts";
@@ -33,6 +35,7 @@ import {
 } from "./report.ts";
 import { Store } from "./store.ts";
 import { projectName, stageOf, type Task, taskTitle } from "./tasks.ts";
+import { type CoreTexts, coreTexts } from "./texts.ts";
 import { type Alarm, Watchdog } from "./watchdog.ts";
 
 export interface HerdOptions {
@@ -58,6 +61,8 @@ export interface HerdOptions {
   boardDebounceMs?: number;
   relayIdleMinutes?: number;
   sessionIdleMinutes?: number;
+  /** Language of the texts the owner reads. Default: Chinese. */
+  locale?: Locale;
 }
 
 /** Per-task state that only the Herd and its listeners use. */
@@ -112,6 +117,7 @@ export class Herd {
   private readonly watchdog: Watchdog;
   private readonly following = new Map<string, Following>();
   private readonly clock: Clock;
+  private readonly texts: CoreTexts;
   private started = false;
   private relayTimer: Timer | undefined;
 
@@ -119,6 +125,7 @@ export class Herd {
 
   constructor(opts: HerdOptions) {
     this.opts = opts;
+    this.texts = coreTexts(opts.locale ?? DEFAULT_LOCALE);
     this.clock = opts.clock ?? systemClock;
     const storeOptions = opts.secrets === undefined ? {} : { secrets: opts.secrets };
     this.store = opts.store ?? Store.open(join(opts.home, "herd.db"), storeOptions);
@@ -130,6 +137,7 @@ export class Herd {
       clock: this.clock,
       ...(opts.remindMinutes === undefined ? {} : { remindMinutes: opts.remindMinutes }),
       ...(opts.secrets === undefined ? {} : { secrets: opts.secrets }),
+      texts: this.texts,
     };
     this.inbox = new Inbox(inboxOptions);
     this.board = new Board({
@@ -142,6 +150,7 @@ export class Herd {
     this.watchdog = new Watchdog({
       clock: this.clock,
       onAlarm: (alarm) => void this.onAlarm(alarm),
+      texts: this.texts,
       ...(opts.watchdogSeconds === undefined ? {} : { watchdogSeconds: opts.watchdogSeconds }),
       ...(opts.maxQuietMinutes === undefined ? {} : { maxQuietMinutes: opts.maxQuietMinutes }),
     });
@@ -211,10 +220,10 @@ export class Herd {
         await this.board.flush(true);
         return;
       case "help":
-        await this.say(HELP_TEXT);
+        await this.say(this.texts.help);
         return;
       case "invalid":
-        await this.say(`Usage: ${command.usage}`);
+        await this.say(this.texts.usage(command.usage));
         return;
       case "run":
         await this.runCommand(command.agent, command.dir, command.text);
@@ -224,36 +233,36 @@ export class Herd {
         if (matches.length === 1 && matches[0] !== undefined) {
           await this.startRelay(matches[0].id);
         } else if (matches.length === 0) {
-          await this.say(`No open task matches "${command.query}".`);
+          await this.say(this.texts.noMatch(command.query));
         } else {
           const list = matches.map((t) => `- ${t.id.slice(0, 8)} ${t.title}`).join("\n");
-          await this.say(`More than one task matches "${command.query}":\n${list}`);
+          await this.say(this.texts.manyMatches(command.query, list));
         }
         return;
       }
       case "end":
-        if (relay === undefined) await this.say("No relay is active.");
+        if (relay === undefined) await this.say(this.texts.noRelay);
         else await this.endRelay("ended by you");
         return;
       case "interrupt":
         if (relay === undefined) {
-          await this.say("No relay is active.");
+          await this.say(this.texts.noRelay);
           return;
         }
         this.store.audit("relay.interrupt", { taskId: relay.taskId });
         void this.interruptTask(relay.taskId, command.text).catch(() => {});
         return;
       case "herder":
-        await this.say(`No Herder model is configured yet. Commands:\n${HELP_TEXT}`);
+        await this.say(this.texts.noHerder);
         return;
       case "text": {
         if (relay === undefined) {
-          await this.say(`No Herder model is configured yet. Commands:\n${HELP_TEXT}`);
+          await this.say(this.texts.noHerder);
           return;
         }
         const f = this.following.get(relay.taskId);
         this.store.audit("relay.message", { taskId: relay.taskId });
-        if (f?.busy === true) await this.say("Queued: the agent gets this when its turn ends.");
+        if (f?.busy === true) await this.say(this.texts.queued);
         void this.promptTask(relay.taskId, command.text).catch(() => {});
         return;
       }
@@ -263,14 +272,14 @@ export class Herd {
   private async runCommand(agent: string, dir: string, text: string): Promise<void> {
     if (!this.opts.profiles.some((p) => p.id === agent)) {
       const known = this.opts.profiles.map((p) => p.id).join(", ");
-      await this.say(`Unknown agent "${agent}". Known: ${known}.`);
+      await this.say(this.texts.unknownAgent(agent, known));
       return;
     }
     const cwd = resolve(
       dir === "~" || dir.startsWith("~/") ? join(this.opts.userHome, dir.slice(1)) : dir,
     );
     if (!isDirectory(cwd)) {
-      await this.say(`Not a directory: ${cwd}`);
+      await this.say(this.texts.notDirectory(cwd));
       return;
     }
     try {
@@ -294,7 +303,7 @@ export class Herd {
   private async startRelay(taskId: string): Promise<void> {
     const f = this.following.get(taskId);
     if (f === undefined || f.ended) {
-      await this.say("That task has ended; there is nothing to relay to.");
+      await this.say(this.texts.taskEnded);
       return;
     }
     const current = this.relay();
@@ -355,7 +364,7 @@ export class Herd {
     try {
       return await turn;
     } finally {
-      await this.endTask(taskId, "the run finished");
+      await this.endTask(taskId, this.texts.runFinished);
     }
   }
 
@@ -379,7 +388,7 @@ export class Herd {
         project: projectName(cwd),
         agent: profile.name,
         stage: "queued",
-        lastReport: "Starting",
+        lastReport: this.texts.starting,
         startedAt: now,
         updatedAt: now,
         automaticDecisions: [],
@@ -406,10 +415,10 @@ export class Herd {
       f.agentSessionId = await connection.newSession(cwd);
     } catch (error) {
       const message = (error as Error).message;
-      this.setReport(f, `Could not start: ${message}`);
+      this.setReport(f, this.texts.couldNotStart(message));
       this.registry.set(sessionId, "error");
-      await this.sendReport(f, `Could not start the agent: ${message}`, null);
-      await this.endTask(sessionId, "the agent could not start");
+      await this.sendReport(f, this.texts.couldNotStartBody(message), null);
+      await this.endTask(sessionId, this.texts.agentCouldNotStart);
       throw error;
     }
     this.store.audit("session.started", {
@@ -493,10 +502,10 @@ export class Herd {
       connection.on("exit", (e) => {
         this.store.audit("session.exited", { sessionId, code: e.code, signal: e.signal });
         if (f.busy) {
-          this.watchdog.exited(sessionId, `the agent exited (code ${e.code ?? e.signal})`);
+          this.watchdog.exited(sessionId, this.texts.exited(String(e.code ?? e.signal)));
         }
         if (!f.ended) this.registry.set(sessionId, e.code === 0 ? "ended" : "error");
-        if (!f.busy && !f.ended) void this.endTask(sessionId, "the agent exited");
+        if (!f.busy && !f.ended) void this.endTask(sessionId, this.texts.agentExited);
       }),
     ];
   }
@@ -538,7 +547,7 @@ export class Herd {
     let prompt = text;
     if (!f.hinted) {
       f.hinted = true;
-      prompt = `${replyHint(this.opts.replyHintChars ?? REPLY_HINT_CHARS)}\n\n${text}`;
+      prompt = `${replyHint(this.opts.replyHintChars ?? REPLY_HINT_CHARS, this.texts)}\n\n${text}`;
     }
     this.registry.set(sessionId, "working");
     this.watchdog.turnStarted(sessionId);
@@ -548,11 +557,11 @@ export class Herd {
       f.finished = stopReason === "end_turn";
       this.store.audit("turn.ended", { sessionId, stopReason });
       this.registry.set(sessionId, "idle");
-      await this.inbox.expireSession(sessionId, "the agent's turn ended");
+      await this.inbox.expireSession(sessionId, this.texts.turnEnded);
       const reply = f.turn.text;
       if (this.relay()?.taskId === sessionId) {
-        this.setReport(f, `Relayed: ${firstLine(reply)}`);
-        await this.say(reply.trim() === "" ? "(no reply)" : reply, f.task.title);
+        this.setReport(f, this.texts.relayed(firstLine(reply)));
+        await this.say(reply.trim() === "" ? this.texts.noReply : reply, f.task.title);
         this.store.audit("relay.reply", { taskId: sessionId, stopReason });
       } else {
         await this.sendReport(f, reply, () => this.askSummary(connection, agentSessionId, f));
@@ -562,8 +571,8 @@ export class Herd {
       const message = (error as Error).message;
       this.watchdog.turnEnded(sessionId);
       if (this.registry.get(sessionId)?.state !== "ended") this.registry.set(sessionId, "error");
-      await this.sendReport(f, `The task failed: ${message}`, null);
-      await this.endTask(sessionId, "the turn failed");
+      await this.sendReport(f, this.texts.failedBody(message), null);
+      await this.endTask(sessionId, this.texts.turnFailed);
       throw error;
     }
   }
@@ -576,7 +585,7 @@ export class Herd {
   ): Promise<SummaryAnswer> {
     f.turn = { text: "", toolCalls: 0 };
     const max = this.opts.reportMaxChars ?? REPORT_MAX_CHARS;
-    await connection.prompt(agentSessionId, summaryPrompt(max));
+    await connection.prompt(agentSessionId, summaryPrompt(max, this.texts));
     return { text: f.turn.text, toolCalls: f.turn.toolCalls };
   }
 
@@ -591,16 +600,17 @@ export class Herd {
       reply,
       ask ?? (() => Promise.reject(new Error("no summary turn"))),
       max,
+      this.texts.noReply,
     );
     this.restage(f);
-    const view = reportView(f.task, body, this.clock.now());
+    const view = reportView(f.task, body, this.clock.now(), this.texts);
     try {
       await this.opts.channel.send(view);
       this.store.audit("report.sent", { taskId: f.task.id, summarized: body.summarized });
     } catch (error) {
       this.store.audit("report.error", { taskId: f.task.id, message: (error as Error).message });
     }
-    this.setReport(f, `Reported: ${firstLine(body.body)}`);
+    this.setReport(f, this.texts.reported(firstLine(body.body)));
   }
 
   private async onAlarm(alarm: Alarm): Promise<void> {
@@ -608,12 +618,12 @@ export class Herd {
     if (f === undefined) return;
     f.alarm = true;
     this.store.audit("watchdog.alarm", { ...alarm });
-    this.setReport(f, `Watchdog: ${alarm.detail}`);
+    this.setReport(f, this.texts.watchdog(alarm.detail));
     try {
       await this.opts.channel.send({
         kind: "text",
         taskLabel: f.task.title,
-        text: `Watchdog: ${alarm.detail}`,
+        text: this.texts.watchdog(alarm.detail),
       });
     } catch (error) {
       this.store.audit("watchdog.error", { message: (error as Error).message });
@@ -689,9 +699,9 @@ export class Herd {
         this.store.audit("item.decided", { itemId: item.id, source: "rule", action });
         const f = this.following.get(sessionId);
         if (f !== undefined) {
-          const verb = action === "allow" ? "Allowed" : "Denied";
-          const rule = result.ruleId === undefined ? "" : ` ${result.ruleId}`;
-          f.task.automaticDecisions.push(`${verb} by rule${rule}: ${item.body || item.title}`);
+          f.task.automaticDecisions.push(
+            this.texts.byRule(action === "allow", result.ruleId, item.body || item.title),
+          );
         }
       } else {
         this.store.updateItem(item.id, { state: "expired", decidedAt: now() });
@@ -719,7 +729,7 @@ export class Herd {
     this.watchdog.stop();
     this.relayTimer?.cancel();
     for (const f of this.following.values()) {
-      if (!f.ended) await this.endTask(f.task.id, "AgentHerd stopped");
+      if (!f.ended) await this.endTask(f.task.id, this.texts.agentherdStopped);
     }
     await this.inbox.stop();
     if (this.started) await this.opts.channel.stop();

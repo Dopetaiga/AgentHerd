@@ -9,9 +9,12 @@ import { FakeChannel } from "@agentherd/channel-fake";
 import type { AgentProfile, RelayView, ReportView, TextView } from "@agentherd/protocol";
 import { afterEach, describe, expect, it } from "vitest";
 import { FakeClock } from "../../src/clock.ts";
-import { HELP_TEXT } from "../../src/commands.ts";
 import { Herd, RELAY_KEY } from "../../src/herd.ts";
 import { Store } from "../../src/store.ts";
+import { CORE_TEXTS } from "../../src/texts.ts";
+
+// The owner reads Chinese by default.
+const T = CORE_TEXTS["zh-CN"];
 
 const BIN = fileURLToPath(new URL("../../../mock-agent/bin/mock-agent.ts", import.meta.url));
 const dir = mkdtempSync(join(tmpdir(), "agentherd-relay-"));
@@ -82,7 +85,7 @@ describe("E2E-RUN-COMMAND", () => {
     await channel.say(`/run mock ${dir} Fix the build\nsecond line`);
     await until(() => reports(channel).length === 1);
     expect(reports(channel)[0]?.body).toBe("first done");
-    expect(reports(channel)[0]?.title).toMatch(/^Done: Fix the build/);
+    expect(reports(channel)[0]?.title).toMatch(/^已完成：Fix the build/);
     expect(herd.openTasks()).toHaveLength(1);
   });
 
@@ -92,9 +95,9 @@ describe("E2E-RUN-COMMAND", () => {
     await channel.say("/run mock /does/not/exist task");
     await channel.say("/run mock");
     expect(texts(channel)).toEqual([
-      'Unknown agent "nope". Known: mock.',
-      "Not a directory: /does/not/exist",
-      "Usage: /run <agent> <dir> <task>",
+      '没有叫"nope"的 Agent。可用的有：mock。',
+      "不是一个目录：/does/not/exist",
+      "用法：/run <agent> <dir> <task>",
     ]);
     expect(herd.tasks()).toHaveLength(0);
   });
@@ -121,7 +124,7 @@ describe("E2E-RELAY", () => {
 
     // After the relay, plain text gets the help text, not the agent.
     await channel.say("hello");
-    expect(texts(channel).at(-1)).toContain(HELP_TEXT);
+    expect(texts(channel).at(-1)).toContain(T.help);
   });
 
   it("the agent receives the owner's text exactly", async () => {
@@ -207,8 +210,8 @@ describe("E2E-HELP", () => {
     await channel.say("/help");
     await channel.say("what is running?");
     await channel.say("/end");
-    expect(texts(channel)[0]).toBe(HELP_TEXT);
-    expect(texts(channel)[1]).toContain(HELP_TEXT);
-    expect(texts(channel)[2]).toBe("No relay is active.");
+    expect(texts(channel)[0]).toBe(T.help);
+    expect(texts(channel)[1]).toContain(T.help);
+    expect(texts(channel)[2]).toBe("现在没有在转接。");
   });
 });

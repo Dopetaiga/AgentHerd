@@ -52,6 +52,10 @@ describe("FeishuChannel.setup", () => {
     expect(qrs).toEqual([["https://open.feishu.cn/qr", 3600]]);
     expect(states).toEqual(["waiting-scan", "verifying", "connected"]);
     expect(options.createOnly).toBe(true);
+    expect(options.appPreset).toEqual({
+      name: "AgentHerd",
+      desc: "只在你的 Agent 需要你时才打扰你",
+    });
     expect(options.addons).toEqual({
       scopes: { tenant: SCOPES },
       events: { items: { tenant: EVENTS } },
@@ -102,6 +106,7 @@ describe("FeishuChannel.start", () => {
         return api;
       },
       onError: (e) => errors.push(e.message),
+      locale: "en",
     });
     await channel.start(
       { channelId: "feishu", ownerId: "ou_owner", data: { appId: "cli_9", brand: "lark" } },
@@ -178,5 +183,61 @@ describe("FeishuChannel card callback", () => {
     // After the callback is answered, updates patch again.
     await channel.update({ channelId: "feishu", id: "om_1" }, { kind: "text", text: "later" });
     expect(patched).toEqual(["om_1"]);
+  });
+});
+
+describe("FeishuChannel locale", () => {
+  it("toasts in Chinese by default", async () => {
+    let onCardAction: ((p: unknown) => Promise<Record<string, unknown>>) | null = null;
+    const api: FeishuApi = {
+      connect: async (h) => {
+        onCardAction = h.onCardAction;
+      },
+      close: async () => {},
+      sendCard: async () => "om_1",
+      patchCard: async () => {},
+      pin: async () => {},
+    };
+    const channel = new FeishuChannel({
+      getSecret: async () => "s",
+      saveSecret: async () => {},
+      createApi: () => api,
+    });
+    await channel.start(
+      { channelId: "feishu", ownerId: "ou_owner", data: { appId: "cli_1" } },
+      () => {},
+    );
+    const handler = onCardAction as unknown as (p: unknown) => Promise<Record<string, unknown>>;
+    const response = await handler({
+      operator: { open_id: "ou_owner" },
+      action: { value: { target: "i1", action: "allow" } },
+    });
+    expect(response).toEqual({ toast: { type: "info", content: "已收到" } });
+  });
+
+  it("uses the English app description with locale en", async () => {
+    let options: Record<string, unknown> = {};
+    const channel = new FeishuChannel({
+      getSecret: async () => "",
+      saveSecret: async () => {},
+      verify: async () => {},
+      locale: "en",
+      register: (async (
+        opts: Record<string, unknown> & { onQRCodeReady: (i: unknown) => void },
+      ) => {
+        options = opts;
+        opts.onQRCodeReady({ url: "u", expireIn: 1 });
+        return {
+          client_id: "cli_1",
+          client_secret: "s",
+          user_info: { open_id: "ou_owner", tenant_brand: "feishu" },
+        };
+      }) as never,
+    });
+    await channel.setup(ui().setupUi);
+    expect(options.appPreset).toEqual({
+      name: "AgentHerd",
+      desc: "Only pings you when your agents need you",
+    });
   });
 });

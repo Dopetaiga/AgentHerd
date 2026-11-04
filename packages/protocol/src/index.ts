@@ -14,6 +14,14 @@ export type SessionState =
 /** docs/spec/04-herder.md §2, "Stages" */
 export type Stage = "queued" | "working" | "needs-owner" | "stuck" | "done" | "failed";
 
+/** Language of everything the owner reads in the channel. Commands stay in English. */
+export type Locale = "zh-CN" | "en";
+
+export const DEFAULT_LOCALE: Locale = "zh-CN";
+
+/** How a task ended, for the report card's color. */
+export type ReportResult = "done" | "failed" | "blocked" | "stopped";
+
 /** docs/spec/04-herder.md §2, `herd_report` states */
 export type ReportState = "progress" | "waiting" | "ready" | "blocked" | "failed" | "dropped";
 
@@ -142,6 +150,7 @@ export interface BoardView {
 export interface ReportView {
   kind: "report";
   taskId: string;
+  result: ReportResult;
   title: string;
   body: string;
   /** True when the body is the agent's own summary of a longer reply. */

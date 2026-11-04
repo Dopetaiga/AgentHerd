@@ -14,6 +14,7 @@ import type {
 import { redact } from "@agentherd/rules";
 import type { Clock, Timer } from "./clock.ts";
 import type { Store } from "./store.ts";
+import { CORE_TEXTS, type CoreTexts } from "./texts.ts";
 
 export const BODY_MAX_LINES = 20;
 export const DEFAULT_REMIND_MINUTES = 30;
@@ -45,12 +46,15 @@ export interface InboxOptions {
   secrets?: Record<string, string>;
   /** Called after an item is decided or expired. */
   onClosed?: (item: Item) => void;
+  texts?: CoreTexts;
 }
 
-const OPTIONS: ItemView["options"] = [
-  { action: "allow", label: "Allow" },
-  { action: "deny", label: "Deny" },
-];
+function options(texts: CoreTexts): ItemView["options"] {
+  return [
+    { action: "allow", label: texts.allow },
+    { action: "deny", label: texts.deny },
+  ];
+}
 
 /** Card body: the command and the paths, at most 20 lines, redacted. */
 /** The agent's own reason for a tool call, e.g. DSH's `rawInput.justification`. */
@@ -61,13 +65,17 @@ function justificationOf(rawInput: unknown): string | undefined {
   return typeof value === "string" && value.trim() !== "" ? value.trim() : undefined;
 }
 
-export function itemBody(item: Item, secrets?: Record<string, string>): string {
+export function itemBody(
+  item: Item,
+  secrets?: Record<string, string>,
+  texts: CoreTexts = CORE_TEXTS.en,
+): string {
   const lines: string[] = [];
   if (item.toolCall?.command !== undefined) lines.push(...item.toolCall.command.split("\n"));
   for (const path of item.toolCall?.paths ?? []) lines.push(path);
   if (lines.length === 0) lines.push(...item.body.split("\n"));
   const justification = justificationOf(item.toolCall?.rawInput);
-  if (justification !== undefined) lines.push(`Reason: ${justification}`);
+  if (justification !== undefined) lines.push(texts.reason(justification));
   const shown =
     lines.length > BODY_MAX_LINES
       ? [...lines.slice(0, BODY_MAX_LINES - 1), `… ${lines.length - BODY_MAX_LINES + 1} more lines`]
@@ -75,20 +83,25 @@ export function itemBody(item: Item, secrets?: Record<string, string>): string {
   return redact(shown.join("\n"), secrets);
 }
 
-export function itemView(item: Item, reason: string, secrets?: Record<string, string>): ItemView {
+export function itemView(
+  item: Item,
+  reason: string,
+  secrets?: Record<string, string>,
+  texts: CoreTexts = CORE_TEXTS.en,
+): ItemView {
   return {
     kind: "item",
     itemId: item.id,
     title: redact(item.title, secrets),
-    body: itemBody(item, secrets),
+    body: itemBody(item, secrets, texts),
     risk: item.risk,
-    options: OPTIONS,
+    options: options(texts),
     reason: redact(reason, secrets),
   };
 }
 
-function entryView(entry: Entry, secrets?: Record<string, string>): ItemView {
-  const view = itemView(entry.item, entry.reason, secrets);
+function entryView(entry: Entry, texts: CoreTexts, secrets?: Record<string, string>): ItemView {
+  const view = itemView(entry.item, entry.reason, secrets, texts);
   if (entry.taskLabel !== undefined) view.taskLabel = entry.taskLabel;
   return view;
 }
@@ -98,9 +111,11 @@ export class Inbox {
   private readonly remindMs: number;
 
   private readonly opts: InboxOptions;
+  private readonly texts: CoreTexts;
 
   constructor(opts: InboxOptions) {
     this.opts = opts;
+    this.texts = opts.texts ?? CORE_TEXTS.en;
     this.remindMs = (opts.remindMinutes ?? DEFAULT_REMIND_MINUTES) * 60_000;
   }
 
@@ -155,13 +170,13 @@ export class Inbox {
     for (const entry of queue) {
       if (entry.closing) continue;
       entry.closing = true;
-      await this.finish(entry, "expired", `Expired: ${why}`);
+      await this.finish(entry, "expired", this.texts.expired(why));
     }
   }
 
   async stop(): Promise<void> {
     for (const sessionId of [...this.queues.keys()]) {
-      await this.expireSession(sessionId, "AgentHerd stopped");
+      await this.expireSession(sessionId, this.texts.agentherdStopped);
     }
   }
 
@@ -175,7 +190,7 @@ export class Inbox {
 
   private async show(entry: Entry): Promise<void> {
     const { channel, store, secrets } = this.opts;
-    const ref = await channel.send(entryView(entry, secrets));
+    const ref = await channel.send(entryView(entry, this.texts, secrets));
     entry.ref = ref;
     store.updateItem(entry.item.id, { messageRef: ref });
     store.audit("item.sent", { itemId: entry.item.id });
@@ -186,7 +201,7 @@ export class Inbox {
     entry.reminder = this.opts.clock.after(this.remindMs, () => {
       if (entry.closing) return;
       const { channel, store, secrets } = this.opts;
-      const text = `Still waiting for you: ${redact(entry.item.title, secrets)}`;
+      const text = this.texts.stillWaiting(redact(entry.item.title, secrets));
       void channel
         .send({ kind: "text", text })
         .then(() => store.audit("item.reminded", { itemId: entry.item.id }))
@@ -201,7 +216,7 @@ export class Inbox {
     entry.closing = true;
     const { store, clock } = this.opts;
     if (!entry.target.answer(answer)) {
-      await this.finish(entry, "expired", "Expired: the agent stopped waiting");
+      await this.finish(entry, "expired", this.texts.expired(this.texts.agentStoppedWaiting));
       await this.next(entry.item.sessionId);
       return;
     }
@@ -215,7 +230,11 @@ export class Inbox {
       precedents: [],
     };
     store.insertDecision(decision, { ownerId, createdAt: clock.now().toISOString() });
-    await this.finish(entry, "decided", answer === "allow" ? "Allowed by you" : "Denied by you");
+    await this.finish(
+      entry,
+      "decided",
+      answer === "allow" ? this.texts.allowedByYou : this.texts.deniedByYou,
+    );
     await this.next(entry.item.sessionId);
   }
 
@@ -225,7 +244,7 @@ export class Inbox {
     store.updateItem(entry.item.id, { state, decidedAt: clock.now().toISOString() });
     store.audit(`item.${state}`, { itemId: entry.item.id, final });
     if (entry.ref !== undefined) {
-      const view: ItemView = { ...entryView(entry, secrets), options: [], final };
+      const view: ItemView = { ...entryView(entry, this.texts, secrets), options: [], final };
       try {
         await channel.update(entry.ref, view);
       } catch (error) {

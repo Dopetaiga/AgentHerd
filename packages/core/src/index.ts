@@ -3,7 +3,7 @@ export { BOARD_DEBOUNCE_MS, BOARD_MAX_ROWS, Board, boardView } from "./board.ts"
 export type { Clock, Timer } from "./clock.ts";
 export { FakeClock, systemClock } from "./clock.ts";
 export type { Command } from "./commands.ts";
-export { HELP_TEXT, parseCommand } from "./commands.ts";
+export { parseCommand } from "./commands.ts";
 export type { HerdOptions, RunResult } from "./herd.ts";
 export { Herd } from "./herd.ts";
 export type { Answerable, InboxOptions, OwnerAnswer } from "./inbox.ts";
@@ -26,5 +26,6 @@ export type { AuditRow, DecisionRow, SessionRow, StoredItem, StoreOptions } from
 export { Store } from "./store.ts";
 export type { StageInput, Task } from "./tasks.ts";
 export { projectName, sortForBoard, stageOf, TITLE_MAX_CHARS, taskTitle } from "./tasks.ts";
+export { CORE_TEXTS, type CoreTexts, coreTexts } from "./texts.ts";
 export type { Alarm, AlarmReason, WatchdogOptions } from "./watchdog.ts";
 export { MAX_QUIET_MINUTES, REPEAT_LIMIT, WATCHDOG_SECONDS, Watchdog } from "./watchdog.ts";

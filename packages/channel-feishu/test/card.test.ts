@@ -44,33 +44,33 @@ const textView: TextView = {
 
 describe("renderCard", () => {
   it("renders an allow/deny item card", () => {
-    expect(renderCard(allowDenyItem)).toMatchSnapshot();
+    expect(renderCard(allowDenyItem, "en")).toMatchSnapshot();
   });
 
   it("renders a final item card", () => {
-    expect(renderCard(finalItem)).toMatchSnapshot();
+    expect(renderCard(finalItem, "en")).toMatchSnapshot();
   });
 
   it("renders a high-risk item card", () => {
-    expect(renderCard(highRiskItem)).toMatchSnapshot();
+    expect(renderCard(highRiskItem, "en")).toMatchSnapshot();
   });
 
   it("renders a text view", () => {
-    expect(renderCard(textView)).toMatchSnapshot();
+    expect(renderCard(textView, "en")).toMatchSnapshot();
   });
 
   it("sets update_multi to true", () => {
-    expect(renderCard(allowDenyItem).config).toEqual({ update_multi: true });
+    expect(renderCard(allowDenyItem, "en").config).toEqual({ update_multi: true });
   });
 
   it("gives each button a callback value of {target, action}", () => {
-    const json = JSON.stringify(renderCard(allowDenyItem));
+    const json = JSON.stringify(renderCard(allowDenyItem, "en"));
     expect(json).toContain('"value":{"target":"item-1","action":"allow"}');
     expect(json).toContain('"value":{"target":"item-1","action":"deny"}');
   });
 
   it("renders no button for a final card", () => {
-    expect(JSON.stringify(renderCard(finalItem))).not.toContain("button");
+    expect(JSON.stringify(renderCard(finalItem, "en"))).not.toContain("button");
   });
 
   it("escapes triple backticks inside the body", () => {
@@ -78,13 +78,13 @@ describe("renderCard", () => {
       ...allowDenyItem,
       body: "before ``` after",
     };
-    const json = JSON.stringify(renderCard(view));
+    const json = JSON.stringify(renderCard(view, "en"));
     expect(json).toContain("before ``\u200B` after");
     expect(json).not.toContain("before ``` after");
   });
 
   it("sets the header template to grey for a final card", () => {
-    const card = renderCard(finalItem);
+    const card = renderCard(finalItem, "en");
     expect(card.header).toMatchObject({ template: "grey" });
   });
 });
@@ -125,6 +125,7 @@ function makeReport(overrides: Partial<ReportView> = {}): ReportView {
   return {
     kind: "report",
     taskId: "r1",
+    result: "done",
     title: "Daily summary",
     body: "short body",
     summarized: false,
@@ -165,7 +166,7 @@ function buttonValue(row: Record<string, unknown>): Record<string, unknown> {
 
 describe("renderCard board", () => {
   it("renders an empty board as one markdown element", () => {
-    const card = renderCard({ kind: "board", rows: [] });
+    const card = renderCard({ kind: "board", rows: [] }, "en");
     expect(card.header).toEqual({
       title: { tag: "plain_text", content: "Tasks" },
       template: "blue",
@@ -175,7 +176,7 @@ describe("renderCard board", () => {
 
   it("renders the table columns and header style", () => {
     const view: BoardView = { kind: "board", rows: [makeRow(), makeRow({ taskId: "t2" })] };
-    const elements = bodyElements(renderCard(view));
+    const elements = bodyElements(renderCard(view, "en"));
     expect(elements).toHaveLength(1);
 
     const table = must(elements[0]);
@@ -217,7 +218,7 @@ describe("renderCard board", () => {
         }),
       ],
     };
-    const table = must(bodyElements(renderCard(view))[0]);
+    const table = must(bodyElements(renderCard(view, "en"))[0]);
     const rows = table.rows as Record<string, unknown>[];
 
     expect(rows).toHaveLength(2);
@@ -243,7 +244,7 @@ describe("renderCard board", () => {
   it("derives updated from updatedAt in local time", () => {
     const iso = "2024-06-01T03:04:00.000Z";
     const view: BoardView = { kind: "board", rows: [makeRow({ updatedAt: iso })] };
-    const table = must(bodyElements(renderCard(view))[0]);
+    const table = must(bodyElements(renderCard(view, "en"))[0]);
     const rows = table.rows as Record<string, unknown>[];
     const date = new Date(iso);
     expect(must(rows[0]).updated).toBe(
@@ -258,7 +259,7 @@ describe("renderCard board", () => {
       kind: "board",
       rows: stages.map((stage, index) => makeRow({ taskId: `t${index}`, stage })),
     };
-    const table = must(bodyElements(renderCard(view))[0]);
+    const table = must(bodyElements(renderCard(view, "en"))[0]);
     const rows = table.rows as Record<string, unknown>[];
     expect(rows.map((row) => row.stage)).toEqual(
       stages.map((stage, index) => [{ text: stage, color: colors[index] }]),
@@ -272,39 +273,39 @@ describe("renderCard board", () => {
         makeRow({ taskId: `t${index}`, task: `task ${index}` }),
       ),
     };
-    const table = must(bodyElements(renderCard(view))[0]);
+    const table = must(bodyElements(renderCard(view, "en"))[0]);
     expect(table.page_size).toBe(10);
   });
 });
 
 describe("renderCard report", () => {
-  it("uses green for a normal title", () => {
-    expect(renderCard(makeReport({ title: "Daily summary" })).header).toMatchObject({
+  it("uses green for result done", () => {
+    expect(renderCard(makeReport({ result: "done" }), "en").header).toMatchObject({
       template: "green",
       title: { tag: "plain_text", content: "Daily summary" },
     });
   });
 
-  it("uses red for a title starting with Failed", () => {
-    expect(renderCard(makeReport({ title: "Failed to build" })).header).toMatchObject({
+  it("uses red for result failed", () => {
+    expect(renderCard(makeReport({ result: "failed" }), "en").header).toMatchObject({
       template: "red",
     });
   });
 
-  it("uses orange for a title starting with Blocked", () => {
-    expect(renderCard(makeReport({ title: "Blocked on review" })).header).toMatchObject({
+  it("uses orange for result blocked", () => {
+    expect(renderCard(makeReport({ result: "blocked" }), "en").header).toMatchObject({
       template: "orange",
     });
   });
 
-  it("matches the prefix case-sensitively", () => {
-    expect(renderCard(makeReport({ title: "failed to build" })).header).toMatchObject({
-      template: "green",
+  it("uses grey for result stopped", () => {
+    expect(renderCard(makeReport({ result: "stopped" }), "en").header).toMatchObject({
+      template: "grey",
     });
   });
 
   it("shows a short body as a single markdown element plus the relay button row", () => {
-    expect(bodyElements(renderCard(makeReport({ body: "hello" })))).toEqual([
+    expect(bodyElements(renderCard(makeReport({ body: "hello" }), "en"))).toEqual([
       { tag: "markdown", content: "hello" },
       buttonRow("Relay to this task", "r1", "relay"),
     ]);
@@ -312,7 +313,7 @@ describe("renderCard report", () => {
 
   it("folds a long body with no newline and adds a Show all panel", () => {
     const body = "x".repeat(FOLD_CHARS + 50);
-    const elements = bodyElements(renderCard(makeReport({ body })));
+    const elements = bodyElements(renderCard(makeReport({ body }), "en"));
     expect(elements).toHaveLength(3);
     expect(elements[0]).toEqual({ tag: "markdown", content: `${"x".repeat(FOLD_CHARS)}…` });
     expect(elements[1]).toEqual({
@@ -327,7 +328,7 @@ describe("renderCard report", () => {
   it("cuts at the last newline after position 200", () => {
     const head = "a".repeat(300);
     const body = `${head}\n${"b".repeat(FOLD_CHARS)}`;
-    const elements = bodyElements(renderCard(makeReport({ body })));
+    const elements = bodyElements(renderCard(makeReport({ body }), "en"));
     expect(elements[0]).toEqual({ tag: "markdown", content: `${head}…` });
     expect(must(elements[1]).elements).toEqual([{ tag: "markdown", content: body }]);
   });
@@ -335,13 +336,13 @@ describe("renderCard report", () => {
   it("hard-cuts when the last newline is not after position 200", () => {
     const head = "a".repeat(100);
     const body = `${head}\n${"b".repeat(FOLD_CHARS + 50)}`;
-    const elements = bodyElements(renderCard(makeReport({ body })));
+    const elements = bodyElements(renderCard(makeReport({ body }), "en"));
     expect(elements[0]).toEqual({ tag: "markdown", content: `${body.slice(0, FOLD_CHARS)}…` });
   });
 
   it("adds a Full reply panel when summarized with a full reply", () => {
     const elements = bodyElements(
-      renderCard(makeReport({ summarized: true, fullReply: "the whole reply" })),
+      renderCard(makeReport({ summarized: true, fullReply: "the whole reply" }), "en"),
     );
     expect(elements).toHaveLength(3);
     expect(elements[1]).toEqual({
@@ -354,7 +355,7 @@ describe("renderCard report", () => {
   });
 
   it("omits the Full reply panel when not summarized", () => {
-    expect(bodyElements(renderCard(makeReport({ fullReply: "the whole reply" })))).toEqual([
+    expect(bodyElements(renderCard(makeReport({ fullReply: "the whole reply" }), "en"))).toEqual([
       { tag: "markdown", content: "short body" },
       buttonRow("Relay to this task", "r1", "relay"),
     ]);
@@ -362,7 +363,7 @@ describe("renderCard report", () => {
 
   it("renders automatic decisions as a bullet list", () => {
     const elements = bodyElements(
-      renderCard(makeReport({ automaticDecisions: ["Allow lint", "Deny deploy"] })),
+      renderCard(makeReport({ automaticDecisions: ["Allow lint", "Deny deploy"] }), "en"),
     );
     expect(elements).toHaveLength(3);
     expect(elements[1]).toEqual({
@@ -373,14 +374,14 @@ describe("renderCard report", () => {
   });
 
   it("omits the decisions block when empty", () => {
-    expect(bodyElements(renderCard(makeReport({ automaticDecisions: [] })))).toEqual([
+    expect(bodyElements(renderCard(makeReport({ automaticDecisions: [] }), "en"))).toEqual([
       { tag: "markdown", content: "short body" },
       buttonRow("Relay to this task", "r1", "relay"),
     ]);
   });
 
   it("round-trips the Relay to this task button through parseCardAction", () => {
-    const elements = bodyElements(renderCard(makeReport()));
+    const elements = bodyElements(renderCard(makeReport(), "en"));
     const value = buttonValue(must(elements[elements.length - 1]));
     expect(value).toEqual({ target: "r1", action: "relay" });
 
@@ -402,7 +403,7 @@ describe("renderCard report", () => {
 describe("renderCard relay", () => {
   it("shows the talking content and an End relay button when active", () => {
     const elements = bodyElements(
-      renderCard({ kind: "relay", taskId: "t1", taskLabel: "Build", active: true }),
+      renderCard({ kind: "relay", taskId: "t1", taskLabel: "Build", active: true }, "en"),
     );
     expect(elements).toHaveLength(2);
     expect(elements[0]).toEqual({
@@ -414,13 +415,15 @@ describe("renderCard relay", () => {
 
   it("shows Back to the Herder with no button when inactive", () => {
     expect(
-      bodyElements(renderCard({ kind: "relay", taskId: "t1", taskLabel: "Build", active: false })),
+      bodyElements(
+        renderCard({ kind: "relay", taskId: "t1", taskLabel: "Build", active: false }, "en"),
+      ),
     ).toEqual([{ tag: "markdown", content: "Back to the Herder" }]);
   });
 
   it("round-trips the End relay button through parseCardAction", () => {
     const elements = bodyElements(
-      renderCard({ kind: "relay", taskId: "t1", taskLabel: "Build", active: true }),
+      renderCard({ kind: "relay", taskId: "t1", taskLabel: "Build", active: true }, "en"),
     );
     const value = buttonValue(must(elements[1]));
     expect(value).toEqual({ target: "t1", action: "end-relay" });
@@ -443,7 +446,7 @@ describe("renderCard relay", () => {
 describe("renderCard text folding", () => {
   it("shows a long text folded with a Show all panel", () => {
     const text = "x".repeat(FOLD_CHARS + 30);
-    const elements = bodyElements(renderCard({ kind: "text", text }));
+    const elements = bodyElements(renderCard({ kind: "text", text }, "en"));
     expect(elements).toHaveLength(2);
     expect(elements[0]).toEqual({ tag: "markdown", content: `${"x".repeat(FOLD_CHARS)}…` });
     expect(elements[1]).toEqual({
@@ -456,7 +459,7 @@ describe("renderCard text folding", () => {
 
   it("keeps a text at or under FOLD_CHARS as a single markdown element", () => {
     const text = "x".repeat(FOLD_CHARS);
-    expect(bodyElements(renderCard({ kind: "text", text }))).toEqual([
+    expect(bodyElements(renderCard({ kind: "text", text }, "en"))).toEqual([
       { tag: "markdown", content: text },
     ]);
   });
@@ -465,5 +468,49 @@ describe("renderCard text folding", () => {
 describe("FOLD_CHARS", () => {
   it("is 600", () => {
     expect(FOLD_CHARS).toBe(600);
+  });
+});
+
+describe("renderCard zh-CN defaults", () => {
+  it("renders the risk label in Chinese by default", () => {
+    const card = renderCard(allowDenyItem);
+    const header = card.header as Record<string, unknown>;
+    const tags = header.text_tag_list as Record<string, unknown>[];
+    const tag = must(tags[0]);
+    const text = tag.text as Record<string, unknown>;
+    expect(text.content).toBe("中风险");
+  });
+
+  it("renders the board header and stage name in Chinese", () => {
+    const view: BoardView = { kind: "board", rows: [makeRow({ stage: "working" })] };
+    const card = renderCard(view);
+    expect(card.header).toEqual({
+      title: { tag: "plain_text", content: "任务看板" },
+      template: "blue",
+    });
+    const table = must(bodyElements(card)[0]);
+    const rows = table.rows as Record<string, unknown>[];
+    expect(must(rows[0]).stage).toEqual([{ text: "进行中", color: "blue" }]);
+  });
+
+  it("renders the report relay button label in Chinese", () => {
+    const elements = bodyElements(renderCard(makeReport()));
+    expect(must(elements[elements.length - 1])).toEqual(buttonRow("转接到这个任务", "r1", "relay"));
+  });
+
+  it("renders relay texts in Chinese", () => {
+    const active = bodyElements(
+      renderCard({ kind: "relay", taskId: "t1", taskLabel: "Build", active: true }),
+    );
+    expect(active).toHaveLength(2);
+    expect(active[0]).toEqual({
+      tag: "markdown",
+      content: "正在和 **Build** 对话。直接发的消息都会转给这个任务，发 /end 结束。",
+    });
+    expect(active[1]).toEqual(buttonRow("结束转接", "t1", "end-relay"));
+
+    expect(
+      bodyElements(renderCard({ kind: "relay", taskId: "t1", taskLabel: "Build", active: false })),
+    ).toEqual([{ tag: "markdown", content: "已回到主管" }]);
   });
 });

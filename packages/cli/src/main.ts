@@ -6,7 +6,7 @@ import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { FeishuChannel } from "@agentherd/channel-feishu";
 import { Herd, Store } from "@agentherd/core";
-import type { AgentProfile, Mode } from "@agentherd/protocol";
+import type { AgentProfile, Locale, Mode } from "@agentherd/protocol";
 import QRCode from "qrcode";
 import { agentherdHome, getSecret, readConfig, saveSecret, writeConfig } from "./config.ts";
 import { availableProfiles, resolveProfile } from "./profiles.ts";
@@ -59,8 +59,9 @@ export async function main(argv: string[], out: Out = console.log): Promise<numb
   }
 }
 
-function feishuChannel(): FeishuChannel {
+function feishuChannel(locale?: Locale): FeishuChannel {
   return new FeishuChannel({
+    ...(locale === undefined ? {} : { locale }),
     getSecret,
     saveSecret,
     onError: (error) => console.error(`[feishu] ${error.message}`),
@@ -129,9 +130,10 @@ async function run(home: string, args: string[], out: Out): Promise<number> {
   const herd = new Herd({
     home,
     userHome: homedir(),
-    channel: feishuChannel(),
+    channel: feishuChannel(config.locale),
     binding: config.channel,
     mode,
+    ...(config.locale === undefined ? {} : { locale: config.locale }),
     profiles: [profile],
   });
   herd.registry.onChange((row, previous) => out(`[session] ${previous ?? "new"} → ${row.state}`));
@@ -179,9 +181,10 @@ async function start(home: string, args: string[], out: Out): Promise<number> {
   const herd = new Herd({
     home,
     userHome: homedir(),
-    channel: feishuChannel(),
+    channel: feishuChannel(config.locale),
     binding: config.channel,
     mode,
+    ...(config.locale === undefined ? {} : { locale: config.locale }),
     profiles,
   });
   herd.registry.onChange((row, previous) =>

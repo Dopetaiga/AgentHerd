@@ -12,14 +12,6 @@ export type Command =
   | { kind: "text"; text: string }
   | { kind: "invalid"; command: string; usage: string };
 
-export const HELP_TEXT = `status — show the task board
-/run <agent> <dir> <task> — start a task
-/relay <task> — talk to a task directly
-/end — end the relay
-/interrupt <text> — stop the current turn and send text
-/herder <text> — talk to the Herder during a relay
-/help — this list`;
-
 const USAGE = {
   run: "/run <agent> <dir> <task>",
   relay: "/relay <task>",

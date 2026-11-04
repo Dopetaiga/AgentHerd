@@ -1,4 +1,15 @@
-import type { ItemOption, Risk, Stage, TextView, View } from "@agentherd/protocol";
+import type {
+  ItemOption,
+  Locale,
+  ReportResult,
+  Risk,
+  Stage,
+  TextView,
+  View,
+} from "@agentherd/protocol";
+import { DEFAULT_LOCALE } from "@agentherd/protocol";
+import type { CardTexts } from "./texts.ts";
+import { CARD_TEXTS } from "./texts.ts";
 
 /** Feishu card header template color for an item's risk level. */
 function riskTemplate(risk: Risk): string {
@@ -13,15 +24,8 @@ function riskTemplate(risk: Risk): string {
 }
 
 /** User-facing tag text for an item's risk level. */
-function riskLabel(risk: Risk): string {
-  switch (risk) {
-    case "low":
-      return "Low risk";
-    case "medium":
-      return "Medium risk";
-    case "high":
-      return "High risk";
-  }
+function riskLabel(risk: Risk, t: CardTexts): string {
+  return t.risk[risk];
 }
 
 /** Break a ``` sequence inside a code block so it cannot close the fence early. */
@@ -30,14 +34,19 @@ function escapeCodeFence(text: string): string {
 }
 
 /** A card header: title, colored template, and a risk tag. */
-function itemHeader(title: string, risk: Risk, template: string): Record<string, unknown> {
+function itemHeader(
+  title: string,
+  risk: Risk,
+  template: string,
+  t: CardTexts,
+): Record<string, unknown> {
   return {
     title: { tag: "plain_text", content: title },
     template,
     text_tag_list: [
       {
         tag: "text_tag",
-        text: { tag: "plain_text", content: riskLabel(risk) },
+        text: { tag: "plain_text", content: riskLabel(risk, t) },
         color: riskTemplate(risk),
       },
     ],
@@ -125,11 +134,18 @@ function clock(iso: string): string {
   return `${hours}:${minutes}`;
 }
 
-/** Header template color for a report title. */
-function reportTemplate(title: string): string {
-  if (title.startsWith("Failed")) return "red";
-  if (title.startsWith("Blocked")) return "orange";
-  return "green";
+/** Header template color for a report, driven by how the task ended. */
+function reportTemplate(result: ReportResult): string {
+  switch (result) {
+    case "failed":
+      return "red";
+    case "blocked":
+      return "orange";
+    case "done":
+      return "green";
+    case "stopped":
+      return "grey";
+  }
 }
 
 /** Maximum body length shown before a report body is folded. */
@@ -156,7 +172,8 @@ function collapsiblePanel(title: string, content: string): Record<string, unknow
 }
 
 /** Render a channel-neutral view as Feishu Card JSON 2.0. */
-export function renderCard(view: View): Record<string, unknown> {
+export function renderCard(view: View, locale: Locale = DEFAULT_LOCALE): Record<string, unknown> {
+  const t = CARD_TEXTS[locale];
   switch (view.kind) {
     case "item": {
       const elements: Record<string, unknown>[] = [];
@@ -165,7 +182,7 @@ export function renderCard(view: View): Record<string, unknown> {
       }
       elements.push(markdown(`\`\`\`\n${escapeCodeFence(view.body)}\n\`\`\``));
       if (view.reason !== undefined) {
-        elements.push(markdown(`Reason: <font color='grey'>${view.reason}</font>`));
+        elements.push(markdown(`${t.reasonPrefix}<font color='grey'>${view.reason}</font>`));
       }
       if (view.final !== undefined) {
         elements.push(markdown(`**${view.final}**`));
@@ -184,6 +201,7 @@ export function renderCard(view: View): Record<string, unknown> {
           view.title,
           view.risk,
           view.final !== undefined ? "grey" : riskTemplate(view.risk),
+          t,
         ),
         elements,
       );
@@ -197,14 +215,14 @@ export function renderCard(view: View): Record<string, unknown> {
         elements.push(markdown(view.text));
       } else {
         elements.push(markdown(`${foldBody(view.text)}…`));
-        elements.push(collapsiblePanel("Show all", view.text));
+        elements.push(collapsiblePanel(t.showAll, view.text));
       }
       return makeCard(undefined, elements);
     }
     case "board": {
-      const header = { title: { tag: "plain_text", content: "Tasks" }, template: "blue" };
+      const header = { title: { tag: "plain_text", content: t.boardHeader }, template: "blue" };
       if (view.rows.length === 0) {
-        return makeCard(header, [markdown("No tasks yet.")]);
+        return makeCard(header, [markdown(t.noTasks)]);
       }
       const table: Record<string, unknown> = {
         tag: "table",
@@ -220,16 +238,16 @@ export function renderCard(view: View): Record<string, unknown> {
           lines: 1,
         },
         columns: [
-          { name: "task", display_name: "Task", data_type: "text", width: "auto" },
-          { name: "stage", display_name: "Stage", data_type: "options", width: "120px" },
-          { name: "project", display_name: "Project", data_type: "text", width: "auto" },
-          { name: "agent", display_name: "Agent", data_type: "text", width: "100px" },
-          { name: "report", display_name: "Last report", data_type: "lark_md", width: "auto" },
-          { name: "updated", display_name: "Updated", data_type: "text", width: "90px" },
+          { name: "task", display_name: t.columns.task, data_type: "text", width: "auto" },
+          { name: "stage", display_name: t.columns.stage, data_type: "options", width: "120px" },
+          { name: "project", display_name: t.columns.project, data_type: "text", width: "auto" },
+          { name: "agent", display_name: t.columns.agent, data_type: "text", width: "100px" },
+          { name: "report", display_name: t.columns.report, data_type: "lark_md", width: "auto" },
+          { name: "updated", display_name: t.columns.updated, data_type: "text", width: "90px" },
         ],
         rows: view.rows.map((row) => ({
           task: row.task,
-          stage: [{ text: row.stage, color: stageColor(row.stage) }],
+          stage: [{ text: t.stages[row.stage], color: stageColor(row.stage) }],
           project: row.project,
           agent: row.agent,
           report: row.lastReport,
@@ -244,25 +262,25 @@ export function renderCard(view: View): Record<string, unknown> {
         elements.push(markdown(view.body));
       } else {
         elements.push(markdown(`${foldBody(view.body)}…`));
-        elements.push(collapsiblePanel("Show all", view.body));
+        elements.push(collapsiblePanel(t.showAll, view.body));
       }
       if (view.summarized && view.fullReply !== undefined) {
-        elements.push(collapsiblePanel("Full reply", view.fullReply));
+        elements.push(collapsiblePanel(t.fullReply, view.fullReply));
       }
       if (view.automaticDecisions.length > 0) {
         elements.push(
           markdown(
-            `**Automatic decisions**\n${view.automaticDecisions
+            `**${t.automaticDecisions}**\n${view.automaticDecisions
               .map((decision) => `- ${decision}`)
               .join("\n")}`,
           ),
         );
       }
-      elements.push(actionRow(view.taskId, "relay", "Relay to this task"));
+      elements.push(actionRow(view.taskId, "relay", t.relayToTask));
       return makeCard(
         {
           title: { tag: "plain_text", content: view.title },
-          template: reportTemplate(view.title),
+          template: reportTemplate(view.result),
         },
         elements,
       );
@@ -270,14 +288,10 @@ export function renderCard(view: View): Record<string, unknown> {
     case "relay": {
       const elements: Record<string, unknown>[] = [];
       if (view.active) {
-        elements.push(
-          markdown(
-            `Now talking to **${view.taskLabel}**. Plain messages go to this task. /end to stop.`,
-          ),
-        );
-        elements.push(actionRow(view.taskId, "end-relay", "End relay"));
+        elements.push(markdown(t.relayActive(view.taskLabel)));
+        elements.push(actionRow(view.taskId, "end-relay", t.endRelay));
       } else {
-        elements.push(markdown("Back to the Herder"));
+        elements.push(markdown(t.backToHerder));
       }
       return makeCard(undefined, elements);
     }
