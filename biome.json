@@ -2,7 +2,14 @@
   "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
   "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
   "files": {
-    "includes": ["**", "!docs", "!plans", "!**/*.md"]
+    "includes": [
+      "**",
+      "!docs",
+      "!plans",
+      "!**/*.md",
+      "!packages/herder-loop/src",
+      "!packages/herder-loop/test"
+    ]
   },
   "formatter": {
     "enabled": true,

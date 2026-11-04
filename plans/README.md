@@ -17,3 +17,8 @@ States: `TODO`, `IN PROGRESS`, `DONE`, `BLOCKED: <reason>`, `REJECTED: <reason>`
 | [002](002-acp-client-drives-mock-agent.md) | The ACP client runs a scripted mock agent and answers its permission requests | M1 | M | 001 | DONE |
 | [003](003-core-approval-loop-with-fake-channel.md) | A mock agent's permission request reaches the owner and the answer goes back | M1 | L | 001, 002 | DONE |
 | [004](004-feishu-channel-and-cli.md) | The owner approves a mock agent's request from a real Feishu card, started from a CLI | M1 | M | 003 | DONE |
+| [005](005-herder-loop-fork-and-sync.md) | Pi's agent loop lives in packages/herder-loop and one upstream sync has been done with the sync script | M2 | M | ADR 0020 | IN PROGRESS |
+| 006 | A DSH session runs through ACP and its permission requests reach the owner (Q07) | M2 | M | 004 | TODO (plan not written) |
+| 007 | Tasks have stages, a watchdog, a pinned board and completion reports | M2 | L | 006 | TODO (plan not written) |
+| 008 | The Herder starts tasks from chat, relays, and never approves | M2 | L | 005, 007 | TODO (plan not written) |
+| 009 | The desktop app does onboarding and shows sessions and the read-only inbox | M2 | L | 008 | TODO (plan not written) |
