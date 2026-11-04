@@ -24,3 +24,4 @@ States: `TODO`, `IN PROGRESS`, `DONE`, `BLOCKED: <reason>`, `REJECTED: <reason>`
 | [009](009-herder-answers-and-starts-tasks.md) | The Herder answers the owner, starts tasks from chat, and never approves | M2 | L | 005, 008 | DONE (manual run pending) |
 | [010](010-model-list-and-roles.md) | The owner keeps a list of model services and chooses the model of each role (ADR 0021) | M2 | M | 009 | DONE (manual run pending) |
 | [011](011-desktop-app-onboarding-models-tasks.md) | The desktop app binds Feishu, configures models, and shows tasks and open items | M2 | L | 010 | DONE (manual run pending) |
+| [012](012-pi-and-dsh-agents.md) | Pi joins next to DSH through a bundled ACP bridge with an approval gate (ADR 0022) | M2 | M | 011 | DONE (manual run pending) |

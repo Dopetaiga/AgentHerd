@@ -28,7 +28,7 @@ export const MODEL_USAGE = `Usage: agentherd model <command>
   add-compatible <id> --base-url <url> --models a,b [--name <name>]
                                      Add an OpenAI-compatible endpoint; the key is read from stdin
   key <service>                      Replace the key of a service (stdin)
-  use <herder|reviewer> <service>/<model>
+  use <herder|reviewer|pi> <service>/<model>
                                      Choose the model of a role ("none" to clear)
   test <service>/<model>             Send one short request
   remove <service>                   Remove a service and its key

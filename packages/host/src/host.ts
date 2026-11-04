@@ -18,6 +18,7 @@ import {
 import {
   builtinProviders,
   herderFromSettings,
+  piModelEnv,
   resolveModel,
   serviceKey,
   testModel,
@@ -125,12 +126,7 @@ export class Host implements HostApi {
   private async restartHerd(): Promise<void> {
     await this.stopHerd();
     const config = this.config();
-    this.profileList =
-      this.opts.profiles?.() ??
-      availableProfiles({
-        script: this.opts.script,
-        configured: config.profiles ?? [],
-      });
+    this.profileList = this.buildProfiles(config);
     this.refreshHerderChoice();
     if (config.channel === undefined || this.stopped) {
       this.emitStatus();
@@ -166,6 +162,16 @@ export class Host implements HostApi {
     this.emitTasks();
   }
 
+  private buildProfiles(config: CliConfig = this.config()): AgentProfile[] {
+    if (this.opts.profiles !== undefined) return this.opts.profiles();
+    const pi = piModelEnv(this.settings(), this.opts.secrets, this.opts.env);
+    return availableProfiles({
+      script: this.opts.script,
+      configured: config.profiles ?? [],
+      ...("env" in pi ? { piModelEnv: pi.env } : {}),
+    });
+  }
+
   private herderFactory() {
     const choice = herderFromSettings(this.settings(), this.opts.secrets, this.opts.env);
     return "factory" in choice ? choice.factory : undefined;
@@ -189,6 +195,8 @@ export class Host implements HostApi {
     if (this.herd !== undefined && before !== this.herderRef) {
       await this.herd.setHerder(this.herderFactory());
     }
+    this.profileList = this.buildProfiles();
+    this.herd?.setProfiles(this.profileList);
     this.log(`[herder] ${this.herderRef ?? `off: ${this.herderReason}`}`);
     this.emit({ topic: "models", data: this.models() });
     this.emitStatus();

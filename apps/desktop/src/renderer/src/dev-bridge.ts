@@ -90,7 +90,7 @@ function installFakeBridge(): void {
   const modelsChanged = (): ModelsView => {
     // Like core: roles that point at models no longer listed are cleared.
     const roles: ModelsView["roles"] = {};
-    for (const role of ["herder", "reviewer"] as const) {
+    for (const role of ["herder", "reviewer", "pi"] as const) {
       const ref = models.roles[role];
       if (ref === undefined) continue;
       const s = models.services.find((x) => x.id === ref.serviceId);

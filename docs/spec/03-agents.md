@@ -36,6 +36,7 @@ An agent is a profile in configuration, not a package:
 | Agent | Command | Status |
 | --- | --- | --- |
 | DeepSeek Harness | `dsh acp` | Tested 2026-11-04: `initialize` returns `deepseek-harness-acp`, session `close`/`list`/`resume`. Asks over `session/request_permission` only when a command needs more than its sandbox mode allows; see [DSH approvals](#dsh-approvals). Built-in profile `dsh` (found via `AGENTHERD_DSH`, `PATH`, or the app bundle); end-to-end run with Feishu passed 2026-11-04 |
+| Pi | `node packages/pi-acp/bin/pi-acp.ts --pi <pi>` (bridge to `pi --mode rpc`) | Tested 2026-11-04 with Pi 1.5.0 and DeepSeek: allow writes the file, deny blocks it. Built-in profile `pi` (found via `AGENTHERD_PI` or `PATH`); see [Pi](#pi) and ADR 0022 |
 | Claude Code | `claude-agent-acp` (npm `@agentclientprotocol/claude-agent-acp`, 0.100.0) | Package exists; not run **(verify, Q01)** |
 | Codex | `codex-acp` (npm `@zed-industries/codex-acp`, 0.16.0) | Package exists; not run **(verify, Q01)** |
 | Gemini CLI, OpenCode, Qwen Code, others | Their ACP mode | **(verify, Q02)** |
@@ -78,6 +79,25 @@ Tested 2026-11-04 with DSH 0.0.1 ACP (`/Applications/DeepSeek Harness.app/.../ru
   shows the justification.
 - DSH writes two harmless stderr lines: `Node.js environment variables are disabled because
   this process is invoked by other apps.` and `Got response to unknown request null`.
+
+### Pi
+
+Pi has no ACP server and never asks before a tool call. AgentHerd's bridge
+(`packages/pi-acp`, ADR 0022) starts `pi --mode rpc --no-session -e extension/gate.ts` for each
+ACP session:
+
+- The gate asks before every tool except `read`, `grep`, `find`, `ls` inside the session
+  folder. The question goes out as `session/request_permission` (`allow-once` /
+  `reject-once`); anything but allow blocks the call. Other extension dialogs are cancelled.
+- `text_delta` becomes `agent_message_chunk`; `tool_execution_start/end` become `tool_call`
+  and `tool_call_update` (`bash` → `execute`, `edit`/`write` → `edit`, `read`/`ls` → `read`,
+  `grep`/`find` → `search`). `agent_settled` ends the turn; `session/cancel` sends `abort`.
+- A model error (`stopReason: "error"`) fails the turn with Pi's message.
+- Model: Pi's own login and settings, unless the owner chose a model for the `pi` role; then
+  the host passes `AGENTHERD_PI_MODEL` (pi-ai model JSON) and `AGENTHERD_PI_KEY`, and
+  `extension/model.ts` registers it as provider `agentherd`.
+- The host searches the login shell's `PATH` plus `~/.local/bin`, `/opt/homebrew/bin`,
+  `/usr/local/bin` so an app opened from Finder finds `dsh`, `pi` and `node`.
 
 How each agent asks the user a question over ACP (permission request, or a message that ends
 the turn) is open **(verify, Q03)**.
