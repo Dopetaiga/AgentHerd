@@ -1,17 +1,20 @@
-// 设置: mode, keep awake, and where AgentHerd keeps its files.
+// 设置: the Feishu channel, mode, keep awake, the first run, and where AgentHerd keeps its files.
 
 import type { SettingsPatch } from "@agentherd/host/api";
+import { Check, Eye, FolderOpen, Hand, Info, MoonStar, Rocket } from "lucide-react";
 import { useState } from "react";
-import { Card, SectionTitle, Switch } from "../components/ui";
+import { FeishuSection } from "../components/FeishuSection";
+import { Button, Group, IconTile, Row, Section, Switch } from "../components/ui";
 import { call, type Mode, useApp } from "../store";
 
-const MODES: { mode: Mode; title: string; hint: string }[] = [
-  { mode: "observe", title: "只观察", hint: "只建议，不自动批准" },
-  { mode: "assist", title: "协助", hint: "按规则自动批准" },
+const MODES: { mode: Mode; title: string; hint: string; icon: typeof Eye }[] = [
+  { mode: "observe", title: "只观察", hint: "只建议，不自动批准", icon: Eye },
+  { mode: "assist", title: "协助", hint: "按规则自动批准", icon: Hand },
 ];
 
 export function SettingsPage() {
   const status = useApp((s) => s.status);
+  const openFirstRun = useApp((s) => s.openFirstRun);
   const [busy, setBusy] = useState(false);
 
   const update = async (patch: SettingsPatch) => {
@@ -24,66 +27,106 @@ export function SettingsPage() {
   if (status === undefined) return null;
 
   return (
-    <div className="flex flex-col gap-6">
-      <div>
-        <SectionTitle>模式</SectionTitle>
-        <Card className="flex flex-col gap-1 p-2">
-          {MODES.map(({ mode, title, hint }) => (
-            <label
-              key={mode}
-              className="flex cursor-pointer items-center gap-3 rounded-md px-2 py-2 hover:bg-zinc-50 dark:hover:bg-zinc-800/60"
-            >
-              <input
-                type="radio"
-                name="mode"
-                className="accent-blue-600"
-                checked={status.mode === mode}
-                disabled={busy}
-                onChange={() => void update({ mode })}
-              />
-              <span>
-                <span className="block text-sm text-zinc-900 dark:text-zinc-100">{title}</span>
-                <span className="block text-xs text-zinc-500">{hint}</span>
-              </span>
-            </label>
-          ))}
+    <div className="flex flex-col gap-7">
+      <FeishuSection />
+
+      <Section title="模式">
+        <Group>
+          {MODES.map(({ mode, title, hint, icon: Icon }) => {
+            const active = status.mode === mode;
+            return (
+              <label key={mode} className="block cursor-pointer hover:bg-hover">
+                <input
+                  type="radio"
+                  name="mode"
+                  className="peer sr-only"
+                  checked={active}
+                  disabled={busy}
+                  onChange={() => void update({ mode })}
+                />
+                <Row
+                  className="peer-focus-visible:bg-hover"
+                  icon={
+                    <IconTile tone={active ? "blue" : "gray"}>
+                      <Icon size={15} strokeWidth={1.75} />
+                    </IconTile>
+                  }
+                  title={title}
+                  description={hint}
+                  trailing={active ? <Check size={16} className="text-accent-text" /> : undefined}
+                />
+              </label>
+            );
+          })}
           {!MODES.some((m) => m.mode === status.mode) && (
-            <p className="px-2 py-1 text-xs text-zinc-500">当前模式：{status.mode}</p>
+            <div className="px-4 py-2.5 text-ink-muted text-sm">当前模式：{status.mode}</div>
           )}
-        </Card>
-      </div>
+        </Group>
+      </Section>
 
-      <div>
-        <SectionTitle>电源</SectionTitle>
-        <Card className="flex items-center gap-3">
-          <div className="min-w-0 flex-1">
-            <div className="text-sm text-zinc-900 dark:text-zinc-100">防止休眠</div>
-            <div className="text-xs text-zinc-500">
-              有任务在跑时让电脑保持唤醒，合上盖子也能继续
-            </div>
-          </div>
-          <Switch
-            label="防止休眠"
-            checked={status.keepAwake}
-            disabled={busy}
-            onChange={(keepAwake) => void update({ keepAwake })}
+      <Section title="电源">
+        <Group>
+          <Row
+            icon={
+              <IconTile>
+                <MoonStar size={15} strokeWidth={1.75} />
+              </IconTile>
+            }
+            title="防止休眠"
+            description="有任务在跑时让电脑保持唤醒，合上盖子也能继续"
+            trailing={
+              <Switch
+                label="防止休眠"
+                checked={status.keepAwake}
+                disabled={busy}
+                onChange={(keepAwake) => void update({ keepAwake })}
+              />
+            }
           />
-        </Card>
-      </div>
+        </Group>
+      </Section>
 
-      <div>
-        <SectionTitle>关于</SectionTitle>
-        <Card className="grid grid-cols-[6rem_1fr] gap-y-2 text-sm">
-          <span className="text-zinc-500">数据目录</span>
-          <span className="selectable break-all font-mono text-xs leading-5 text-zinc-800 dark:text-zinc-200">
-            {status.home}
-          </span>
-          <span className="text-zinc-500">版本</span>
-          <span className="selectable font-mono text-xs leading-5 text-zinc-800 dark:text-zinc-200">
-            {status.version}
-          </span>
-        </Card>
-      </div>
+      <Section title="关于">
+        <Group>
+          <Row
+            icon={
+              <IconTile>
+                <Rocket size={15} strokeWidth={1.75} />
+              </IconTile>
+            }
+            title="重新运行引导"
+            description="一步步绑定飞书、添加模型服务、给主管选模型"
+            trailing={<Button onClick={openFirstRun}>打开引导</Button>}
+          />
+          <Row
+            icon={
+              <IconTile>
+                <FolderOpen size={15} strokeWidth={1.75} />
+              </IconTile>
+            }
+            title="数据目录"
+            trailing={
+              <span
+                className="selectable block max-w-[420px] truncate font-mono text-ink-muted text-sm"
+                title={status.home}
+              >
+                {status.home}
+              </span>
+            }
+          />
+          <Row
+            icon={
+              <IconTile>
+                <Info size={15} strokeWidth={1.75} />
+              </IconTile>
+            }
+            title="版本"
+            trailing={
+              <span className="selectable font-mono text-ink-muted text-sm">{status.version}</span>
+            }
+          />
+        </Group>
+      </Section>
     </div>
   );
 }

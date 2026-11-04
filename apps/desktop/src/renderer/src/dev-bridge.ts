@@ -1,5 +1,10 @@
 // A fake bridge for previewing the UI in a plain browser (vite dev without Electron).
 // It is installed only when the preload script did not set `window.agentherd`.
+// `?sim=` picks the starting state:
+//   fresh (default)  not bound, no Herder model: the first run opens
+//   bound            bound and connected, no Herder model
+//   keychain         bound, but reading the keychain was cancelled; 重新连接 then works
+//   ready            bound, connected, Herder chosen
 
 import type {
   HostEvent,
@@ -25,7 +30,15 @@ function minutesAgo(n: number): string {
   return new Date(Date.now() - n * 60_000).toISOString();
 }
 
+type Sim = "fresh" | "bound" | "keychain" | "ready";
+
+function simulation(): Sim {
+  const value = new URLSearchParams(window.location.search).get("sim");
+  return value === "bound" || value === "keychain" || value === "ready" ? value : "fresh";
+}
+
 function installFakeBridge(): void {
+  const sim = simulation();
   const eventListeners = new Set<Listener<HostEvent>>();
   const connectionListeners = new Set<Listener<boolean>>();
   const keys = new Map<string, string>([["deepseek", "sk-fake"]]);
@@ -34,8 +47,21 @@ function installFakeBridge(): void {
   let status: HostStatus = {
     version: "0.0.0-dev",
     home: "~/.agentherd",
-    channel: { bound: false, connected: false, error: "尚未绑定飞书" },
-    herder: { on: false, reason: "没有给主管选模型" },
+    channel:
+      sim === "fresh"
+        ? { bound: false, connected: false }
+        : sim === "keychain"
+          ? {
+              bound: true,
+              appId: "cli_fake123",
+              connected: false,
+              error: "Platform failure: User canceled the operation.",
+            }
+          : { bound: true, appId: "cli_fake123", connected: true },
+    herder:
+      sim === "ready"
+        ? { on: true, ref: "deepseek/deepseek-chat" }
+        : { on: false, reason: "no model chosen for the Herder" },
     mode: "observe",
     locale: "zh-CN",
     keepAwake: true,
@@ -93,7 +119,7 @@ function installFakeBridge(): void {
         hasKey: true,
       },
     ],
-    roles: {},
+    roles: sim === "ready" ? { herder: { serviceId: "deepseek", model: "deepseek-chat" } } : {},
   };
 
   const providers: ProviderView[] = [
@@ -146,7 +172,7 @@ function installFakeBridge(): void {
   const herderStatus = (): HostStatus["herder"] => {
     const ref = models.roles.herder;
     return ref === undefined
-      ? { on: false, reason: "没有给主管选模型" }
+      ? { on: false, reason: "no model chosen for the Herder" }
       : { on: true, ref: `${ref.serviceId}/${ref.model}` };
   };
   const modelsChanged = (): ModelsView => {
@@ -171,6 +197,17 @@ function installFakeBridge(): void {
 
   const fake: RemoteHost = {
     status: () => delay(status),
+    reconnect: () => {
+      // The second try reads the keychain fine.
+      if (status.channel.bound) {
+        status = {
+          ...status,
+          channel: { bound: true, appId: status.channel.appId, connected: true },
+        };
+        emit({ topic: "status", data: structuredClone(status) });
+      }
+      return delay(status, 900);
+    },
     tasks: () => delay(tasks),
     providers: () => delay(providers),
     models: () => delay(models),

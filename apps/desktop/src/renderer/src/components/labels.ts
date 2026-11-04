@@ -111,3 +111,19 @@ export function herderReasonLabel(reason: string | undefined): string | undefine
   if (key) return `服务「${key[1]}」没有 Key`;
   return reason;
 }
+
+/** The channel error in Chinese where it is a known one; other errors as the host wrote them. */
+export function channelErrorLabel(error: string): string {
+  if (error === "Platform failure: User canceled the operation.")
+    return "读取钥匙串被取消。点「重新连接」，在系统弹窗里输入 Mac 登录密码并选「始终允许」。";
+  return error;
+}
+
+/** The channel is bound but could not connect, and the host says why: the owner can retry. */
+export function canReconnect(channel: {
+  bound: boolean;
+  connected: boolean;
+  error?: string | undefined;
+}): boolean {
+  return channel.bound && !channel.connected && channel.error !== undefined && channel.error !== "";
+}

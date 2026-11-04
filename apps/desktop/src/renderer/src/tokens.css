@@ -1,0 +1,157 @@
+/*
+ * AgentHerd design tokens. Every color, radius and size the renderer uses is declared here.
+ * Dark is the base palette; the light palette replaces values only, when the system asks for it.
+ * The values follow the look of OpenBot's desktop app (neutral greys, hue-210 accent).
+ */
+
+:root {
+  color-scheme: dark;
+
+  /* Surfaces, from back to front: window frame, page card, grouped list, controls. */
+  --ah-bg-frame: #0d0d0d;
+  /* The frame over macOS window vibrancy: the same color, see-through. */
+  --ah-bg-frame-translucent: rgb(13 13 13 / 0.55);
+  --ah-bg-canvas: #1a1a1a;
+  --ah-bg-surface: #212121;
+  --ah-bg-surface-raised: #242424;
+  --ah-bg-control: #262628;
+  --ah-bg-control-hover: #2c2c2e;
+  --ah-bg-control-active: #333335;
+  --ah-bg-inset: #161616;
+  --ah-hover: rgba(255, 255, 255, 0.06);
+  --ah-selected: rgba(255, 255, 255, 0.09);
+  --ah-overlay: rgba(0, 0, 0, 0.42);
+  --ah-dialog-ring: rgba(255, 255, 255, 0.1);
+
+  /* Lines. Borders stay faint; there are no drop shadows on cards. */
+  --ah-border: rgba(255, 255, 255, 0.06);
+  --ah-border-strong: rgba(255, 255, 255, 0.1);
+  --ah-border-focus: #979797;
+
+  /* Text. */
+  --ah-text-primary: #ffffff;
+  --ah-text-secondary: #dcdcdc;
+  --ah-text-muted: #979797;
+  --ah-text-dim: #6a6a6a;
+  --ah-text-placeholder: #77777b;
+
+  /* The inverted element: the primary button, a light chip on a dark canvas. */
+  --ah-invert: #f0f0f0;
+  --ah-invert-hover: #dcdcdc;
+  --ah-on-invert: #141414;
+
+  /* Accent (hue 210): selection, links, the switch, focus of a chosen item. */
+  --ah-accent: #007cf7;
+  --ah-accent-hover: #1f8fff;
+  --ah-accent-text: #42a0ff;
+  --ah-accent-soft: rgba(0, 124, 247, 0.16);
+
+  /* Status. */
+  --ah-success: #31cf76;
+  --ah-success-text: #31cf76;
+  --ah-success-soft: rgba(49, 207, 118, 0.12);
+  --ah-warning: #ff9412;
+  --ah-warning-text: #ff9412;
+  --ah-warning-soft: rgba(255, 148, 18, 0.12);
+  --ah-danger: #fd2f3b;
+  --ah-danger-text: #ff6069;
+  --ah-danger-soft: rgba(253, 47, 59, 0.16);
+  --ah-danger-soft-hover: rgba(253, 47, 59, 0.26);
+
+  /* QR codes are always ink on paper. */
+  --ah-paper: #ffffff;
+
+  --ah-shadow-dialog: 0 16px 48px rgba(0, 0, 0, 0.5);
+  --ah-shadow-toast: 0 8px 24px rgba(0, 0, 0, 0.4);
+
+  /* Type: six steps, a mac-like 13px body. */
+  --ah-text-sm: 12px;
+  --ah-text-md: 13px;
+  --ah-text-lg: 14px;
+  --ah-text-xl: 16px;
+  --ah-text-2xl: 18px;
+  --ah-text-3xl: 24px;
+  --ah-leading-sm: 16px;
+  --ah-leading-md: 18px;
+  --ah-leading-lg: 20px;
+  --ah-leading-xl: 22px;
+  --ah-leading-2xl: 24px;
+  --ah-leading-3xl: 30px;
+
+  /* Spacing. */
+  --ah-space-1: 4px;
+  --ah-space-2: 8px;
+  --ah-space-3: 12px;
+  --ah-space-4: 16px;
+  --ah-space-6: 24px;
+  --ah-space-8: 32px;
+
+  /* Radii. */
+  --ah-radius-xs: 4px;
+  --ah-radius-sm: 6px;
+  --ah-radius-md: 8px;
+  --ah-radius-lg: 12px;
+  --ah-radius-card: 14px;
+  --ah-radius-grouped: 16px;
+  --ah-radius-xl: 20px;
+  --ah-radius-modal: 30px;
+
+  /* Controls. */
+  --ah-control-xs: 24px;
+  --ah-control-sm: 28px;
+  --ah-control-md: 32px;
+  --ah-sidebar-width: 216px;
+  --ah-titlebar-height: 48px;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    color-scheme: light;
+
+    --ah-bg-frame: #e8e8eb;
+    --ah-bg-frame-translucent: rgb(232 232 235 / 0.55);
+    --ah-bg-canvas: #f5f5f6;
+    --ah-bg-surface: #ffffff;
+    --ah-bg-surface-raised: #fcfcfc;
+    --ah-bg-control: #ffffff;
+    --ah-bg-control-hover: #f0f0f2;
+    --ah-bg-control-active: #e8e8eb;
+    --ah-bg-inset: #f0f0f2;
+    --ah-hover: rgba(20, 20, 20, 0.05);
+    --ah-selected: rgba(20, 20, 20, 0.07);
+    --ah-overlay: rgba(20, 20, 20, 0.16);
+    --ah-dialog-ring: rgba(20, 20, 20, 0.1);
+
+    --ah-border: rgba(20, 20, 20, 0.07);
+    --ah-border-strong: rgba(20, 20, 20, 0.12);
+    --ah-border-focus: #6b6b70;
+
+    --ah-text-primary: #141414;
+    --ah-text-secondary: #3a3a3c;
+    --ah-text-muted: #6b6b70;
+    --ah-text-dim: #8e8e93;
+    --ah-text-placeholder: #9a9aa0;
+
+    --ah-invert: #1c1c1e;
+    --ah-invert-hover: #3a3a3c;
+    --ah-on-invert: #ffffff;
+
+    --ah-accent-hover: #006ad4;
+    --ah-accent-text: #0064c8;
+    --ah-accent-soft: rgba(0, 124, 247, 0.12);
+
+    --ah-success: #1fa85a;
+    --ah-success-text: #187a41;
+    --ah-success-soft: rgba(31, 168, 90, 0.12);
+    --ah-warning: #f08a00;
+    --ah-warning-text: #9c5200;
+    --ah-warning-soft: rgba(240, 138, 0, 0.14);
+    --ah-danger: #e8222d;
+    --ah-danger-text: #c0141d;
+    --ah-danger-soft: rgba(232, 34, 45, 0.1);
+    --ah-danger-soft-hover: rgba(232, 34, 45, 0.18);
+
+    --ah-shadow-dialog: 0 16px 48px rgba(20, 20, 20, 0.12);
+    --ah-shadow-toast: 0 8px 24px rgba(20, 20, 20, 0.1);
+  }
+}

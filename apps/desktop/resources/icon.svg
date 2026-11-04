@@ -1,4 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 32 32">
+  <title>AgentHerd</title>
   <!-- macOS icon grid: the tile is inset to 824/1024 with a 185px corner. -->
   <g transform="translate(3.125 3.125) scale(0.8047)">
     <rect width="32" height="32" rx="7.2" fill="#1c1c1e"/>

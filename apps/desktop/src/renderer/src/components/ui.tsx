@@ -1,17 +1,19 @@
-// Small shared UI pieces: buttons, cards, badges, fields, switch, modal, toasts.
+// Small shared UI pieces: buttons, grouped lists, badges, fields, switch, modal, toasts.
+// Colors come from the --ah-* tokens through the Tailwind theme (see styles.css).
 
 import { X } from "lucide-react";
 import { type ButtonHTMLAttributes, type ReactNode, useEffect } from "react";
 import { useApp } from "../store";
 
-type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
+type ButtonVariant = "primary" | "secondary" | "ghost" | "danger" | "link";
 
 const BUTTON_STYLES: Record<ButtonVariant, string> = {
-  primary: "bg-blue-600 text-white hover:bg-blue-500 disabled:bg-blue-600/50",
-  secondary:
-    "border border-zinc-300 bg-white text-zinc-800 hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100 dark:hover:bg-zinc-700",
-  ghost: "text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800",
-  danger: "bg-red-600 text-white hover:bg-red-500 disabled:bg-red-600/50",
+  // Inverted: dark on a light canvas, light on a dark one.
+  primary: "bg-invert text-on-invert hover:bg-invert-hover",
+  secondary: "border border-line-strong bg-control text-ink hover:bg-control-hover",
+  ghost: "text-ink-muted hover:bg-hover hover:text-ink",
+  danger: "bg-danger-soft text-danger-text hover:bg-danger-soft-hover",
+  link: "px-1! text-accent-text hover:underline",
 };
 
 export function Button({
@@ -23,58 +25,154 @@ export function Button({
   variant?: ButtonVariant;
   size?: "sm" | "md";
 }) {
-  const sizing = size === "sm" ? "h-7 px-2.5 text-xs" : "h-8 px-3.5 text-sm";
+  const sizing = size === "sm" ? "h-6 px-2 text-sm" : "h-7 px-3 text-md";
   return (
     <button
       type="button"
-      className={`inline-flex shrink-0 items-center justify-center gap-1.5 rounded-md font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${sizing} ${BUTTON_STYLES[variant]} ${className}`}
+      className={`inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-md font-medium transition-colors disabled:pointer-events-none disabled:opacity-50 ${sizing} ${BUTTON_STYLES[variant]} ${className}`}
       {...props}
     />
   );
 }
 
-export function Card({ children, className = "" }: { children: ReactNode; className?: string }) {
+/** A grouped inset list: one rounded surface, rows split by inset hairlines. */
+export function Group({ children, className = "" }: { children: ReactNode; className?: string }) {
   return (
     <section
-      className={`rounded-lg border border-zinc-200 bg-white p-4 shadow-xs dark:border-zinc-700/70 dark:bg-zinc-900 ${className}`}
+      className={`overflow-hidden rounded-card border border-line bg-surface [&>*+*]:border-line [&>*+*]:border-t ${className}`}
     >
       {children}
     </section>
   );
 }
 
-export function SectionTitle({ children, hint }: { children: ReactNode; hint?: ReactNode }) {
+/** One row of a group: optional icon, a title with a description, and trailing controls. */
+export function Row({
+  icon,
+  title,
+  description,
+  trailing,
+  className = "",
+  children,
+}: {
+  icon?: ReactNode;
+  title?: ReactNode;
+  description?: ReactNode;
+  trailing?: ReactNode;
+  className?: string;
+  children?: ReactNode;
+}) {
   return (
-    <div className="mb-2 flex items-baseline gap-2">
-      <h2 className="font-semibold text-sm text-zinc-800 dark:text-zinc-100">{children}</h2>
-      {hint !== undefined && <span className="text-xs text-zinc-500">{hint}</span>}
+    <div className={`flex min-h-12 items-center gap-3 px-4 py-2.5 ${className}`}>
+      {icon !== undefined && icon}
+      {(title !== undefined || description !== undefined) && (
+        <div className="min-w-0 flex-1">
+          {title !== undefined && <div className="truncate font-medium text-ink">{title}</div>}
+          {description !== undefined && (
+            <div className="mt-0.5 text-ink-muted text-sm">{description}</div>
+          )}
+        </div>
+      )}
+      {children}
+      {trailing !== undefined && <div className="flex shrink-0 items-center gap-2">{trailing}</div>}
     </div>
   );
 }
 
-export type Tone = "gray" | "blue" | "green" | "amber" | "orange" | "red";
-
-const TONES: Record<Tone, string> = {
-  gray: "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300",
-  blue: "bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300",
-  green: "bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300",
-  amber: "bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300",
-  orange: "bg-orange-50 text-orange-700 dark:bg-orange-950 dark:text-orange-300",
-  red: "bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-300",
-};
-
-export function Badge({ tone = "gray", children }: { tone?: Tone; children: ReactNode }) {
+/** A small square that holds a row's glyph. */
+export function IconTile({
+  children,
+  tone = "gray",
+}: {
+  children: ReactNode;
+  tone?: "gray" | "green" | "amber" | "red" | "blue";
+}) {
+  const tones = {
+    gray: "bg-control-hover text-ink-2",
+    green: "bg-success-soft text-success-text",
+    amber: "bg-warning-soft text-warning-text",
+    red: "bg-danger-soft text-danger-text",
+    blue: "bg-accent-soft text-accent-text",
+  };
   return (
     <span
-      className={`inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full px-2 py-0.5 font-medium text-xs ${TONES[tone]}`}
+      className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md font-semibold text-sm ${tones[tone]}`}
     >
       {children}
     </span>
   );
 }
 
-export const inputClass =
-  "h-8 w-full rounded-md border border-zinc-300 bg-white px-2.5 text-sm text-zinc-900 outline-none placeholder:text-zinc-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100";
+/** A titled section: a quiet heading above a group, with an optional hint and actions. */
+export function Section({
+  title,
+  hint,
+  actions,
+  children,
+}: {
+  title: ReactNode;
+  hint?: ReactNode;
+  actions?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <section className="flex flex-col gap-2">
+      <div className="flex min-h-6 items-end justify-between gap-3">
+        <div className="min-w-0">
+          <h2 className="font-medium text-ink-2 text-md">{title}</h2>
+          {hint !== undefined && <p className="mt-0.5 text-ink-muted text-sm">{hint}</p>}
+        </div>
+        {actions !== undefined && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+export type Tone = "gray" | "blue" | "green" | "amber" | "orange" | "red";
+
+const TONES: Record<Tone, string> = {
+  gray: "bg-control-hover text-ink-2",
+  blue: "bg-accent-soft text-accent-text",
+  green: "bg-success-soft text-success-text",
+  amber: "bg-warning-soft text-warning-text",
+  orange: "bg-warning-soft text-warning-text",
+  red: "bg-danger-soft text-danger-text",
+};
+
+const DOTS: Record<Tone, string> = {
+  gray: "bg-ink-dim",
+  blue: "bg-accent",
+  green: "bg-success",
+  amber: "bg-warning",
+  orange: "bg-warning",
+  red: "bg-danger",
+};
+
+export function Badge({ tone = "gray", children }: { tone?: Tone; children: ReactNode }) {
+  return (
+    <span
+      className={`inline-flex h-5 shrink-0 items-center gap-1 whitespace-nowrap rounded-sm px-1.5 font-medium text-xs ${TONES[tone]}`}
+    >
+      {children}
+    </span>
+  );
+}
+
+/** A status dot. */
+export function Dot({ tone = "gray", pulse = false }: { tone?: Tone; pulse?: boolean }) {
+  return (
+    <span className="relative inline-flex h-2 w-2 shrink-0">
+      {pulse && (
+        <span className={`absolute inset-0 animate-ping rounded-full opacity-50 ${DOTS[tone]}`} />
+      )}
+      <span className={`relative inline-flex h-2 w-2 rounded-full ${DOTS[tone]}`} />
+    </span>
+  );
+}
+
+/** Class for text fields, text areas and selects (see `.ah-input` in styles.css). */
+export const inputClass = "ah-input";
 
 export function Field({
   label,
@@ -88,11 +186,11 @@ export function Field({
   return (
     // biome-ignore lint/a11y/noLabelWithoutControl: the control is passed in as children
     <label className="block">
-      <span className="mb-1 block font-medium text-xs text-zinc-700 dark:text-zinc-300">
-        {label}
-      </span>
+      <span className="mb-1.5 ml-0.5 block font-medium text-ink-2 text-md">{label}</span>
       {children}
-      {hint !== undefined && <span className="mt-1 block text-xs text-zinc-500">{hint}</span>}
+      {hint !== undefined && (
+        <span className="mt-1.5 ml-0.5 block text-ink-muted text-sm">{hint}</span>
+      )}
     </label>
   );
 }
@@ -116,13 +214,13 @@ export function Switch({
       aria-label={label}
       disabled={disabled}
       onClick={() => onChange(!checked)}
-      className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors disabled:opacity-50 ${
-        checked ? "bg-blue-600" : "bg-zinc-300 dark:bg-zinc-600"
+      className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors duration-150 disabled:opacity-50 ${
+        checked ? "bg-accent" : "bg-control-active"
       }`}
     >
       <span
-        className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform ${
-          checked ? "translate-x-4.5" : "translate-x-0.5"
+        className={`inline-block h-4 w-4 rounded-full bg-white shadow-[0_1px_2px_rgba(0,0,0,0.25)] transition-transform duration-150 ${
+          checked ? "translate-x-[18px]" : "translate-x-0.5"
         }`}
       />
     </button>
@@ -131,12 +229,14 @@ export function Switch({
 
 export function Modal({
   title,
+  description,
   onClose,
   children,
   footer,
   wide = false,
 }: {
   title: ReactNode;
+  description?: ReactNode;
   onClose: () => void;
   children: ReactNode;
   footer?: ReactNode;
@@ -150,28 +250,33 @@ export function Modal({
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/30 p-6 backdrop-blur-[1px]">
+    <div className="ah-fade-in fixed inset-0 z-40 flex items-center justify-center bg-overlay p-8">
       <div
         role="dialog"
         aria-modal="true"
-        className={`flex max-h-full w-full flex-col overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-2xl dark:border-zinc-700 dark:bg-zinc-900 ${
-          wide ? "max-w-2xl" : "max-w-lg"
+        className={`ah-dialog-in flex max-h-full w-full flex-col overflow-hidden rounded-card bg-canvas shadow-(--ah-shadow-dialog) ring-1 ring-(color:--ah-dialog-ring) ${
+          wide ? "max-w-[560px]" : "max-w-[460px]"
         }`}
       >
-        <header className="flex items-center justify-between border-zinc-200 border-b px-5 py-3 dark:border-zinc-700">
-          <h3 className="font-semibold text-sm text-zinc-900 dark:text-zinc-100">{title}</h3>
+        <header className="flex items-start justify-between gap-4 px-6 pt-5 pb-4">
+          <div className="min-w-0">
+            <h3 className="font-semibold text-ink text-lg">{title}</h3>
+            {description !== undefined && (
+              <p className="mt-1 text-ink-muted text-md">{description}</p>
+            )}
+          </div>
           <button
             type="button"
             aria-label="关闭"
             onClick={onClose}
-            className="rounded p-1 text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+            className="-mr-2 flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-hover hover:text-ink"
           >
-            <X size={16} />
+            <X size={16} strokeWidth={1.75} />
           </button>
         </header>
-        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">{children}</div>
+        <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-5">{children}</div>
         {footer !== undefined && (
-          <footer className="flex items-center justify-end gap-2 border-zinc-200 border-t px-5 py-3 dark:border-zinc-700">
+          <footer className="flex items-center justify-end gap-2 border-line border-t px-6 py-3.5">
             {footer}
           </footer>
         )}
@@ -180,11 +285,25 @@ export function Modal({
   );
 }
 
-export function EmptyState({ icon, text }: { icon: ReactNode; text: ReactNode }) {
+export function EmptyState({
+  icon,
+  title,
+  text,
+  action,
+}: {
+  icon: ReactNode;
+  title?: ReactNode;
+  text: ReactNode;
+  action?: ReactNode;
+}) {
   return (
-    <div className="flex flex-col items-center gap-2 py-8 text-center text-sm text-zinc-500">
-      <div className="text-zinc-400">{icon}</div>
-      <div>{text}</div>
+    <div className="flex flex-col items-center gap-1 px-6 py-9 text-center">
+      <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-lg bg-control-hover text-ink-muted">
+        {icon}
+      </div>
+      {title !== undefined && <div className="font-medium text-ink">{title}</div>}
+      <div className="max-w-sm text-ink-muted text-md">{text}</div>
+      {action !== undefined && <div className="mt-3">{action}</div>}
     </div>
   );
 }
@@ -198,18 +317,17 @@ export function Toasts() {
         <div
           key={t.id}
           role="alert"
-          className={`pointer-events-auto flex items-start gap-2 rounded-lg border px-3 py-2 text-sm shadow-lg ${
-            t.kind === "error"
-              ? "border-red-200 bg-red-50 text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-200"
-              : "border-zinc-200 bg-white text-zinc-800 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
-          }`}
+          className="ah-dialog-in pointer-events-auto flex items-start gap-2.5 rounded-lg bg-surface-raised px-3 py-2.5 text-ink shadow-(--ah-shadow-toast) ring-1 ring-line-strong"
         >
+          <span className="mt-[5px]">
+            <Dot tone={t.kind === "error" ? "red" : "green"} />
+          </span>
           <span className="selectable min-w-0 flex-1 break-words">{t.text}</span>
           <button
             type="button"
             aria-label="关闭"
             onClick={() => dismiss(t.id)}
-            className="shrink-0 opacity-60 hover:opacity-100"
+            className="shrink-0 text-ink-muted hover:text-ink"
           >
             <X size={14} />
           </button>

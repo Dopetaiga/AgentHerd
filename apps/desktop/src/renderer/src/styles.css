@@ -1,14 +1,79 @@
 @import "tailwindcss";
+@import "./tokens.css";
 
-@theme {
+/* Tailwind utilities read the AgentHerd tokens, so classes such as `bg-surface` or
+   `text-ink-muted` follow the light and dark palettes. */
+@theme inline {
   --font-sans:
     -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Hiragino Sans GB",
     "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif;
-  --font-mono: ui-monospace, "SF Mono", Menlo, Monaco, Consolas, monospace;
-}
+  --font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 
-:root {
-  color-scheme: light dark;
+  --color-frame: var(--ah-bg-frame);
+  --color-canvas: var(--ah-bg-canvas);
+  --color-surface: var(--ah-bg-surface);
+  --color-surface-raised: var(--ah-bg-surface-raised);
+  --color-control: var(--ah-bg-control);
+  --color-control-hover: var(--ah-bg-control-hover);
+  --color-control-active: var(--ah-bg-control-active);
+  --color-inset: var(--ah-bg-inset);
+  --color-hover: var(--ah-hover);
+  --color-selected: var(--ah-selected);
+  --color-overlay: var(--ah-overlay);
+
+  --color-line: var(--ah-border);
+  --color-line-strong: var(--ah-border-strong);
+  --color-line-focus: var(--ah-border-focus);
+
+  --color-ink: var(--ah-text-primary);
+  --color-ink-2: var(--ah-text-secondary);
+  --color-ink-muted: var(--ah-text-muted);
+  --color-ink-dim: var(--ah-text-dim);
+  --color-ink-placeholder: var(--ah-text-placeholder);
+
+  --color-invert: var(--ah-invert);
+  --color-invert-hover: var(--ah-invert-hover);
+  --color-on-invert: var(--ah-on-invert);
+
+  --color-accent: var(--ah-accent);
+  --color-accent-hover: var(--ah-accent-hover);
+  --color-accent-text: var(--ah-accent-text);
+  --color-accent-soft: var(--ah-accent-soft);
+
+  --color-success: var(--ah-success);
+  --color-success-text: var(--ah-success-text);
+  --color-success-soft: var(--ah-success-soft);
+  --color-warning: var(--ah-warning);
+  --color-warning-text: var(--ah-warning-text);
+  --color-warning-soft: var(--ah-warning-soft);
+  --color-danger: var(--ah-danger);
+  --color-danger-text: var(--ah-danger-text);
+  --color-danger-soft: var(--ah-danger-soft);
+  --color-danger-soft-hover: var(--ah-danger-soft-hover);
+  --color-paper: var(--ah-paper);
+
+  --text-xs: 11px;
+  --text-xs--line-height: 14px;
+  --text-sm: var(--ah-text-sm);
+  --text-sm--line-height: var(--ah-leading-sm);
+  --text-md: var(--ah-text-md);
+  --text-md--line-height: var(--ah-leading-md);
+  --text-base: var(--ah-text-lg);
+  --text-base--line-height: var(--ah-leading-lg);
+  --text-lg: var(--ah-text-xl);
+  --text-lg--line-height: var(--ah-leading-xl);
+  --text-xl: var(--ah-text-2xl);
+  --text-xl--line-height: var(--ah-leading-2xl);
+  --text-2xl: var(--ah-text-3xl);
+  --text-2xl--line-height: var(--ah-leading-3xl);
+
+  --radius-xs: var(--ah-radius-xs);
+  --radius-sm: var(--ah-radius-sm);
+  --radius-md: var(--ah-radius-md);
+  --radius-lg: var(--ah-radius-lg);
+  --radius-card: var(--ah-radius-card);
+  --radius-grouped: var(--ah-radius-grouped);
+  --radius-xl: var(--ah-radius-xl);
 }
 
 html,
@@ -19,9 +84,29 @@ body,
 
 body {
   margin: 0;
+  background: var(--ah-bg-frame);
+  color: var(--ah-text-primary);
   font-family: var(--font-sans);
+  font-size: var(--ah-text-md);
+  line-height: var(--ah-leading-md);
   -webkit-font-smoothing: antialiased;
   user-select: none;
+  cursor: default;
+}
+
+/* On macOS the window has vibrancy behind it (see src/main). The frame lets it show through;
+   the page card and the first run keep their opaque canvas. */
+html.ah-vibrancy,
+html.ah-vibrancy body {
+  background: transparent;
+}
+
+.ah-frame {
+  background: var(--ah-bg-frame);
+}
+
+html.ah-vibrancy .ah-frame {
+  background: var(--ah-bg-frame-translucent);
 }
 
 input,
@@ -30,10 +115,138 @@ textarea,
   user-select: text;
 }
 
+::selection {
+  background: var(--ah-accent-soft);
+}
+
+:focus-visible {
+  outline: none;
+}
+
+/* Thin, quiet scrollbars. */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background: var(--ah-border-strong);
+  background-clip: content-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--ah-text-dim);
+}
+
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
 .app-drag {
   -webkit-app-region: drag;
 }
 
-.app-no-drag {
+.app-no-drag,
+.app-drag button,
+.app-drag input,
+.app-drag select,
+.app-drag a {
   -webkit-app-region: no-drag;
+}
+
+/* Form controls. One look for text fields, text areas and selects. */
+/* In a layer so that Tailwind utilities such as pl-8 and w-60 can adjust a control. */
+@layer components {
+  .ah-input {
+    display: block;
+    width: 100%;
+    height: var(--ah-control-md);
+    border: 1px solid var(--ah-border-strong);
+    border-radius: var(--ah-radius-md);
+    outline: 0;
+    background: var(--ah-bg-control);
+    padding: 0 10px;
+    color: var(--ah-text-primary);
+    caret-color: var(--ah-text-primary);
+    font-size: var(--ah-text-md);
+    line-height: var(--ah-leading-md);
+  }
+
+  .ah-input::placeholder {
+    color: var(--ah-text-placeholder);
+  }
+
+  .ah-input:focus {
+    border-color: var(--ah-border-focus);
+  }
+
+  .ah-input:disabled {
+    opacity: 0.6;
+  }
+
+  textarea.ah-input {
+    height: auto;
+    padding-block: 8px;
+  }
+
+  select.ah-input {
+    appearance: none;
+    padding-right: 28px;
+    background-image:
+      linear-gradient(45deg, transparent 50%, var(--ah-text-muted) 50%),
+      linear-gradient(135deg, var(--ah-text-muted) 50%, transparent 50%);
+    background-position:
+      calc(100% - 15px) 50%,
+      calc(100% - 11px) 50%;
+    background-repeat: no-repeat;
+    background-size:
+      4px 4px,
+      4px 4px;
+  }
+
+  select.ah-input option,
+  select.ah-input optgroup {
+    background: var(--ah-bg-surface);
+    color: var(--ah-text-primary);
+  }
+
+  /* Native radio and checkbox, tinted with the accent. */
+  .ah-check {
+    width: 14px;
+    height: 14px;
+    margin: 0;
+    flex: 0 0 auto;
+    accent-color: var(--ah-accent);
+  }
+}
+
+@keyframes ah-dialog-in {
+  from {
+    opacity: 0;
+    transform: scale(0.98) translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes ah-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.ah-dialog-in {
+  animation: ah-dialog-in 160ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+.ah-fade-in {
+  animation: ah-fade-in 120ms ease-out both;
 }

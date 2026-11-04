@@ -24,7 +24,7 @@ export type ModelRef = NonNullable<Parameters<HostApi["chooseModel"]>[1]>;
 export type Stage = Task["stage"];
 export type Mode = HostStatus["mode"];
 
-export type Page = "onboarding" | "tasks" | "models" | "settings";
+export type Page = "tasks" | "models" | "settings";
 
 export interface Toast {
   id: number;
@@ -41,13 +41,30 @@ interface AppState {
   providers: ProviderView[];
   setup: SetupState | undefined;
   page: Page;
+  /** The first-run flow covers the window. */
+  firstRun: boolean;
   toasts: Toast[];
+  /** Shows a page. It also closes the first run, without marking it done. */
   setPage(page: Page): void;
+  openFirstRun(): void;
+  /** Closes the first run and remembers that it ran, so it does not open by itself again. */
+  finishFirstRun(): void;
   toast(text: string, kind?: Toast["kind"]): void;
   dismissToast(id: number): void;
 }
 
-const PAGES: readonly Page[] = ["onboarding", "tasks", "models", "settings"];
+const PAGES: readonly Page[] = ["tasks", "models", "settings"];
+
+/** Set once the owner finished or skipped the first run. */
+const FIRST_RUN_DONE = "agentherd.firstRunDone";
+
+function firstRunDone(): boolean {
+  try {
+    return window.localStorage.getItem(FIRST_RUN_DONE) !== null;
+  } catch {
+    return false;
+  }
+}
 
 /** A page named in the URL hash (e.g. "#models"), for previews and reloads. */
 function hashPage(): Page | undefined {
@@ -64,8 +81,19 @@ export const useApp = create<AppState>()((set, get) => ({
   providers: [],
   setup: undefined,
   page: hashPage() ?? "tasks",
+  // "#onboarding" opens the first run at once, for previews and screenshots.
+  firstRun: window.location.hash === "#onboarding",
   toasts: [],
-  setPage: (page) => set({ page }),
+  setPage: (page) => set({ page, firstRun: false }),
+  openFirstRun: () => set({ firstRun: true }),
+  finishFirstRun: () => {
+    try {
+      window.localStorage.setItem(FIRST_RUN_DONE, new Date().toISOString());
+    } catch {
+      // Without storage the first run may show again next time; nothing else breaks.
+    }
+    set({ firstRun: false });
+  },
   toast: (text, kind = "error") => {
     const id = nextToastId++;
     set({ toasts: [...get().toasts, { id, kind, text }] });
@@ -102,12 +130,18 @@ export async function call<T>(fn: (h: RemoteHost) => Promise<T>): Promise<T | un
   }
 }
 
+/** Connects the channel again and shows the status it returns. */
+export async function reconnect(): Promise<void> {
+  const status = await call((h) => h.reconnect());
+  if (status !== undefined) useApp.setState({ status });
+}
+
 /** Applies a models view returned by a host call. */
 export function applyModels(models: ModelsView | undefined): void {
   if (models !== undefined) useApp.setState({ models });
 }
 
-/** True when onboarding is not finished: no Feishu binding or no Herder model. */
+/** True when setup is not finished: no Feishu binding or no Herder model. */
 export function needsOnboarding(status: HostStatus | undefined, models: ModelsView | undefined) {
   if (status === undefined || models === undefined) return false;
   return !status.channel.bound || models.roles.herder === undefined;
@@ -152,8 +186,10 @@ export async function loadAll(quiet = false): Promise<boolean> {
     ]);
     const first = !useApp.getState().loaded;
     useApp.setState({ status, tasks, models, providers, setup, connected: true, loaded: true });
-    if (first && hashPage() === undefined && needsOnboarding(status, models))
-      useApp.setState({ page: "onboarding" });
+    // The first run opens by itself once, when setup is not finished. A page in the hash is a
+    // preview of that page, so it does not.
+    if (first && window.location.hash === "" && needsOnboarding(status, models) && !firstRunDone())
+      useApp.setState({ firstRun: true });
     return true;
   } catch (error) {
     if (!quiet) useApp.getState().toast(errorText(error));
