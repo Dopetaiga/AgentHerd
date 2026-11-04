@@ -76,6 +76,8 @@ packages/
   protocol/             AgentHerd types and schemas: Item, Decision, Rule, local API messages
   core/                 Registry, Herder, inbox, store, local API server
   acp-client/           Starts agents from profiles, maps ACP to registry events and back
+  herder/               Herder: tools, prompts, per-event context, ModelClient
+  herder-loop/          Agent loop forked from Pi (ADR 0020); UPSTREAM.md tracks the base
   rules/                Rule model, matcher, guard list, command normalization
   exporter-claude-code/ exporter-codex/ exporter-gemini/ exporter-opencode/
   channel-feishu/       Feishu channel: one-scan setup, long connection, cards

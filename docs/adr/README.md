@@ -23,3 +23,4 @@ Format and rules: [ADR 0001](0001-record-architecture-decisions.md).
 | [0017](0017-resident-herder-per-project.md) | A resident Herder per project, on the strongest model, that manages agents | Superseded by 0018 |
 | [0018](0018-one-herder-as-secretary-separate-approvals.md) | One Herder for all projects as a light-model secretary; approvals in a separate pipeline | Accepted |
 | [0019](0019-relay-verbatim-board-and-reports.md) | Relay, verbatim messages, pinned board and completion reports | Accepted |
+| [0020](0020-fork-pi-agent-loop-track-upstream.md) | Fork Pi's agent loop into the repo and follow its upstream; pi-ai pinned behind ModelClient | Accepted |
