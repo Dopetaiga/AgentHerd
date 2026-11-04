@@ -1,7 +1,7 @@
-// Agent CLIs the host downloads for the owner, like OpenBot's provider runtimes: a pinned version per
-// platform with the SHA-256 GitHub publishes, unpacked under <home>/runtimes/<id>/<version>/ and
-// checked with `--version` before it is used. Only Pi ships standalone binaries; DSH comes with its
-// desktop app.
+// Agent CLIs the host downloads for the owner, like OpenBot's provider runtimes. A release is
+// either an archive (checked against the digest its publisher lists) or an npm package (npm checks
+// every tarball against the registry's integrity). It is unpacked beside its final folder, checked
+// (`--version` or package.json), then moved to <root>/<id>/<version>/ and recorded as current.
 
 import { execFile } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
@@ -9,6 +9,7 @@ import {
   createWriteStream,
   existsSync,
   mkdirSync,
+  readdirSync,
   readFileSync,
   renameSync,
   rmSync,
@@ -21,48 +22,39 @@ import { promisify } from "node:util";
 
 const run = promisify(execFile);
 
-export interface RuntimeArtifact {
-  url: string;
-  sha256: string;
-  bytes: number;
+export interface Digest {
+  algorithm: "sha256" | "sha512";
+  encoding: "hex" | "base64";
+  value: string;
 }
 
-export interface RuntimeLock {
+/** How a downloaded executable proves it is the version that was asked for. */
+export type VersionCheck = "exec" | "node" | "none";
+
+export interface ArchiveRelease {
+  kind: "archive";
   id: string;
   version: string;
-  /** Executable path inside the unpacked archive. */
+  url: string;
+  digest: Digest;
+  bytes: number;
+  format: "tar.gz" | "zip";
+  /** Path of the executable inside the unpacked archive. */
   executable: string;
-  artifacts: Partial<Record<string, RuntimeArtifact>>;
+  /** exec: `<exe> --version`; node: `node <exe> --version`; none: no check. */
+  check: VersionCheck;
 }
 
-/** Pi 1.5.0 (2026-11-02). Hashes are the `digest` of each GitHub release asset. */
-export const PI_RUNTIME: RuntimeLock = {
-  id: "pi",
-  version: "1.5.0",
-  executable: "pi/pi",
-  artifacts: {
-    "darwin-arm64": {
-      url: "https://github.com/earendil-works/pi/releases/download/v1.5.0/pi-darwin-arm64.tar.gz",
-      sha256: "a9bf0d82d58d2a7d337f4ae4171b5fc9ebffe42509527a831364c4b65adf2cdf",
-      bytes: 48027930,
-    },
-    "darwin-x64": {
-      url: "https://github.com/earendil-works/pi/releases/download/v1.5.0/pi-darwin-x64.tar.gz",
-      sha256: "f41b26cd9a1754abe259e05a421fb33b00936779cb0783c893a6389d1bd2ee0d",
-      bytes: 50541720,
-    },
-    "linux-arm64": {
-      url: "https://github.com/earendil-works/pi/releases/download/v1.5.0/pi-linux-arm64.tar.gz",
-      sha256: "5d5711b48600756473682e86360b026b11abf7591e5d112eb411d4da2c100d9a",
-      bytes: 58742522,
-    },
-    "linux-x64": {
-      url: "https://github.com/earendil-works/pi/releases/download/v1.5.0/pi-linux-x64.tar.gz",
-      sha256: "df870ba0e344cb7b3358d8d8f19397b8b8d225a8669784736ad68a5c2169d53b",
-      bytes: 58876253,
-    },
-  },
-};
+export interface NpmRelease {
+  kind: "npm";
+  id: string;
+  version: string;
+  package: string;
+  /** Path of the entry script inside the install folder (node_modules/…). */
+  executable: string;
+}
+
+export type Release = ArchiveRelease | NpmRelease;
 
 export function currentTarget(): string {
   return `${process.platform}-${process.arch}`;
@@ -70,102 +62,205 @@ export function currentTarget(): string {
 
 export interface InstallProgress {
   received: number;
+  /** 0 when the size is not known (npm installs). */
   total: number;
 }
 
-/** File written last, after the executable answered `--version` with the pinned version. */
+export interface Installed {
+  id: string;
+  version: string;
+  /** Absolute path of the executable. */
+  path: string;
+}
+
+export interface InstallOptions {
+  onProgress?: (p: InstallProgress) => void;
+  signal?: AbortSignal;
+  /** npm's CLI script, for npm releases. */
+  npmCli?: string;
+}
+
+/** File written last in a version folder, after the checks passed. */
 const READY_MARK = ".agentherd-ready";
+/** <root>/<id>/current.json names the version in use. */
+const CURRENT = "current.json";
+const CHECK_TIMEOUT_MS = 60_000;
+const NPM_TIMEOUT_MS = 15 * 60_000;
 
-/** Download, check and unpack pinned agent CLIs under `<root>/<id>/<version>/`. */
+/**
+ * Env that makes `process.execPath` run a script. Inside Electron's utility process, execPath is
+ * the Electron binary, which runs as Node only with ELECTRON_RUN_AS_NODE.
+ */
+export function nodeEnv(): Record<string, string> {
+  return process.versions.electron === undefined ? {} : { ELECTRON_RUN_AS_NODE: "1" };
+}
+
+/** Downloaded agent CLIs under `<root>/<id>/<version>/`. */
 export class RuntimeStore {
-  private readonly root: string;
-  private readonly target: string;
+  readonly root: string;
 
-  constructor(root: string, target: string = currentTarget()) {
+  constructor(root: string) {
     this.root = root;
-    this.target = target;
   }
 
-  dir(lock: RuntimeLock): string {
-    return join(this.root, lock.id, lock.version);
+  dir(id: string, version: string): string {
+    return join(this.root, id, version);
   }
 
-  supported(lock: RuntimeLock): boolean {
-    return lock.artifacts[this.target] !== undefined;
-  }
-
-  /** @returns The executable when the pinned version is installed and checked, else undefined. */
-  installed(lock: RuntimeLock): string | undefined {
-    const dir = this.dir(lock);
-    if (!existsSync(join(dir, READY_MARK))) return undefined;
-    const bin = join(dir, lock.executable);
-    return existsSync(bin) ? bin : undefined;
+  /** The checked copy in use, or undefined. */
+  installed(id: string): Installed | undefined {
+    const file = join(this.root, id, CURRENT);
+    if (!existsSync(file)) return undefined;
+    try {
+      const { version, executable } = JSON.parse(readFileSync(file, "utf8")) as {
+        version: string;
+        executable: string;
+      };
+      const dir = this.dir(id, version);
+      const path = join(dir, executable);
+      if (!existsSync(join(dir, READY_MARK)) || !existsSync(path)) return undefined;
+      return { id, version, path };
+    } catch {
+      return undefined;
+    }
   }
 
   /**
-   * Downloads the archive, checks its SHA-256, unpacks it beside the final folder, checks that the
-   * executable reports the pinned version, then moves it into place.
-   * @returns The executable.
-   * @throws When the platform has no build, the download fails, or a check does not match.
+   * Downloads and checks a release, makes it current and removes older versions.
+   * @returns The installed copy.
+   * @throws When the download fails, a digest or version does not match, or it was cancelled.
    */
-  async install(
-    lock: RuntimeLock,
-    onProgress: (p: InstallProgress) => void = () => {},
-    signal?: AbortSignal,
-  ): Promise<string> {
-    const done = this.installed(lock);
-    if (done !== undefined) return done;
-    const artifact = lock.artifacts[this.target];
-    if (artifact === undefined) throw new Error(`${lock.id} has no build for ${this.target}`);
-    const parent = join(this.root, lock.id);
+  async install(release: Release, opts: InstallOptions = {}): Promise<Installed> {
+    const current = this.installed(release.id);
+    if (current?.version === release.version) return current;
+    const parent = join(this.root, release.id);
     mkdirSync(parent, { recursive: true, mode: 0o700 });
     const staging = join(parent, `.installing-${randomUUID()}`);
-    const archive = `${staging}.tar.gz`;
+    mkdirSync(staging);
     try {
-      await download(artifact, archive, onProgress, signal);
-      mkdirSync(staging);
-      await run("tar", ["-xzf", archive, "-C", staging]);
-      const bin = join(staging, lock.executable);
-      if (!existsSync(bin)) throw new Error(`${lock.id} archive has no ${lock.executable}`);
-      const { stdout } = await run(bin, ["--version"], { timeout: 30_000 });
-      if (stdout.trim() !== lock.version) {
-        throw new Error(`${lock.id} reports version "${stdout.trim()}", expected ${lock.version}`);
-      }
-      writeFileSync(join(staging, READY_MARK), `${artifact.sha256}\n`);
-      const dir = this.dir(lock);
+      if (release.kind === "archive") await unpackArchive(release, staging, opts);
+      else await npmInstall(release, staging, opts);
+      writeFileSync(join(staging, READY_MARK), `${release.version}\n`);
+      const dir = this.dir(release.id, release.version);
       rmSync(dir, { recursive: true, force: true });
       renameSync(staging, dir);
-      return join(dir, lock.executable);
+      writeFileSync(
+        join(parent, CURRENT),
+        `${JSON.stringify({ version: release.version, executable: release.executable })}\n`,
+      );
+      for (const name of readdirSync(parent)) {
+        if (name !== release.version && name !== CURRENT) {
+          rmSync(join(parent, name), { recursive: true, force: true });
+        }
+      }
+      return { id: release.id, version: release.version, path: join(dir, release.executable) };
     } finally {
-      rmSync(archive, { force: true });
       rmSync(staging, { recursive: true, force: true });
     }
   }
 
-  /** Removes every installed version of a runtime. */
-  remove(lock: RuntimeLock): void {
-    rmSync(join(this.root, lock.id), { recursive: true, force: true });
-  }
-
-  /** The SHA-256 recorded when the runtime was installed. */
-  recordedHash(lock: RuntimeLock): string | undefined {
-    const mark = join(this.dir(lock), READY_MARK);
-    return existsSync(mark) ? readFileSync(mark, "utf8").trim() : undefined;
+  /** Removes every downloaded version. */
+  remove(id: string): void {
+    rmSync(join(this.root, id), { recursive: true, force: true });
   }
 }
 
+async function unpackArchive(
+  release: ArchiveRelease,
+  staging: string,
+  opts: InstallOptions,
+): Promise<void> {
+  const archive = `${staging}.${release.format}`;
+  try {
+    await download(release, archive, opts.onProgress ?? (() => {}), opts.signal);
+    if (release.format === "tar.gz") {
+      await run("tar", ["-xzf", archive, "-C", staging]);
+    } else if (process.platform === "darwin") {
+      // ditto keeps symlinks and code signatures inside .app bundles.
+      await run("ditto", ["-x", "-k", archive, staging]);
+    } else {
+      await run("unzip", ["-q", archive, "-d", staging]);
+    }
+  } finally {
+    rmSync(archive, { force: true });
+  }
+  const bin = join(staging, release.executable);
+  if (!existsSync(bin)) throw new Error(`${release.id} archive has no ${release.executable}`);
+  if (release.check === "none") return;
+  const [command, args, env] =
+    release.check === "node"
+      ? [process.execPath, [bin, "--version"], nodeEnv()]
+      : [bin, ["--version"], {}];
+  const { stdout } = await run(command, args, {
+    timeout: CHECK_TIMEOUT_MS,
+    env: { ...process.env, ...env },
+  }).catch((error: Error & { signal?: string }) => {
+    throw new Error(`${release.id} did not start (${describeFailure(error)})`);
+  });
+  if (!stdout.includes(release.version)) {
+    throw new Error(
+      `${release.id} reports version "${stdout.trim()}", expected ${release.version}`,
+    );
+  }
+}
+
+async function npmInstall(release: NpmRelease, staging: string, opts: InstallOptions) {
+  if (opts.npmCli === undefined) throw new Error("npm is not available to install packages");
+  opts.onProgress?.({ received: 0, total: 0 });
+  const args = [
+    opts.npmCli,
+    "install",
+    "--prefix",
+    staging,
+    "--ignore-scripts",
+    "--omit=dev",
+    "--no-audit",
+    "--no-fund",
+    "--no-save",
+    "--loglevel=error",
+    `${release.package}@${release.version}`,
+  ];
+  await run(process.execPath, args, {
+    timeout: NPM_TIMEOUT_MS,
+    maxBuffer: 16 * 1024 * 1024,
+    env: { ...process.env, ...nodeEnv() },
+    ...(opts.signal === undefined ? {} : { signal: opts.signal }),
+  }).catch((error: Error & { stderr?: string }) => {
+    if (opts.signal?.aborted) throw new Error("cancelled");
+    const detail = (error.stderr ?? "").trim().split("\n").slice(-3).join(" ");
+    throw new Error(`npm could not install ${release.package}: ${detail || error.message}`);
+  });
+  const manifest = join(staging, "node_modules", release.package, "package.json");
+  const version = existsSync(manifest)
+    ? (JSON.parse(readFileSync(manifest, "utf8")) as { version?: string }).version
+    : undefined;
+  if (version !== release.version) {
+    throw new Error(`${release.package} installed as "${version}", expected ${release.version}`);
+  }
+  if (!existsSync(join(staging, release.executable))) {
+    throw new Error(`${release.package} has no ${release.executable}`);
+  }
+}
+
+/** Short reason a process failed: a signal (e.g. killed by security software) or its exit code. */
+export function describeFailure(error: Error & { signal?: string | null; code?: unknown }) {
+  if (error.signal) return `killed by ${error.signal}`;
+  if (typeof error.code === "number") return `exit code ${error.code}`;
+  return error.message;
+}
+
 async function download(
-  artifact: RuntimeArtifact,
+  release: ArchiveRelease,
   path: string,
   onProgress: (p: InstallProgress) => void,
   signal?: AbortSignal,
 ): Promise<void> {
-  const response = await fetch(artifact.url, signal === undefined ? {} : { signal });
+  const response = await fetch(release.url, signal === undefined ? {} : { signal });
   if (!response.ok || response.body === null) {
-    throw new Error(`download failed: HTTP ${response.status} for ${artifact.url}`);
+    throw new Error(`download failed: HTTP ${response.status} for ${release.url}`);
   }
-  const total = Number(response.headers.get("content-length")) || artifact.bytes;
-  const hash = createHash("sha256");
+  const total = Number(response.headers.get("content-length")) || release.bytes;
+  const hash = createHash(release.digest.algorithm);
   let received = 0;
   let last = 0;
   const body = Readable.fromWeb(response.body as import("node:stream/web").ReadableStream);
@@ -180,8 +275,10 @@ async function download(
   });
   await pipeline(body, createWriteStream(path, { mode: 0o600 }));
   onProgress({ received, total });
-  const actual = hash.digest("hex");
-  if (actual !== artifact.sha256) {
-    throw new Error(`download of ${artifact.url} does not match its SHA-256 (got ${actual})`);
+  const actual = hash.digest(release.digest.encoding);
+  if (actual !== release.digest.value) {
+    throw new Error(
+      `download of ${release.url} does not match its ${release.digest.algorithm.toUpperCase()} (got ${actual})`,
+    );
   }
 }

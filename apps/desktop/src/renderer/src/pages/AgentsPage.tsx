@@ -1,8 +1,18 @@
-// Agent: the coding agents the owner can start with /run, like OpenBot's provider list. Pi is
-// downloaded by the app (pinned build, hash checked); DSH comes with the DeepSeek Harness app.
+// Agent: the coding agents the owner can start with /run, like OpenBot's provider list. The app
+// downloads each one's latest release (digest checked); 验证 starts it once to prove it works.
 
-import type { AgentView } from "@agentherd/host/api";
-import { CircleAlert, Download, Loader2, SquareTerminal, Trash2, X } from "lucide-react";
+import type { AgentCheck, AgentView } from "@agentherd/host/api";
+import {
+  CircleAlert,
+  CircleCheck,
+  Download,
+  Loader2,
+  RefreshCw,
+  ShieldCheck,
+  SquareTerminal,
+  Trash2,
+  X,
+} from "lucide-react";
 import { useState } from "react";
 import { RoleSelect } from "../components/RolePicker";
 import { Badge, Button, Group, IconTile, Section } from "../components/ui";
@@ -11,6 +21,18 @@ import { call, useApp } from "../store";
 const DESCRIPTIONS: Record<string, string> = {
   dsh: "DeepSeek 的编程 Agent。每次写文件、联网都会先在飞书里问你。",
   pi: "轻量的开源编程 Agent。除了读任务目录里的文件，每次用工具都会先在飞书里问你。",
+  opencode: "开源编程 Agent。改文件、跑命令、联网前都会先在飞书里问你。",
+  gemini: "Google 的编程 Agent。改文件和跑命令前会先在飞书里问你。",
+  claude: "Anthropic 的 Claude Code（通过 ACP 适配器）。改文件和跑命令前会先在飞书里问你。",
+  codex: "OpenAI 的 Codex（通过 ACP 适配器），只读模式启动，改文件和联网前会先在飞书里问你。",
+};
+
+/** How to sign in, for agents that use their own account. */
+const LOGIN: Record<string, string> = {
+  opencode: "用自己的账号：在终端运行 opencode auth login。",
+  gemini: "用自己的账号：在终端运行 gemini 登录，或设置 GEMINI_API_KEY。",
+  claude: "用自己的账号：在终端运行 claude 登录，或设置 ANTHROPIC_API_KEY。",
+  codex: "用自己的账号：在终端运行 codex login，或设置 OPENAI_API_KEY。",
 };
 
 const SOURCES: Record<NonNullable<AgentView["source"]>, string> = {
@@ -47,7 +69,7 @@ function Progress({ agent }: { agent: AgentView }) {
       </div>
       <span className="text-ink-muted text-sm">
         {p === undefined || p.total === 0
-          ? "正在连接…"
+          ? "正在下载和安装…"
           : `${megabytes(p.received)} / ${megabytes(p.total)}（${percent}%）`}
       </span>
     </div>
@@ -70,48 +92,109 @@ function Actions({ agent }: { agent: AgentView }) {
       </Button>
     );
   }
-  if (agent.canInstall) {
-    return (
-      <Button
-        variant="primary"
-        disabled={busy}
-        onClick={() => void act(() => call((h) => h.installAgent(agent.id)))}
-      >
-        {busy ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />}
-        {agent.error === undefined ? "下载" : "重新下载"}
-      </Button>
-    );
-  }
-  if (agent.canRemove) {
-    return (
-      <Button
-        disabled={busy}
-        onClick={() => {
-          if (window.confirm(`移除下载的 ${agent.name}？正在跑的任务不受影响，以后可以再下载。`))
-            void act(() => call((h) => h.removeAgent(agent.id)));
-        }}
-      >
-        <Trash2 size={13} />
-        移除
-      </Button>
-    );
-  }
-  return null;
+  const ready = agent.state === "ready";
+  return (
+    <>
+      {agent.canInstall && (
+        <Button
+          variant={ready ? "secondary" : "primary"}
+          disabled={busy}
+          title={ready ? "下载最新版本替换现在这份" : undefined}
+          onClick={() => void act(() => call((h) => h.installAgent(agent.id)))}
+        >
+          {busy ? (
+            <Loader2 size={13} className="animate-spin" />
+          ) : ready ? (
+            <RefreshCw size={13} />
+          ) : (
+            <Download size={13} />
+          )}
+          {ready ? "更新" : agent.error === undefined ? "下载" : "重新下载"}
+        </Button>
+      )}
+      {agent.canRemove && (
+        <Button
+          disabled={busy}
+          onClick={() => {
+            if (window.confirm(`移除下载的 ${agent.name}？正在跑的任务不受影响，以后可以再下载。`))
+              void act(() => call((h) => h.removeAgent(agent.id)));
+          }}
+        >
+          <Trash2 size={13} />
+          移除
+        </Button>
+      )}
+    </>
+  );
 }
 
 function detail(agent: AgentView): string {
-  if (agent.state === "missing" && agent.id === "dsh")
-    return "安装 DeepSeek Harness 桌面版后自动出现";
-  if (agent.state === "missing" && agent.canInstall)
-    return `约 ${megabytes(48_000_000)}，版本 ${agent.version ?? ""}`;
+  if (agent.state === "missing" && agent.canInstall) {
+    return agent.id === "dsh"
+      ? "从 DeepSeek 官方更新源下载最新版（约 350 MB）；装了桌面版就直接用它"
+      : "下载官方最新版";
+  }
   if (agent.state === "ready" && agent.source !== undefined) {
     return `${SOURCES[agent.source]}${agent.source === "managed" ? `，版本 ${agent.version ?? ""}` : ""}`;
   }
   return "";
 }
 
+function CheckButton({ agent, onResult }: { agent: AgentView; onResult: (c: AgentCheck) => void }) {
+  const [busy, setBusy] = useState(false);
+  if (agent.state !== "ready") return null;
+  return (
+    <Button
+      disabled={busy}
+      title="在空目录里启动一次，看它能不能正常工作"
+      onClick={async () => {
+        setBusy(true);
+        const check = await call((h) => h.verifyAgent(agent.id));
+        setBusy(false);
+        if (check !== undefined) onResult(check);
+      }}
+    >
+      {busy ? <Loader2 size={13} className="animate-spin" /> : <ShieldCheck size={13} />}
+      {busy ? "验证中" : "验证"}
+    </Button>
+  );
+}
+
+function CheckResult({ check, agent }: { check: AgentCheck; agent: AgentView }) {
+  const seconds = (check.ms / 1000).toFixed(1);
+  if (check.ok) {
+    const version = check.agentVersion === undefined ? "" : ` ${check.agentVersion}`;
+    return (
+      <div className="mt-1 flex items-center gap-1.5 text-sm text-success-text">
+        <CircleCheck size={13} />
+        能用：{check.agentName ?? agent.name}
+        {version} 已启动并建好会话（{seconds} 秒）
+      </div>
+    );
+  }
+  const killed = check.error?.includes("SIGKILL") ?? false;
+  return (
+    <div className="mt-1 flex flex-col gap-0.5 text-danger-text text-sm">
+      <div className="flex items-center gap-1.5">
+        <CircleAlert size={13} />
+        {check.needsLogin
+          ? `需要先登录。${LOGIN[agent.id] ?? ""}`
+          : killed
+            ? "进程被系统杀掉了（SIGKILL），可能是安全软件拦截了这个程序"
+            : "没能启动"}
+      </div>
+      {check.error !== undefined && check.error !== "" && (
+        <div className="selectable ml-5 line-clamp-3 whitespace-pre-wrap font-mono text-ink-muted text-xs">
+          {check.error}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function AgentRow({ agent }: { agent: AgentView }) {
   const description = DESCRIPTIONS[agent.id];
+  const [check, setCheck] = useState<AgentCheck | undefined>();
   return (
     <div className="px-4 py-3.5">
       <div className="flex items-start gap-3">
@@ -133,7 +216,13 @@ function AgentRow({ agent }: { agent: AgentView }) {
               {agent.path}
             </div>
           )}
+          {LOGIN[agent.id] !== undefined && agent.state === "ready" && check === undefined && (
+            <div className="mt-0.5 text-ink-muted text-sm">{LOGIN[agent.id]}</div>
+          )}
           {agent.state === "installing" && <Progress agent={agent} />}
+          {check !== undefined && agent.state === "ready" && (
+            <CheckResult check={check} agent={agent} />
+          )}
           {agent.error !== undefined && agent.state !== "installing" && (
             <div className="mt-1 flex items-center gap-1.5 text-danger-text text-sm">
               <CircleAlert size={13} />
@@ -142,6 +231,7 @@ function AgentRow({ agent }: { agent: AgentView }) {
           )}
         </div>
         <div className="flex shrink-0 items-center gap-2">
+          <CheckButton agent={agent} onResult={setCheck} />
           <Actions agent={agent} />
         </div>
       </div>
@@ -165,7 +255,7 @@ export function AgentsPage() {
     <div className="flex flex-col gap-7">
       <Section
         title="编程 Agent"
-        hint={ready === 0 ? "还没有可用的 Agent。下载 Pi 就能开始。" : `${ready} 个可以用`}
+        hint={ready === 0 ? "还没有可用的 Agent。下载一个就能开始。" : `${ready} 个可以用`}
       >
         <Group>
           {agents.map((a) => (

@@ -9,6 +9,8 @@ import { Herd, Store } from "@agentherd/core";
 import {
   agentherdHome,
   feishuSecrets,
+  findAgent,
+  RuntimeStore,
   readConfig,
   resolveProfile,
   runHost,
@@ -25,7 +27,7 @@ Commands:
   setup feishu                 Create a Feishu bot with one QR scan and bind it to you
   model <command>              Model services and the model of each role (agentherd model help)
   run [options] <dir> <prompt> Run one task with an agent; approvals go to Feishu
-      --profile <id>           Agent profile: mock, dsh, or one from config.json (default: mock)
+      --profile <id>           Agent: mock, dsh, pi, opencode, gemini, claude, codex, or one from config.json (default: mock)
       --script <yaml>          Script for the mock profile
       --mode <observe|assist>  Mode (default: from config, else assist)
   start [options]              Stay connected; start and relay to tasks from chat (/help)
@@ -149,6 +151,8 @@ async function run(home: string, args: string[], out: Out): Promise<number> {
   const profile = resolveProfile(values.profile, {
     script: values.script === undefined ? undefined : resolve(values.script),
     configured: config.profiles ?? [],
+    // Copies the desktop app downloaded first, then the user's own install.
+    find: (id) => new RuntimeStore(join(home, "runtimes")).installed(id)?.path ?? findAgent(id),
   });
 
   const herd = new Herd({

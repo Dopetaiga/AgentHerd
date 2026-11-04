@@ -1,26 +1,37 @@
-// The agents the owner can run, where each CLI comes from, and downloads of the ones the app can
-// install (runtimes.ts). The host keeps one Agents and rebuilds profiles when it changes.
+// The agents the owner can run, where each CLI comes from, and downloads of their latest releases
+// (catalog.ts, runtimes.ts). The host keeps one Agents and rebuilds profiles when it changes.
 
+import { existsSync } from "node:fs";
+import { delimiter, join } from "node:path";
 import type { AgentProfile } from "@agentherd/protocol";
-import type { AgentView } from "./api.ts";
-import { DSH_APP_BIN, findDsh, findPi } from "./profiles.ts";
-import { PI_RUNTIME, type RuntimeLock, type RuntimeStore } from "./runtimes.ts";
+import type { AgentSource, AgentView } from "./api.ts";
+import { AGENTS, type AgentDef, type Fetchers, httpFetchers, npmRuntime } from "./catalog.ts";
+import { DSH_APP_BIN } from "./profiles.ts";
+import { currentTarget, type InstallProgress, type RuntimeStore } from "./runtimes.ts";
 
 export interface AgentsOptions {
   store: RuntimeStore;
-  /** Pinned Pi build (tests pass a local one). */
-  piRuntime?: RuntimeLock;
   env?: NodeJS.ProcessEnv;
-  findDsh?: () => string | undefined;
-  /** Pi on the system (not downloaded by the app). */
-  findSystemPi?: () => string | undefined;
+  /** Agent definitions (tests pass local ones). */
+  catalog?: AgentDef[];
+  fetchers?: Fetchers;
+  target?: string;
+  exists?: (path: string) => boolean;
+  /** The DeepSeek Harness desktop app's CLI, when installed. */
+  dshApp?: string;
   onChange: () => void;
   log?: (line: string) => void;
 }
 
 interface Install {
-  progress: { received: number; total: number };
+  progress: InstallProgress;
   abort: AbortController;
+}
+
+export interface AgentPath {
+  path: string;
+  source: AgentSource;
+  version?: string;
 }
 
 export class Agents {
@@ -32,29 +43,44 @@ export class Agents {
     this.opts = opts;
   }
 
-  private get pi(): RuntimeLock {
-    return this.opts.piRuntime ?? PI_RUNTIME;
+  get catalog(): AgentDef[] {
+    return this.opts.catalog ?? AGENTS;
   }
 
-  /** Pi to run: AGENTHERD_PI, then the app's download, then `pi` on PATH. */
-  piPath(): string | undefined {
-    const explicit = (this.opts.env ?? process.env).AGENTHERD_PI;
-    if (explicit !== undefined && explicit !== "") return explicit;
-    return this.opts.store.installed(this.pi) ?? this.systemPi();
+  private get env(): NodeJS.ProcessEnv {
+    return this.opts.env ?? process.env;
   }
 
-  dshPath(): string | undefined {
-    return (this.opts.findDsh ?? (() => findDsh(this.opts.env ?? process.env)))();
+  private exists(path: string): boolean {
+    return (this.opts.exists ?? existsSync)(path);
   }
 
-  private systemPi(): string | undefined {
-    return (
-      this.opts.findSystemPi ?? (() => findPi({ PATH: (this.opts.env ?? process.env).PATH }))
-    )();
+  /** Where `id` runs from: its env variable, then the app's download, then PATH, then its app. */
+  find(id: string): AgentPath | undefined {
+    const def = this.catalog.find((d) => d.id === id);
+    if (def === undefined) return undefined;
+    const explicit = this.env[def.envVar];
+    if (explicit !== undefined && explicit !== "") return { path: explicit, source: "system" };
+    const managed = this.opts.store.installed(id);
+    if (managed !== undefined) {
+      return { path: managed.path, source: "managed", version: managed.version };
+    }
+    for (const dir of (this.env.PATH ?? "").split(delimiter)) {
+      if (dir === "") continue;
+      for (const name of def.systemNames) {
+        const candidate = join(dir, name);
+        if (this.exists(candidate)) return { path: candidate, source: "system" };
+      }
+    }
+    if (id === "dsh") {
+      const app = this.opts.dshApp ?? DSH_APP_BIN;
+      if (this.exists(app)) return { path: app, source: "app" };
+    }
+    return undefined;
   }
 
   views(configured: AgentProfile[], modelRefs: Record<string, string>): AgentView[] {
-    const views: AgentView[] = [this.dshView(), this.piView()];
+    const views = this.catalog.map((def) => this.view(def));
     for (const p of configured) {
       const i = views.findIndex((v) => v.id === p.id);
       const view: AgentView = {
@@ -75,34 +101,12 @@ export class Agents {
     });
   }
 
-  private dshView(): AgentView {
-    const path = this.dshPath();
-    if (path === undefined) {
-      return {
-        id: "dsh",
-        name: "DeepSeek Harness",
-        state: "missing",
-        canInstall: false,
-        canRemove: false,
-      };
-    }
-    return {
-      id: "dsh",
-      name: "DeepSeek Harness",
-      state: "ready",
-      source: path === DSH_APP_BIN ? "app" : "system",
-      path,
-      canInstall: false,
-      canRemove: false,
-    };
-  }
-
-  private piView(): AgentView {
-    const lock = this.pi;
-    const base = { id: "pi", name: "Pi", version: lock.version };
-    const error = this.errors.get("pi");
+  private view(def: AgentDef): AgentView {
+    const base = { id: def.id, name: def.name };
+    const error = this.errors.get(def.id);
     const withError = error === undefined ? {} : { error };
-    const install = this.installs.get("pi");
+    const install = this.installs.get(def.id);
+    const canInstall = def.latest !== undefined;
     if (install !== undefined) {
       return {
         ...base,
@@ -112,43 +116,39 @@ export class Agents {
         canRemove: false,
       };
     }
-    const managed = this.opts.store.installed(lock);
-    const path = this.piPath();
-    if (path !== undefined) {
-      return {
-        ...base,
-        state: "ready",
-        source: path === managed ? "managed" : "system",
-        path,
-        canInstall: false,
-        canRemove: managed !== undefined,
-      };
+    const found = this.find(def.id);
+    if (found === undefined) {
+      return { ...base, state: "missing", canInstall, canRemove: false, ...withError };
     }
-    if (!this.opts.store.supported(lock)) {
-      return { ...base, state: "unsupported", canInstall: false, canRemove: false };
-    }
-    return { ...base, state: "missing", canInstall: true, canRemove: false, ...withError };
+    return {
+      ...base,
+      state: "ready",
+      source: found.source,
+      path: found.path,
+      ...(found.version === undefined ? {} : { version: found.version }),
+      // A download replaces the copy in use with the latest release.
+      canInstall: canInstall && found.source === "managed",
+      canRemove: found.source === "managed",
+      ...withError,
+    };
   }
 
-  /** Starts a download in the background; onChange fires on progress and at the end. */
+  /** Starts a download of the latest release; onChange fires on progress and at the end. */
   install(id: string): void {
-    if (id !== "pi") throw new Error(`AgentHerd cannot download "${id}"`);
+    const def = this.catalog.find((d) => d.id === id);
+    if (def?.latest === undefined) throw new Error(`AgentHerd cannot download "${id}"`);
     if (this.installs.has(id)) return;
     const install: Install = { progress: { received: 0, total: 0 }, abort: new AbortController() };
     this.installs.set(id, install);
     this.errors.delete(id);
     this.opts.onChange();
-    this.opts.store
-      .install(
-        this.pi,
-        (p) => {
-          install.progress = p;
-          this.opts.onChange();
-        },
-        install.abort.signal,
-      )
+    const progress = (p: InstallProgress) => {
+      install.progress = p;
+      this.opts.onChange();
+    };
+    this.download(def, progress, install.abort.signal)
       .then(
-        (bin) => this.opts.log?.(`[agents] installed ${id} at ${bin}`),
+        (path) => this.opts.log?.(`[agents] installed ${id} at ${path}`),
         (error: Error) => {
           if (!install.abort.signal.aborted) this.errors.set(id, error.message);
           this.opts.log?.(`[agents] could not install ${id}: ${error.message}`);
@@ -160,14 +160,38 @@ export class Agents {
       });
   }
 
+  private async download(
+    def: AgentDef,
+    onProgress: (p: InstallProgress) => void,
+    signal: AbortSignal,
+  ): Promise<string> {
+    const fetchers = this.opts.fetchers ?? httpFetchers;
+    const target = this.opts.target ?? currentTarget();
+    const release = await def.latest?.(target, fetchers);
+    if (release === undefined) throw new Error(`${def.name} has no build for ${target}`);
+    let npmCli: string | undefined;
+    if (release.kind === "npm") {
+      const npm = await npmRuntime(fetchers);
+      npmCli = (await this.opts.store.install(npm, { signal })).path;
+    }
+    const installed = await this.opts.store.install(release, {
+      onProgress,
+      signal,
+      ...(npmCli === undefined ? {} : { npmCli }),
+    });
+    return installed.path;
+  }
+
   cancel(id: string): void {
     this.installs.get(id)?.abort.abort();
   }
 
   remove(id: string): void {
-    if (id !== "pi") throw new Error(`"${id}" was not downloaded by AgentHerd`);
+    if (this.opts.store.installed(id) === undefined) {
+      throw new Error(`"${id}" was not downloaded by AgentHerd`);
+    }
     if (this.installs.has(id)) throw new Error("wait for the download to finish or cancel it");
-    this.opts.store.remove(this.pi);
+    this.opts.store.remove(id);
     this.errors.delete(id);
     this.opts.onChange();
   }

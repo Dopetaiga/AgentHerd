@@ -118,15 +118,17 @@ function installFakeBridge(): void {
     emit({ topic: "setup", data: structuredClone(setup) });
   };
 
+  const missing = (id: string, name: string, extra: Partial<AgentView> = {}): AgentView => ({
+    id,
+    name,
+    state: "missing",
+    canInstall: true,
+    canRemove: false,
+    ...extra,
+  });
   let agents: AgentView[] = [
     sim === "no-agent"
-      ? {
-          id: "dsh",
-          name: "DeepSeek Harness",
-          state: "missing",
-          canInstall: false,
-          canRemove: false,
-        }
+      ? missing("dsh", "DeepSeek Harness")
       : {
           id: "dsh",
           name: "DeepSeek Harness",
@@ -136,17 +138,26 @@ function installFakeBridge(): void {
           canInstall: false,
           canRemove: false,
         },
-    {
-      id: "pi",
-      name: "Pi",
-      state: "missing",
-      version: "1.5.0",
-      canInstall: true,
-      canRemove: false,
-      ...(sim === "pi-failed"
-        ? { error: "download failed: HTTP 503 for https://github.com/…" }
-        : {}),
-    },
+    missing(
+      "pi",
+      "Pi",
+      sim === "pi-failed" ? { error: "download failed: HTTP 503 for https://github.com/…" } : {},
+    ),
+    sim === "no-agent"
+      ? missing("opencode", "OpenCode")
+      : {
+          id: "opencode",
+          name: "OpenCode",
+          state: "ready",
+          source: "managed",
+          version: "1.19.5",
+          path: "~/.agentherd/runtimes/opencode/1.19.5/opencode",
+          canInstall: true,
+          canRemove: true,
+        },
+    missing("gemini", "Gemini CLI"),
+    missing("claude", "Claude Code"),
+    missing("codex", "Codex"),
   ];
   let installTimer: ReturnType<typeof setInterval> | undefined;
   const setAgents = (next: AgentView[]): AgentView[] => {
@@ -157,33 +168,35 @@ function installFakeBridge(): void {
     emit({ topic: "status", data: structuredClone(status) });
     return agents;
   };
-  const patchPi = (patch: Partial<AgentView>): AgentView[] =>
-    setAgents(agents.map((a) => (a.id === "pi" ? ({ ...a, ...patch } as AgentView) : a)));
+  const patch = (id: string, change: Partial<AgentView>): AgentView[] =>
+    setAgents(agents.map((a) => (a.id === id ? ({ ...a, ...change } as AgentView) : a)));
+  const reset = (a: AgentView): AgentView => missing(a.id, a.name);
 
   const fake: RemoteHost = {
     agents: () => delay(agents),
-    installAgent: () => {
-      const total = 48_027_930;
+    installAgent: (id) => {
+      const npm = id === "claude" || id === "codex";
+      const total = npm ? 0 : 48_027_930;
       let received = 0;
-      const { error: _e, ...rest } = agents.find((a) => a.id === "pi") as AgentView;
-      patchPi({ ...rest, state: "installing", progress: { received, total } });
+      const current = agents.find((a) => a.id === id) as AgentView;
+      patch(id, { ...reset(current), state: "installing", progress: { received, total } });
       installTimer = setInterval(() => {
-        received = Math.min(total, received + 4_000_000);
-        if (received < total) {
-          patchPi({ progress: { received, total } });
+        received = npm ? received + 1 : Math.min(total, received + 4_000_000);
+        if (npm ? received < 8 : received < total) {
+          patch(id, { progress: { received: npm ? 0 : received, total } });
           return;
         }
         clearInterval(installTimer);
         setAgents(
           agents.map((a) =>
-            a.id === "pi"
+            a.id === id
               ? {
-                  id: "pi",
-                  name: "Pi",
+                  id,
+                  name: a.name,
                   state: "ready",
                   source: "managed",
-                  version: "1.5.0",
-                  canInstall: false,
+                  version: "1.0.0",
+                  canInstall: true,
                   canRemove: true,
                 }
               : a,
@@ -192,14 +205,36 @@ function installFakeBridge(): void {
       }, 300);
       return delay(agents);
     },
-    cancelInstall: () => {
+    cancelInstall: (id) => {
       clearInterval(installTimer);
+      return delay(setAgents(agents.map((a) => (a.id === id ? reset(a) : a))));
+    },
+    removeAgent: (id) => delay(setAgents(agents.map((a) => (a.id === id ? reset(a) : a)))),
+    verifyAgent: (id) => {
+      const loginNeeded = id === "claude" || id === "codex" || id === "gemini";
+      const agent = agents.find((a) => a.id === id);
       return delay(
-        patchPi({ state: "missing", canInstall: true, canRemove: false, progress: undefined }),
+        loginNeeded
+          ? {
+              id,
+              ok: false,
+              needsLogin: true,
+              authMethods: ["Log in with your account"],
+              error: "Authentication required",
+              ms: 1800,
+            }
+          : {
+              id,
+              ok: true,
+              needsLogin: false,
+              agentName: agent?.name ?? id,
+              agentVersion: agent?.version ?? "0.2.1-rc.2",
+              authMethods: [],
+              ms: 1200,
+            },
+        1200,
       );
     },
-    removeAgent: () =>
-      delay(patchPi({ state: "missing", source: undefined, canInstall: true, canRemove: false })),
     status: () => delay(status),
     reconnect: () => {
       // The second try connects.

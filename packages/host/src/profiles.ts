@@ -6,17 +6,11 @@ import { homedir } from "node:os";
 import { delimiter, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { AgentProfile } from "@agentherd/protocol";
+import { AGENTS, agentDef, agentProfile, DSH_APP_LAUNCHER } from "./catalog.ts";
+import { nodeEnv } from "./runtimes.ts";
 
 const MOCK_BIN = fileURLToPath(new URL("../../mock-agent/bin/mock-agent.ts", import.meta.url));
 const PI_ACP_BIN = fileURLToPath(new URL("../../pi-acp/bin/pi-acp.ts", import.meta.url));
-
-/**
- * Env that makes `process.execPath` run a script. Inside Electron's utility process, execPath is
- * the Electron binary, which runs as Node only with ELECTRON_RUN_AS_NODE.
- */
-function nodeEnv(): Record<string, string> {
-  return process.versions.electron === undefined ? {} : { ELECTRON_RUN_AS_NODE: "1" };
-}
 
 /** Folders where npm, Homebrew and installers put CLIs; an app opened from Finder lacks them on PATH. */
 export function extraBinDirs(home: string = homedir()): string[] {
@@ -61,8 +55,7 @@ function onPath(name: string, path: string | undefined, exists: (p: string) => b
 }
 
 /** Where the DeepSeek Harness desktop app keeps its CLI. */
-export const DSH_APP_BIN =
-  "/Applications/DeepSeek Harness.app/Contents/Resources/runtime/cli/bin/dsh";
+export const DSH_APP_BIN = `/Applications/${DSH_APP_LAUNCHER}`;
 
 /** The built-in `mock` profile plays a YAML script. */
 export function mockProfile(script: string): AgentProfile {
@@ -76,37 +69,30 @@ export function mockProfile(script: string): AgentProfile {
 }
 
 /**
- * Finds the `dsh` binary: `AGENTHERD_DSH`, then `dsh` on `PATH`, then the desktop app bundle.
- * @param env Environment to read `AGENTHERD_DSH` and `PATH` from.
- * @param exists File test, replaceable in tests.
- * @returns The path, or `undefined` when DSH is not installed.
+ * Finds an agent's CLI without the app's downloads: its env variable (`AGENTHERD_DSH`, …), then
+ * its command on `PATH`, then (DSH) the desktop app bundle.
+ * @returns The path, or `undefined` when it is not installed.
  */
-export function findDsh(
+export function findAgent(
+  id: string,
   env: NodeJS.ProcessEnv = process.env,
   exists: (path: string) => boolean = existsSync,
 ): string | undefined {
-  const explicit = env.AGENTHERD_DSH;
+  const def = agentDef(id);
+  if (def === undefined) return undefined;
+  const explicit = env[def.envVar];
   if (explicit !== undefined && explicit !== "") return explicit;
-  return onPath("dsh", env.PATH, exists) ?? (exists(DSH_APP_BIN) ? DSH_APP_BIN : undefined);
-}
-
-/**
- * Finds Pi (`npm i -g @earendil-works/pi-coding-agent`): `AGENTHERD_PI`, then `pi` on `PATH`.
- * @returns The path, or `undefined` when Pi is not installed.
- */
-export function findPi(
-  env: NodeJS.ProcessEnv = process.env,
-  exists: (path: string) => boolean = existsSync,
-): string | undefined {
-  const explicit = env.AGENTHERD_PI;
-  if (explicit !== undefined && explicit !== "") return explicit;
-  return onPath("pi", env.PATH, exists);
+  for (const name of def.systemNames) {
+    const found = onPath(name, env.PATH, exists);
+    if (found !== undefined) return found;
+  }
+  return id === "dsh" && exists(DSH_APP_BIN) ? DSH_APP_BIN : undefined;
 }
 
 /**
  * The built-in `pi` profile: AgentHerd's ACP bridge in front of Pi (ADR 0022). The bridge's gate
  * asks before every tool call except reads inside the task folder.
- * @param bin Path from `findPi()`.
+ * @param bin Path of Pi's CLI.
  * @param modelEnv From `piModelEnv()` when the owner chose a model for Pi; else Pi's own settings.
  */
 export function piProfile(bin: string, modelEnv: Record<string, string> = {}): AgentProfile {
@@ -120,25 +106,24 @@ export function piProfile(bin: string, modelEnv: Record<string, string> = {}): A
 }
 
 /**
- * The built-in `dsh` profile. DSH runs in `read-only` sandbox mode so that every write and
- * network command becomes a permission request (docs/spec/03-agents.md#dsh-approvals).
- * @param bin Path from `findDsh()`.
+ * The profile that starts agent `id` from `bin`: Pi behind the bridge, the others with their
+ * ACP arguments and the env that makes them ask before writing (catalog.ts).
  */
-export function dshProfile(bin: string): AgentProfile {
-  return {
-    id: "dsh",
-    name: "DeepSeek Harness",
-    command: [bin, "acp"],
-    env: { DSH_PERMISSION_MODE: "read-only" },
-    exporter: null,
-  };
+export function builtinProfile(
+  id: string,
+  bin: string,
+  piModelEnv: Record<string, string> = {},
+): AgentProfile | undefined {
+  if (id === "pi") return piProfile(bin, piModelEnv);
+  const def = agentDef(id);
+  return def === undefined ? undefined : agentProfile(def, bin);
 }
 
 export interface ResolveOptions {
   script?: string | undefined;
   configured: AgentProfile[];
-  findDsh?: () => string | undefined;
-  findPi?: () => string | undefined;
+  /** Path of an agent's CLI. Default: findAgent(). */
+  find?: (id: string) => string | undefined;
   /** Env for the `pi` profile's model (see piProfile). */
   piModelEnv?: Record<string, string>;
 }
@@ -154,39 +139,34 @@ export function resolveProfile(id: string, opts: ResolveOptions): AgentProfile {
     if (opts.script === undefined) throw new Error("--script is required with the mock profile");
     return mockProfile(opts.script);
   }
-  if (id === "dsh") {
-    const bin = (opts.findDsh ?? findDsh)();
+  const def = agentDef(id);
+  if (def !== undefined) {
+    const bin = (opts.find ?? ((x: string) => findAgent(x)))(id);
     if (bin === undefined) {
       throw new Error(
-        "DeepSeek Harness not found. Install the desktop app, put `dsh` on PATH, or set AGENTHERD_DSH.",
+        `${def.name} not found. Download it on the Agent page of the desktop app, or set ${def.envVar}.`,
       );
     }
-    return dshProfile(bin);
+    return builtinProfile(id, bin, opts.piModelEnv) as AgentProfile;
   }
-  if (id === "pi") {
-    const bin = (opts.findPi ?? findPi)();
-    if (bin === undefined) {
-      throw new Error(
-        "Pi not found. Install it with `npm i -g @earendil-works/pi-coding-agent`, or set AGENTHERD_PI.",
-      );
-    }
-    return piProfile(bin, opts.piModelEnv);
-  }
-  const known = ["mock", "dsh", "pi", ...opts.configured.map((p) => p.id)].join(", ");
-  throw new Error(`unknown profile "${id}" (known: ${known})`);
+  const known = ["mock", ...AGENTS.map((a) => a.id), ...opts.configured.map((p) => p.id)];
+  throw new Error(`unknown profile "${id}" (known: ${known.join(", ")})`);
 }
 
 /**
- * Profiles for `agentherd start`: config.json profiles, then `dsh` and `pi` when installed, then
- * `mock` when a script is given. A configured profile with the same id wins.
+ * Profiles for `agentherd start`: config.json profiles, then each built-in agent that is
+ * installed, then `mock` when a script is given. A configured profile with the same id wins.
  */
 export function availableProfiles(opts: ResolveOptions): AgentProfile[] {
   const profiles = [...opts.configured];
   const has = (id: string) => profiles.some((p) => p.id === id);
-  const bin = (opts.findDsh ?? findDsh)();
-  if (!has("dsh") && bin !== undefined) profiles.push(dshProfile(bin));
-  const pi = (opts.findPi ?? findPi)();
-  if (!has("pi") && pi !== undefined) profiles.push(piProfile(pi, opts.piModelEnv));
+  const find = opts.find ?? ((x: string) => findAgent(x));
+  for (const def of AGENTS) {
+    if (has(def.id)) continue;
+    const bin = find(def.id);
+    const profile = bin === undefined ? undefined : builtinProfile(def.id, bin, opts.piModelEnv);
+    if (profile !== undefined) profiles.push(profile);
+  }
   if (!has("mock") && opts.script !== undefined) profiles.push(mockProfile(opts.script));
   return profiles;
 }
