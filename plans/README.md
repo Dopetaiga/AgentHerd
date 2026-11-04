@@ -27,3 +27,4 @@ States: `TODO`, `IN PROGRESS`, `DONE`, `BLOCKED: <reason>`, `REJECTED: <reason>`
 | [012](012-pi-and-dsh-agents.md) | Pi joins next to DSH through a bundled ACP bridge with an approval gate (ADR 0022) | M2 | M | 011 | DONE (manual run pending) |
 | [013](013-app-downloads-agents.md) | The desktop app downloads Pi on the Agent page; no terminal install (ADR 0023) | M2 | M | 012 | DONE (manual run pending) |
 | [014](014-six-agents-latest-and-check.md) | Six agents downloaded at their latest release, and a 验证 button (ADR 0024) | M2 | L | 013 | DONE (manual run pending) |
+| [015](015-herder-picks-model.md) | The Herder picks the model of each task (ADR 0025) | M2 | M | 014 | DONE (manual run pending) |

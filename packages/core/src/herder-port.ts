@@ -25,8 +25,19 @@ export interface HerderHost {
   recentProjects(): string[];
   relayTaskId(): string | undefined;
   decisions(limit: number): DecisionRow[];
-  /** `title` is the owner's words; `prompt` is what the agent receives. */
-  startTask(profileId: string, cwd: string, title: string, prompt: string): Promise<string>;
+  /** Models in the owner's list ("service/model") and the profile ids that can run each. */
+  models(): { ref: string; agents: string[] }[];
+  /**
+   * `title` is the owner's words; `prompt` is what the agent receives. `model` ("service/model")
+   * runs the agent with that model; without it the agent uses its own settings.
+   */
+  startTask(
+    profileId: string,
+    cwd: string,
+    title: string,
+    prompt: string,
+    model?: string,
+  ): Promise<string>;
   promptTask(taskId: string, text: string): void;
   cancelTurn(taskId: string): Promise<void>;
   startRelay(taskId: string): Promise<void>;

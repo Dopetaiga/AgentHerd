@@ -38,10 +38,17 @@ export class TaskRunner {
     cwd: string,
     ownerText: string,
     prompt: string = ownerText,
+    model?: string,
   ): Promise<{ taskId: string; turn: Promise<RunResult> }> {
     const { ctx } = this;
-    const profile = ctx.opts.profiles.find((p) => p.id === profileId);
-    if (profile === undefined) throw new Error(`unknown agent profile "${profileId}"`);
+    const found = ctx.opts.profiles.find((p) => p.id === profileId);
+    if (found === undefined) throw new Error(`unknown agent profile "${profileId}"`);
+    let profile = found;
+    if (model !== undefined) {
+      if (ctx.opts.agentModels === undefined) throw new Error("no model list to choose from");
+      const env = ctx.opts.agentModels.envFor(profileId, model);
+      profile = { ...found, env: { ...found.env, ...env } };
+    }
     const sessionId = randomUUID();
     const now = ctx.clock.now().toISOString();
     const f: Following = {
@@ -49,7 +56,8 @@ export class TaskRunner {
         id: sessionId,
         title: taskTitle(ownerText),
         project: projectName(cwd),
-        agent: profile.name,
+        agent: model === undefined ? profile.name : `${profile.name} · ${model}`,
+        ...(model === undefined ? {} : { model }),
         stage: "queued",
         lastReport: ctx.texts.starting,
         startedAt: now,
@@ -88,6 +96,7 @@ export class TaskRunner {
       sessionId,
       profileId,
       cwd,
+      ...(model === undefined ? {} : { model }),
       agentSessionId: f.agentSessionId,
     });
     ctx.watchdog.track(sessionId);

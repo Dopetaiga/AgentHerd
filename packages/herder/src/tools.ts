@@ -80,6 +80,12 @@ const sessionStartSchema = obj({
   profile: str({ description: "Agent profile id from session_list" }),
   ownerText: str({ description: "The owner's request, copied exactly from their message" }),
   addedContext: opt(str({ description: "Anything you add, sent below the owner's words" })),
+  model: opt(
+    str({
+      description:
+        "Model for this task as service/model from session_list, one the chosen agent can run. Omit to use the agent's own settings.",
+    }),
+  ),
 });
 const taskSchema = obj({ task: str({ description: "Task id prefix or words of its title" }) });
 const promptSchema = obj({
@@ -114,6 +120,8 @@ export function herderTools(host: HerderHost, turn: () => TurnContext): AgentToo
             .profiles()
             .map((p) => `${p.id} (${p.name})`)
             .join(", ")}`,
+          "Models (service/model: agents that can run it):",
+          ...modelLines(host),
           `Recent projects: ${host.recentProjects().join(", ") || "(none)"}`,
           `Relay: ${host.relayTaskId()?.slice(0, 8) ?? "none"}`,
         ];
@@ -140,7 +148,13 @@ export function herderTools(host: HerderHost, turn: () => TurnContext): AgentToo
       parameters: sessionStartSchema,
       execute: async (
         _id: string,
-        args: { project: string; profile: string; ownerText: string; addedContext?: string },
+        args: {
+          project: string;
+          profile: string;
+          ownerText: string;
+          addedContext?: string;
+          model?: string;
+        },
       ) => {
         const t = turn();
         if (t.kind === "event") throw new Error("tasks start only when the owner asks");
@@ -150,11 +164,22 @@ export function herderTools(host: HerderHost, turn: () => TurnContext): AgentToo
         if (!host.profiles().some((p) => p.id === args.profile)) {
           throw new Error(`unknown profile "${args.profile}"`);
         }
+        const model = args.model?.trim() || undefined;
+        if (model !== undefined) {
+          const choice = host.models().find((m) => m.ref === model);
+          if (choice === undefined) throw new Error(`unknown model "${model}"; see session_list`);
+          if (!choice.agents.includes(args.profile)) {
+            const can = choice.agents.join(", ") || "no agent";
+            throw new Error(`agent "${args.profile}" cannot run ${model} (can: ${can})`);
+          }
+        }
         const cwd = resolveProject(host, args.project);
         if (!isDirectory(cwd)) throw new Error(`${cwd} is not a directory`);
         const prompt = composeTaskPrompt(args.ownerText.trim(), args.addedContext);
-        const taskId = await host.startTask(args.profile, cwd, args.ownerText.trim(), prompt);
-        return ok(`started task ${taskId.slice(0, 8)} in ${cwd}`);
+        const title = args.ownerText.trim();
+        const taskId = await host.startTask(args.profile, cwd, title, prompt, model);
+        const using = model === undefined ? "its own model settings" : model;
+        return ok(`started task ${taskId.slice(0, 8)} in ${cwd} with ${args.profile}, ${using}`);
       },
     },
     {
@@ -238,4 +263,10 @@ export function herderTools(host: HerderHost, turn: () => TurnContext): AgentToo
     },
   ];
   return tools.map((t) => t as unknown as AgentTool);
+}
+
+function modelLines(host: HerderHost): string[] {
+  const models = host.models();
+  if (models.length === 0) return ["(none; agents use their own settings)"];
+  return models.map((m) => `- ${m.ref}: ${m.agents.join(", ") || "(no agent can run it)"}`);
 }

@@ -13,6 +13,8 @@ export interface Task {
   title: string;
   project: string;
   agent: string;
+  /** "service/model" when the task runs with a model from the owner's list. */
+  model?: string;
   stage: Stage;
   /** Last report or event in one line, for the board. */
   lastReport: string;
