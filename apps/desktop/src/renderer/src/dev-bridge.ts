@@ -3,7 +3,7 @@
 // `?sim=` picks the starting state:
 //   fresh (default)  not bound, no Herder model: the first run opens
 //   bound            bound and connected, no Herder model
-//   keychain         bound, but reading the keychain was cancelled; 重新连接 then works
+//   network          bound, but connecting to Feishu failed; 重新连接 then works
 //   ready            bound, connected, Herder chosen
 //   empty            like ready, with no tasks
 //   no-agent         like empty, with no agent profiles
@@ -33,7 +33,7 @@ function minutesAgo(n: number): string {
   return new Date(Date.now() - n * 60_000).toISOString();
 }
 
-const SIMS = ["fresh", "bound", "keychain", "ready", "empty", "no-agent", "offline"] as const;
+const SIMS = ["fresh", "bound", "network", "ready", "empty", "no-agent", "offline"] as const;
 
 type Sim = (typeof SIMS)[number];
 
@@ -44,7 +44,7 @@ function simulation(): Sim {
 
 function installFakeBridge(): void {
   const sim = simulation();
-  const herderChosen = sim !== "fresh" && sim !== "bound" && sim !== "keychain";
+  const herderChosen = sim !== "fresh" && sim !== "bound" && sim !== "network";
   const eventListeners = new Set<Listener<HostEvent>>();
   const connectionListeners = new Set<Listener<boolean>>();
   const keys = new Map<string, string>([["deepseek", "sk-fake"]]);
@@ -56,12 +56,12 @@ function installFakeBridge(): void {
     channel:
       sim === "fresh"
         ? { bound: false, connected: false }
-        : sim === "keychain"
+        : sim === "network"
           ? {
               bound: true,
               appId: "cli_fake123",
               connected: false,
-              error: "Platform failure: User canceled the operation.",
+              error: "getaddrinfo ENOTFOUND open.feishu.cn",
             }
           : { bound: true, appId: "cli_fake123", connected: true },
     herder: herderChosen
@@ -241,7 +241,7 @@ function installFakeBridge(): void {
   const fake: RemoteHost = {
     status: () => delay(status),
     reconnect: () => {
-      // The second try reads the keychain fine.
+      // The second try connects.
       if (status.channel.bound) {
         status = {
           ...status,

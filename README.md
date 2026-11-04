@@ -30,7 +30,7 @@ really needs you.
   When unsure or broken, it asks you. It never guesses "allow". The Herder cannot approve.
 - **Trust in steps.** It starts in `observe` mode: it only suggests and measures how often it
   agrees with you. You turn on `assist` and `auto` when the numbers say so.
-- **Local only.** No AgentHerd server. Secrets stay in your OS keychain.
+- **Local only.** No AgentHerd server. Secrets stay on your machine in `~/.agentherd/secrets.json`, readable only by you.
 
 ## Try it (M1)
 
@@ -53,7 +53,7 @@ node packages/cli/bin/agentherd.ts run --profile dsh /tmp/demo "Create out.txt c
 ```
 
 To let the Herder answer plain messages, add a model service and choose the Herder's model
-(the key is read from stdin and kept in the keychain):
+(the key is read from stdin and kept in `~/.agentherd/secrets.json`):
 
 ```bash
 node packages/cli/bin/agentherd.ts model add deepseek --models deepseek-flash

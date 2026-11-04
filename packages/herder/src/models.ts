@@ -71,7 +71,7 @@ export function resolveModel(service: ModelService, modelId: string): Model<Api>
   };
 }
 
-/** The key of a service: the keychain first, then the provider's environment variable. */
+/** The key of a service: the secret store first, then the provider's environment variable. */
 export function serviceKey(
   service: ModelService,
   secrets: SecretStore,

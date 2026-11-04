@@ -1,7 +1,7 @@
-// Runs one host with the real Feishu channel and the macOS keychain, serving the local API.
+// Runs one host with the real Feishu channel and secrets.json, serving the local API.
 
 import { FeishuChannel } from "@agentherd/channel-feishu";
-import { getSecret, keychain, saveSecret } from "./config.ts";
+import { feishuSecrets, secretFile } from "./config.ts";
 import { Host } from "./host.ts";
 import { type ApiServer, serveApi, socketPath } from "./server.ts";
 
@@ -21,12 +21,11 @@ export async function runHost(opts: RunHostOptions): Promise<RunningHost> {
   const log = opts.log ?? ((line: string) => console.log(line));
   const host = new Host({
     home: opts.home,
-    secrets: keychain,
+    secrets: secretFile(opts.home),
     createChannel: (locale) =>
       new FeishuChannel({
         locale,
-        getSecret,
-        saveSecret,
+        ...feishuSecrets(opts.home),
         onError: (error) => log(`[feishu] ${error.message}`),
       }),
     ...(opts.script === undefined ? {} : { script: opts.script }),

@@ -109,7 +109,7 @@ export interface HostApi {
   cancelSetup(): SetupState;
   setupState(): SetupState;
   updateSettings(patch: SettingsPatch): HostStatus;
-  /** Connects the channel again, e.g. after the owner allowed keychain access. */
+  /** Connects the channel again, e.g. after a network failure. */
   reconnect(): Promise<HostStatus>;
 }
 

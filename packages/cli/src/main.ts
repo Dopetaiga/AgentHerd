@@ -8,12 +8,11 @@ import { FeishuChannel } from "@agentherd/channel-feishu";
 import { Herd, Store } from "@agentherd/core";
 import {
   agentherdHome,
-  getSecret,
-  keychain,
+  feishuSecrets,
   readConfig,
   resolveProfile,
   runHost,
-  saveSecret,
+  secretFile,
   writeConfig,
 } from "@agentherd/host";
 import type { Locale, Mode } from "@agentherd/protocol";
@@ -36,7 +35,7 @@ Commands:
 
 Environment:
   AGENTHERD_HOME               Default: ~/.agentherd
-  DEEPSEEK_API_KEY, ...        A provider's key, if none is saved in the keychain
+  DEEPSEEK_API_KEY, ...        A provider's key, if none is saved in secrets.json
 `;
 
 type Out = (line: string) => void;
@@ -54,7 +53,7 @@ export async function main(argv: string[], out: Out = console.log): Promise<numb
         out(MODEL_USAGE);
         return rest[0] === undefined ? 2 : 0;
       }
-      return modelCommand(home, rest, out, { secrets: keychain, readKey });
+      return modelCommand(home, rest, out, { secrets: secretFile(home), readKey });
     case "run":
       return run(home, rest, out);
     case "start":
@@ -74,11 +73,10 @@ export async function main(argv: string[], out: Out = console.log): Promise<numb
   }
 }
 
-function feishuChannel(locale?: Locale): FeishuChannel {
+function feishuChannel(home: string, locale?: Locale): FeishuChannel {
   return new FeishuChannel({
     ...(locale === undefined ? {} : { locale }),
-    getSecret,
-    saveSecret,
+    ...feishuSecrets(home),
     onError: (error) => console.error(`[feishu] ${error.message}`),
   });
 }
@@ -87,7 +85,7 @@ async function setupFeishu(home: string, out: Out): Promise<number> {
   const runDir = join(home, "run");
   mkdirSync(runDir, { recursive: true, mode: 0o700 });
   const qrPng = join(runDir, "qr.png");
-  const binding = await feishuChannel().setup({
+  const binding = await feishuChannel(home).setup({
     showQrCode(url, expiresInSeconds) {
       void QRCode.toString(url, { type: "terminal", small: true }).then((qr) => {
         out(qr);
@@ -105,7 +103,7 @@ async function setupFeishu(home: string, out: Out): Promise<number> {
   });
   const config = readConfig(home);
   writeConfig(home, { ...config, channel: binding });
-  out(`Bound to Feishu app ${binding.data.appId}. The App Secret is in the keychain.`);
+  out(`Bound to Feishu app ${binding.data.appId}. The App Secret is in ${home}/secrets.json.`);
   return 0;
 }
 
@@ -156,7 +154,7 @@ async function run(home: string, args: string[], out: Out): Promise<number> {
   const herd = new Herd({
     home,
     userHome: homedir(),
-    channel: feishuChannel(config.locale),
+    channel: feishuChannel(home, config.locale),
     binding: config.channel,
     mode,
     ...(config.locale === undefined ? {} : { locale: config.locale }),

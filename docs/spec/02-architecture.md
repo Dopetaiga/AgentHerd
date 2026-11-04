@@ -121,9 +121,11 @@ All state is under `~/.agentherd/` (overridable by `AGENTHERD_HOME`):
 | `logs/` | Rotated logs. Secrets redacted. |
 | `backups/` | Copies of agent config files before each export |
 
-Secrets (Feishu App Secret, model API keys) are stored in the macOS keychain with
-`@napi-rs/keyring` (service `agentherd`, accounts `feishu:<appId>` and `model:<serviceId>`).
-The host process holds them, so the desktop app and the CLI share them; the renderer and
+Secrets (Feishu App Secret, model API keys) are stored in `<home>/secrets.json` (mode 600, in
+the mode 700 home), keyed `feishu:<appId>` and `model:<serviceId>`. Not the macOS keychain: the
+owner did not want them there, and its per-program access prompts appeared every time a different
+binary (node, Electron) read an item. The host process holds them, so the desktop app and the CLI
+share them; the renderer and
 Electron main never see a key after it is saved (plan 011). They are never written to
 `config.json`, logs or `herd.db`.
 

@@ -26,7 +26,7 @@
   拿不准或者出错时就问你，绝不会猜“允许”。主管本身不能批准任何请求。
 - **信任逐步建立。** 默认是 `observe` 模式：只给建议，并统计建议和你实际的回答有多一致。
   数据证明可靠后，再由你开启 `assist` 和 `auto`。
-- **只在本地运行。** 没有 AgentHerd 服务器，密钥保存在系统钥匙串里。
+- **只在本地运行。** 没有 AgentHerd 服务器，密钥保存在本机 `~/.agentherd/secrets.json`，只有你的账户能读。
 
 ## 试用（M1）
 
@@ -47,7 +47,7 @@ DSH 以只读沙箱模式运行，每次写文件都会先问你：
 node packages/cli/bin/agentherd.ts run --profile dsh /tmp/demo "Create out.txt containing hello"
 ```
 
-想让主管回答普通消息，先加一个模型服务并给主管选模型（Key 从标准输入读取，存进钥匙串）：
+想让主管回答普通消息，先加一个模型服务并给主管选模型（Key 从标准输入读取，存进 `~/.agentherd/secrets.json`）：
 
 ```bash
 node packages/cli/bin/agentherd.ts model add deepseek --models deepseek-flash

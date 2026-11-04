@@ -154,7 +154,7 @@ export function FirstRun() {
           draft.choice?.kind === "custom"
             ? "连接 OpenAI 兼容服务"
             : `填写 ${draft.choiceName} 的 Key`;
-        hint = "Key 只保存在这台电脑的系统钥匙串里。";
+        hint = "Key 只保存在这台电脑的 ~/.agentherd/secrets.json 里，只有你的账户能读。";
         body = (
           <div className={BODY}>
             <ServiceKeyFields draft={draft} showId={false} />

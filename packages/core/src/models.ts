@@ -7,7 +7,7 @@ export type ModelRole = "herder" | "reviewer";
 export const MODEL_ROLES: readonly ModelRole[] = ["herder", "reviewer"];
 
 export interface ModelService {
-  /** Stable id, also the keychain account suffix. Lowercase letters, digits and "-". */
+  /** Stable id, also the secret account suffix. Lowercase letters, digits and "-". */
   id: string;
   name: string;
   /** "builtin": a provider pi-ai knows (needs only a key). "openai-compatible": any endpoint. */
@@ -30,7 +30,7 @@ export interface ModelSettings {
   roles: Partial<Record<ModelRole, ModelRef>>;
 }
 
-/** Reads and writes secrets, e.g. the OS keychain. */
+/** Reads and writes secrets, e.g. <home>/secrets.json. */
 export interface SecretStore {
   get(account: string): string | undefined;
   set(account: string, value: string): void;

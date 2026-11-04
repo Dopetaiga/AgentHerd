@@ -297,8 +297,8 @@ export function ServiceKeyFields({
         label="API Key"
         hint={
           custom
-            ? "只保存在本机钥匙串，保存后不再显示。本地服务可留空。"
-            : "只保存在本机钥匙串，保存后不再显示。留空则使用环境变量。"
+            ? "只保存在本机 secrets.json，保存后不再显示。本地服务可留空。"
+            : "只保存在本机 secrets.json，保存后不再显示。留空则使用环境变量。"
         }
       >
         <input

@@ -20,7 +20,6 @@
     "@agentherd/core": "workspace:*",
     "@agentherd/herder": "workspace:*",
     "@agentherd/protocol": "workspace:*",
-    "@napi-rs/keyring": "^2.1.2",
     "qrcode": "^1.5.4"
   },
   "devDependencies": {

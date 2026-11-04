@@ -114,8 +114,10 @@ export function herderReasonLabel(reason: string | undefined): string | undefine
 
 /** The channel error in Chinese where it is a known one; other errors as the host wrote them. */
 export function channelErrorLabel(error: string): string {
-  if (error === "Platform failure: User canceled the operation.")
-    return "读取钥匙串被取消。点「重新连接」，在系统弹窗里输入 Mac 登录密码并选「始终允许」。";
+  if (/^no App Secret for /.test(error))
+    return "找不到飞书机器人的密钥（~/.agentherd/secrets.json），请重新扫码绑定飞书。";
+  if (/ENOTFOUND|ECONNREFUSED|ETIMEDOUT|ECONNRESET/.test(error))
+    return "连不上飞书，检查一下网络后点「重新连接」。";
   return error;
 }
 
