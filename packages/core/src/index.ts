@@ -9,6 +9,23 @@ export { Herd } from "./herd.ts";
 export type { HerderEvent, HerderFactory, HerderHost, HerderPort } from "./herder-port.ts";
 export type { Answerable, InboxOptions, OwnerAnswer } from "./inbox.ts";
 export { BODY_MAX_LINES, DEFAULT_REMIND_MINUTES, Inbox, itemBody, itemView } from "./inbox.ts";
+export {
+  chooseModel,
+  emptyModelSettings,
+  formatModelRef,
+  MODEL_ROLES,
+  type ModelRef,
+  type ModelRole,
+  type ModelService,
+  type ModelSettings,
+  modelFor,
+  modelKeyAccount,
+  parseModelRef,
+  putService,
+  removeService,
+  SERVICE_ID_PATTERN,
+  type SecretStore,
+} from "./models.ts";
 export type { PipelineContext, PipelineResult } from "./pipeline.ts";
 export { decide } from "./pipeline.ts";
 export type { SessionListener } from "./registry.ts";

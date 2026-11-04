@@ -104,3 +104,6 @@ Out (follow-ups): `task_get`, `session_transcript`, `read`, `grep`, `list`, `git
 
 - 2026-11-04: code and tests done (551 tests). The Herder's model key is never asked for in chat.
 - Owner decisions are rows in `decisions` with source `human`; the E2E checks that.
+- 2026-11-04: the model setup (config `herder`, default `deepseek/deepseek-flash`, `setup herder`)
+  was replaced by the model list of [plan 010](010-model-list-and-roles.md) / ADR 0021. Manual
+  run: choose a model with `agentherd model` first.

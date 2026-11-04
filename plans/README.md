@@ -22,4 +22,5 @@ States: `TODO`, `IN PROGRESS`, `DONE`, `BLOCKED: <reason>`, `REJECTED: <reason>`
 | [007](007-stages-watchdog-board-reports.md) | Tasks have stages, a watchdog, a pinned board and completion reports | M2 | L | 006 | DONE |
 | [008](008-long-lived-tasks-relay-and-commands.md) | Tasks stay open, the owner starts and relays to them from chat with fixed commands | M2 | L | 007 | DONE |
 | [009](009-herder-answers-and-starts-tasks.md) | The Herder answers the owner, starts tasks from chat, and never approves | M2 | L | 005, 008 | DONE (manual run pending) |
-| 010 | The desktop app does onboarding and shows sessions and the read-only inbox | M2 | L | 009 | TODO (plan not written) |
+| [010](010-model-list-and-roles.md) | The owner keeps a list of model services and chooses the model of each role (ADR 0021) | M2 | M | 009 | DONE (manual run pending) |
+| 011 | The desktop app does onboarding, the model settings page, sessions and the read-only inbox | M2 | L | 010 | TODO (plan not written) |

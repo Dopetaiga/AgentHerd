@@ -47,6 +47,14 @@ DSH 以只读沙箱模式运行，每次写文件都会先问你：
 node packages/cli/bin/agentherd.ts run --profile dsh /tmp/demo "Create out.txt containing hello"
 ```
 
+想让主管回答普通消息，先加一个模型服务并给主管选模型（Key 从标准输入读取，存进钥匙串）：
+
+```bash
+node packages/cli/bin/agentherd.ts model add deepseek --models deepseek-flash
+node packages/cli/bin/agentherd.ts model use herder deepseek/deepseek-flash
+node packages/cli/bin/agentherd.ts start
+```
+
 ## 文档
 
 - [规格](docs/spec/00-baseline.md)：AgentHerd 做什么

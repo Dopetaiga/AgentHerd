@@ -52,6 +52,15 @@ agent. DSH runs in read-only sandbox mode, so each write asks you first:
 node packages/cli/bin/agentherd.ts run --profile dsh /tmp/demo "Create out.txt containing hello"
 ```
 
+To let the Herder answer plain messages, add a model service and choose the Herder's model
+(the key is read from stdin and kept in the keychain):
+
+```bash
+node packages/cli/bin/agentherd.ts model add deepseek --models deepseek-flash
+node packages/cli/bin/agentherd.ts model use herder deepseek/deepseek-flash
+node packages/cli/bin/agentherd.ts start
+```
+
 ## Docs
 
 - [Specs](docs/spec/00-baseline.md): what AgentHerd does

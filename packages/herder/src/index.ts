@@ -1,5 +1,18 @@
 export { HERDER_STATE_KEY, Herder, type HerderOptions, MAX_SAVED_MESSAGES } from "./herder.ts";
 export {
+  type BuiltinProvider,
+  builtinProviders,
+  CUSTOM_CONTEXT_WINDOW,
+  CUSTOM_MAX_TOKENS,
+  type HerderChoice,
+  herderFromSettings,
+  resolveModel,
+  serviceKey,
+  TEST_TIMEOUT_MS,
+  type TestResult,
+  testModel,
+} from "./models.ts";
+export {
   CONTEXT_LABEL,
   composeTaskPrompt,
   eventsPrompt,
