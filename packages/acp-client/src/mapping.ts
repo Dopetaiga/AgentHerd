@@ -56,3 +56,29 @@ export function toToolCallInfo(call: ToolCallUpdate): ToolCallInfo {
   if (call.rawInput !== undefined && call.rawInput !== null) info.rawInput = call.rawInput;
   return info;
 }
+
+/**
+ * Merges ACP tool call updates by `toolCallId`. ACP sends a tool call once and later only the
+ * changed fields; a permission request's `toolCall` may carry only the id (DSH does this).
+ * Fields that are `undefined` or `null` in an update keep their earlier value.
+ */
+export class ToolCallTracker {
+  private readonly calls = new Map<string, ToolCallUpdate>();
+
+  /** Records an update and returns the merged tool call. */
+  merge(sessionId: string, update: ToolCallUpdate): ToolCallUpdate {
+    const key = `${sessionId}\u0000${update.toolCallId}`;
+    const merged: ToolCallUpdate = { ...this.calls.get(key), toolCallId: update.toolCallId };
+    for (const [field, value] of Object.entries(update)) {
+      if (value !== undefined && value !== null) (merged as Record<string, unknown>)[field] = value;
+    }
+    this.calls.set(key, merged);
+    return merged;
+  }
+
+  /** Forgets all tool calls of a session. */
+  clear(sessionId: string): void {
+    for (const key of this.calls.keys())
+      if (key.startsWith(`${sessionId}\u0000`)) this.calls.delete(key);
+  }
+}

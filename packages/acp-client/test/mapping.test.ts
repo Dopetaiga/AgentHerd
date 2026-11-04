@@ -1,6 +1,6 @@
 import type { PermissionOption } from "@agentclientprotocol/sdk";
 import { describe, expect, it } from "vitest";
-import { toAcpOutcome, toToolCallInfo } from "../src/mapping.ts";
+import { ToolCallTracker, toAcpOutcome, toToolCallInfo } from "../src/mapping.ts";
 
 const ALLOW_ONCE: PermissionOption = { optionId: "allow", name: "Allow", kind: "allow_once" };
 const ALLOW_ALWAYS: PermissionOption = {
@@ -116,5 +116,28 @@ describe("toToolCallInfo", () => {
 
   it("does not copy a null rawInput", () => {
     expect(toToolCallInfo({ toolCallId: "abc", rawInput: null })).not.toHaveProperty("rawInput");
+  });
+});
+
+describe("ToolCallTracker", () => {
+  it("fills a permission request that carries only the id from the earlier tool call", () => {
+    const t = new ToolCallTracker();
+    t.merge("s1", {
+      toolCallId: "c1",
+      title: "bash",
+      kind: "execute",
+      rawInput: { command: "echo hi > out.txt" },
+    });
+    t.merge("s1", { toolCallId: "c1", status: "in_progress", title: null });
+    const info = toToolCallInfo(t.merge("s1", { toolCallId: "c1" }));
+    expect(info).toMatchObject({ kind: "execute", title: "bash", command: "echo hi > out.txt" });
+  });
+
+  it("keeps sessions apart and forgets cleared sessions", () => {
+    const t = new ToolCallTracker();
+    t.merge("s1", { toolCallId: "c1", title: "one" });
+    expect(t.merge("s2", { toolCallId: "c1" }).title).toBeUndefined();
+    t.clear("s1");
+    expect(t.merge("s1", { toolCallId: "c1" }).title).toBeUndefined();
   });
 });

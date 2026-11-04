@@ -7,4 +7,4 @@ export {
   type StartOptions,
   startAgent,
 } from "./connection.ts";
-export { type PermissionAnswer, toAcpOutcome, toToolCallInfo } from "./mapping.ts";
+export { type PermissionAnswer, ToolCallTracker, toAcpOutcome, toToolCallInfo } from "./mapping.ts";

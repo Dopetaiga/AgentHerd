@@ -28,14 +28,14 @@ An agent is a profile in configuration, not a package:
   "id": "dsh",
   "name": "DeepSeek Harness",
   "command": ["dsh", "acp"],
-  "env": {},
+  "env": { "DSH_PERMISSION_MODE": "read-only" },
   "exporter": null
 }
 ```
 
 | Agent | Command | Status |
 | --- | --- | --- |
-| DeepSeek Harness | `dsh acp` | Tested 2026-11-04: `initialize` returns `deepseek-harness-acp`, session `close`/`list`/`resume` |
+| DeepSeek Harness | `dsh acp` | Tested 2026-11-04: `initialize` returns `deepseek-harness-acp`, session `close`/`list`/`resume`. Asks over `session/request_permission` only when a command needs more than its sandbox mode allows; see [DSH approvals](#dsh-approvals) |
 | Claude Code | `claude-agent-acp` (npm `@agentclientprotocol/claude-agent-acp`, 0.100.0) | Package exists; not run **(verify, Q01)** |
 | Codex | `codex-acp` (npm `@zed-industries/codex-acp`, 0.16.0) | Package exists; not run **(verify, Q01)** |
 | Gemini CLI, OpenCode, Qwen Code, others | Their ACP mode | **(verify, Q02)** |
@@ -55,6 +55,29 @@ The desktop app ships built-in profiles for these and lets the user add any ACP 
 | `session/cancel` | Interrupt |
 | Follow-up `session/prompt` | A relayed owner message, or a Herder prompt |
 | `session/load` / `resume` (if supported) | Reopen after an AgentHerd restart |
+
+Permission requests may carry a partial tool call: ACP sends a tool call once and later only
+changed fields, and DSH's `request_permission` carries only the `toolCallId`. The ACP client
+merges updates per `toolCallId` (`ToolCallTracker`), so an item always shows the command and
+input the agent announced earlier.
+
+### DSH approvals
+
+Tested 2026-11-04 with DSH 0.0.1 ACP (`/Applications/DeepSeek Harness.app/.../runtime/cli/bin/dsh acp`):
+
+- DSH runs commands in its sandbox and asks only for escalations. With the default mode, a
+  write inside `cwd` (`echo hello > out.txt`) ran without a permission request.
+- With `DSH_PERMISSION_MODE=read-only` in the profile `env`, the write was denied by the
+  sandbox, the model retried with `sandbox_permissions: workspace-write` and a
+  `justification`, and DSH sent `session/request_permission` with options `allow-once`
+  (`allow_once`) and `reject-once` (`reject_once`). After `allow-once`, the file was written.
+- Other modes: `workspace-write`, `danger-full-access`. The built-in DSH profile uses
+  `read-only` so every write and network command reaches the AgentHerd pipeline; the rules and
+  the owner decide, not DSH's own default.
+- `rawInput` of the escalated call has `command`, `description` and `justification`; the card
+  shows the justification.
+- DSH writes two harmless stderr lines: `Node.js environment variables are disabled because
+  this process is invoked by other apps.` and `Got response to unknown request null`.
 
 How each agent asks the user a question over ACP (permission request, or a message that ends
 the turn) is open **(verify, Q03)**.

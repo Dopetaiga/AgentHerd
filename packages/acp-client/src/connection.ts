@@ -16,7 +16,7 @@ import {
 } from "@agentclientprotocol/sdk";
 import type { AgentProfile, ToolCallInfo } from "@agentherd/protocol";
 import { redact } from "@agentherd/rules";
-import { type PermissionAnswer, toAcpOutcome, toToolCallInfo } from "./mapping.ts";
+import { type PermissionAnswer, ToolCallTracker, toAcpOutcome, toToolCallInfo } from "./mapping.ts";
 
 export const STDERR_LINES = 200;
 /** How long a failed request waits for the process exit to explain it. */
@@ -77,7 +77,7 @@ export interface AgentConnection {
   close(): Promise<void>;
 }
 
-function toUpdateEvent(n: SessionNotification): SessionUpdateEvent {
+function toUpdateEvent(n: SessionNotification, tracker: ToolCallTracker): SessionUpdateEvent {
   const u = n.update;
   switch (u.sessionUpdate) {
     case "agent_message_chunk":
@@ -92,7 +92,7 @@ function toUpdateEvent(n: SessionNotification): SessionUpdateEvent {
         sessionId: n.sessionId,
         type: u.sessionUpdate,
         toolCallId: u.toolCallId,
-        toolCall: toToolCallInfo(u),
+        toolCall: toToolCallInfo(tracker.merge(n.sessionId, u)),
       };
       if (u.status !== undefined && u.status !== null) event.status = u.status;
       return event;
@@ -162,6 +162,7 @@ export async function startAgent(
   const emitter = new Emitter();
   const open = new Map<string, PermissionRequest & { cancel(): void }>();
   let nextRequest = 1;
+  const tracker = new ToolCallTracker();
 
   const exited = new Promise<ExitEvent>((resolve) => {
     let done = false;
@@ -182,7 +183,7 @@ export async function startAgent(
 
   const app = client({ name: "agentherd" })
     .onNotification(methods.client.session.update, ({ params }) => {
-      emitter.emit("update", toUpdateEvent(params));
+      emitter.emit("update", toUpdateEvent(params, tracker));
     })
     .onRequest(methods.client.session.requestPermission, ({ params }) => {
       const acpOptions: PermissionOption[] = params.options;
@@ -200,7 +201,7 @@ export async function startAgent(
           sessionId: params.sessionId,
           requestId,
           toolCallId: params.toolCall.toolCallId,
-          toolCall: toToolCallInfo(params.toolCall),
+          toolCall: toToolCallInfo(tracker.merge(params.sessionId, params.toolCall)),
           options: acpOptions.map((o) => ({ id: o.optionId, kind: o.kind, name: o.name })),
           respond: settle,
           get answered() {
