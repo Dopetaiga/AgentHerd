@@ -3,6 +3,7 @@
 import { FeishuChannel } from "@agentherd/channel-feishu";
 import { feishuSecrets, secretFile } from "./config.ts";
 import { Host } from "./host.ts";
+import { searchPath } from "./profiles.ts";
 import { type ApiServer, serveApi, socketPath } from "./server.ts";
 
 export interface RunHostOptions {
@@ -19,6 +20,9 @@ export interface RunningHost {
 
 export async function runHost(opts: RunHostOptions): Promise<RunningHost> {
   const log = opts.log ?? ((line: string) => console.log(line));
+  // An app opened from Finder gets a short PATH; find dsh/pi and let agents find `node` like a
+  // terminal would.
+  process.env.PATH = searchPath(process.env);
   const host = new Host({
     home: opts.home,
     secrets: secretFile(opts.home),

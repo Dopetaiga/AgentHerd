@@ -61,7 +61,7 @@ export function SettingsPage() {
                 </IconTile>
               }
               title="没有可用的 Agent"
-              description="请安装 DeepSeek Harness"
+              description="安装 DeepSeek Harness，或用 npm i -g @earendil-works/pi-coding-agent 安装 Pi，然后重启 AgentHerd"
             />
           )}
         </Group>

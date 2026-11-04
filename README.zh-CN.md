@@ -47,6 +47,14 @@ DSH 以只读沙箱模式运行，每次写文件都会先问你：
 node packages/cli/bin/agentherd.ts run --profile dsh /tmp/demo "Create out.txt containing hello"
 ```
 
+[Pi](https://github.com/earendil-works/pi) 也一样（`npm i -g @earendil-works/pi-coding-agent`）。
+AgentHerd 通过一个小的 ACP 桥接运行 Pi，除了读目录内文件，每次调用工具都会先问你。Pi 用它自己的登录，
+或者用 `model use pi <服务>/<模型>` 选的模型：
+
+```bash
+node packages/cli/bin/agentherd.ts run --profile pi /tmp/demo "Create out.txt containing hello"
+```
+
 想让主管回答普通消息，先加一个模型服务并给主管选模型（Key 从标准输入读取，存进 `~/.agentherd/secrets.json`）：
 
 ```bash

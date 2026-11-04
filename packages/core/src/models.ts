@@ -2,9 +2,10 @@
 // model chosen for each role. No secrets here; keys are in a SecretStore under modelKeyAccount().
 // The core does not import pi-ai; packages/herder turns a choice into a pi-ai model.
 
-export type ModelRole = "herder" | "reviewer";
+/** `pi`: the model AgentHerd passes to Pi sessions (ADR 0022); without it Pi uses its own settings. */
+export type ModelRole = "herder" | "reviewer" | "pi";
 
-export const MODEL_ROLES: readonly ModelRole[] = ["herder", "reviewer"];
+export const MODEL_ROLES: readonly ModelRole[] = ["herder", "reviewer", "pi"];
 
 export interface ModelService {
   /** Stable id, also the secret account suffix. Lowercase letters, digits and "-". */

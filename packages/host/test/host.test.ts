@@ -98,6 +98,9 @@ describe("Host", () => {
     expect(readFileSync(join(t.home, "config.json"), "utf8")).not.toContain("sk-secret");
     expect(t.secrets.saved).toEqual({ "model:deepseek": "sk-secret" });
 
+    await t.host.chooseModel("pi", { serviceId: "deepseek", model: "deepseek-flash" });
+    expect(t.host.models().roles.pi).toEqual({ serviceId: "deepseek", model: "deepseek-flash" });
+
     await t.host.setKey("deepseek", "");
     expect(t.host.status().herder).toEqual({ on: false, reason: 'no key for service "deepseek"' });
     await t.host.removeService("deepseek");

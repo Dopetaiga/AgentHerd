@@ -4,7 +4,7 @@
 // task-report.ts (reports, alarms, stages) and permission.ts.
 
 import { join } from "node:path";
-import type { Inbound, Mode, Rule } from "@agentherd/protocol";
+import type { AgentProfile, Inbound, Mode, Rule } from "@agentherd/protocol";
 import { DEFAULT_LOCALE } from "@agentherd/protocol";
 import { Board } from "./board.ts";
 import { type Clock, systemClock } from "./clock.ts";
@@ -115,6 +115,11 @@ export class Herd {
 
   hasHerder(): boolean {
     return this.herder !== undefined;
+  }
+
+  /** Agent profiles for tasks started after the change; running tasks keep theirs. */
+  setProfiles(profiles: AgentProfile[]): void {
+    this.opts.profiles = profiles;
   }
 
   getMode(): Mode {

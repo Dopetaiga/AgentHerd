@@ -1,0 +1,23 @@
+{
+  "name": "@agentherd/pi-acp",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "bin": {
+    "agentherd-pi-acp": "./bin/pi-acp.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p .",
+    "test": "vitest run --root ../.. packages/pi-acp"
+  },
+  "dependencies": {
+    "@agentclientprotocol/sdk": "2.4.0"
+  },
+  "devDependencies": {
+    "@agentherd/acp-client": "workspace:*",
+    "@agentherd/protocol": "workspace:*"
+  }
+}

@@ -145,6 +145,40 @@ export function herderFromSettings(
   };
 }
 
+/** Env names the Pi bridge reads (packages/pi-acp/extension/model.ts). */
+export const PI_MODEL_ENV = "AGENTHERD_PI_MODEL";
+export const PI_KEY_ENV = "AGENTHERD_PI_KEY";
+
+export type PiModelChoice = { env: Record<string, string>; ref: string } | { reason: string };
+
+/**
+ * The env that gives Pi sessions the model chosen for the `pi` role: the pi-ai model as JSON and
+ * the key in a separate variable, so neither is on a command line.
+ * @returns `{ reason }` when no model is chosen or it cannot be used; Pi then uses its own settings.
+ */
+export function piModelEnv(
+  settings: ModelSettings,
+  secrets: SecretStore,
+  env?: Record<string, string>,
+): PiModelChoice {
+  const choice = modelFor(settings, "pi");
+  if (choice === undefined) return { reason: "no model chosen for Pi; Pi uses its own settings" };
+  let model: Model<Api>;
+  try {
+    model = resolveModel(choice.service, choice.model);
+  } catch (error) {
+    return { reason: (error as Error).message };
+  }
+  const key = serviceKey(choice.service, secrets, env);
+  if (key === undefined && choice.service.kind === "builtin") {
+    return { reason: `no key for service "${choice.service.id}"` };
+  }
+  return {
+    ref: `${choice.service.id}/${choice.model}`,
+    env: { [PI_MODEL_ENV]: JSON.stringify(model), [PI_KEY_ENV]: key ?? "none" },
+  };
+}
+
 function definedEnv(): Record<string, string> {
   const out: Record<string, string> = {};
   for (const [k, v] of Object.entries(process.env)) if (v !== undefined) out[k] = v;

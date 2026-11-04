@@ -12,6 +12,9 @@ import {
   builtinProviders,
   CUSTOM_CONTEXT_WINDOW,
   herderFromSettings,
+  PI_KEY_ENV,
+  PI_MODEL_ENV,
+  piModelEnv,
   resolveModel,
   serviceKey,
   testModel,
@@ -151,5 +154,23 @@ describe("herderFromSettings", () => {
     expect(herderFromSettings(s, secrets({ "model:deepseek": "k" }), {})).toMatchObject({
       ref: "deepseek/deepseek-flash",
     });
+  });
+});
+
+describe("piModelEnv", () => {
+  it("passes the model as JSON and the key in its own variable", () => {
+    let s = putService(emptyModelSettings(), deepseek);
+    expect(piModelEnv(s, secrets(), {})).toMatchObject({ reason: expect.stringMatching(/Pi/) });
+    s = chooseModel(s, "pi", { serviceId: "deepseek", model: "deepseek-flash" });
+    expect(piModelEnv(s, secrets(), {})).toEqual({ reason: 'no key for service "deepseek"' });
+    const choice = piModelEnv(s, secrets({ "model:deepseek": "sk-pi-secret" }), {});
+    if (!("env" in choice)) throw new Error(choice.reason);
+    expect(choice.ref).toBe("deepseek/deepseek-flash");
+    expect(choice.env[PI_KEY_ENV]).toBe("sk-pi-secret");
+    expect(JSON.parse(choice.env[PI_MODEL_ENV] ?? "")).toMatchObject({
+      id: "deepseek-flash",
+      baseUrl: "https://api.deepseek.com",
+    });
+    expect(choice.env[PI_MODEL_ENV]).not.toContain("sk-pi-secret");
   });
 });
