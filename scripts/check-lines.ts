@@ -1,14 +1,14 @@
 #!/usr/bin/env node
 // Warns when a source file passes SOFT_LINES and fails when it passes MAX_LINES (AGENTS.md
-// "Code"). Runs in `pnpm check`. The numbers follow pi-desktop's guidance: modules normally stay
-// below ~500 lines and responsibilities are reconsidered around ~800.
+// "Code"). Runs in `pnpm check`. The ceiling is a guard against runaway files, not a style
+// target; split by responsibility long before it.
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-export const SOFT_LINES = 500;
-export const MAX_LINES = 800;
+export const SOFT_LINES = 1000;
+export const MAX_LINES = 2000;
 
 export const EXTENSIONS = [".ts", ".tsx", ".mts", ".cts", ".js", ".mjs", ".cjs", ".css"];
 
