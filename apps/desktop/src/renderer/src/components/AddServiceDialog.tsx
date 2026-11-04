@@ -1,70 +1,89 @@
-// "添加服务": choose the service first, then the key, then the models (ADR 0021).
+// "添加服务": one dialog with two views (ADR 0021). First a searchable grid of services; a
+// click opens one form with the key and the models. The actions sit in the header; there are
+// no steps and no 上一步 / 下一步.
 
-import { Loader2 } from "lucide-react";
+import { ChevronLeft, Loader2 } from "lucide-react";
 import { useState } from "react";
-import {
-  ProviderChoiceList,
-  ServiceKeyFields,
-  ServiceModelFields,
-  useServiceDraft,
-} from "./ServiceDraft";
+import { useServiceDraft } from "./ServiceDraft";
+import { ServiceChooser, ServiceForm } from "./ServiceForm";
 import { Button, Modal } from "./ui";
 
-export function AddServiceDialog({ onClose }: { onClose: () => void }) {
+export function AddServiceDialog({
+  onClose,
+  initialProvider,
+  initialModels,
+}: {
+  onClose: () => void;
+  /** Dev preview only: open the form of this provider ("custom" for an address) at once. */
+  initialProvider?: string;
+  /** Dev preview only: the models chosen when the form opens. */
+  initialModels?: string[];
+}) {
   const draft = useServiceDraft();
-  const [step, setStep] = useState<1 | 2 | 3>(1);
+  const [view, setView] = useState<"choose" | "form">("choose");
+  const [opened, setOpened] = useState(false);
+
+  if (!opened && initialProvider !== undefined) {
+    const p = draft.shown.find((x) => x.provider === initialProvider);
+    if (initialProvider === "custom" || p !== undefined) {
+      setOpened(true);
+      draft.pick(p === undefined ? { kind: "custom" } : { kind: "builtin", provider: p });
+      if (initialModels !== undefined) draft.setPicked(initialModels);
+      setView("form");
+    }
+  }
 
   const save = async () => {
     if (await draft.save()) onClose();
   };
 
-  const title =
-    step === 1
-      ? "添加服务"
-      : draft.choice?.kind === "builtin"
-        ? `添加 ${draft.choiceName}`
-        : "添加 OpenAI 兼容服务";
-
-  const footer =
-    step === 1 ? (
-      <Button onClick={onClose}>取消</Button>
-    ) : (
-      <>
-        <span className="mr-auto text-ink-muted text-sm">第 {step - 1} / 2 步</span>
-        <Button onClick={() => setStep(step === 3 ? 2 : 1)} disabled={draft.saving}>
-          上一步
-        </Button>
-        {step === 2 ? (
-          <Button variant="primary" onClick={() => draft.checkDetails() && setStep(3)}>
-            下一步
-          </Button>
-        ) : (
-          <Button
-            variant="primary"
-            onClick={save}
-            disabled={draft.saving || draft.models.length === 0}
-          >
-            {draft.saving && <Loader2 size={14} className="animate-spin" />}保存
-          </Button>
-        )}
-      </>
+  if (view === "choose" || draft.choice === null) {
+    return (
+      <Modal
+        size="large"
+        title="添加服务"
+        description="选择模型服务，然后填写 Key 并选模型。"
+        onClose={onClose}
+        actions={<Button onClick={onClose}>取消</Button>}
+      >
+        <ServiceChooser draft={draft} onPicked={() => setView("form")} />
+      </Modal>
     );
+  }
 
   return (
     <Modal
-      title={title}
-      description={step === 1 ? "先选择模型服务。" : step === 3 ? "选择要启用的模型。" : undefined}
+      size="large"
+      title={draft.choice.kind === "builtin" ? `添加 ${draft.choiceName}` : "添加 OpenAI 兼容服务"}
+      description={
+        <button
+          type="button"
+          className="inline-flex items-center gap-0.5 text-accent-text hover:underline disabled:opacity-50"
+          disabled={draft.saving}
+          onClick={() => setView("choose")}
+        >
+          <ChevronLeft size={13} />
+          更换服务
+        </button>
+      }
       onClose={onClose}
-      footer={footer}
-      wide
+      actions={
+        <>
+          <Button onClick={onClose} disabled={draft.saving}>
+            取消
+          </Button>
+          <Button
+            variant="primary"
+            onClick={() => void save()}
+            disabled={draft.saving || draft.problem !== null}
+            title={draft.problem ?? undefined}
+          >
+            {draft.saving && <Loader2 size={14} className="animate-spin" />}保存
+          </Button>
+        </>
+      }
     >
-      {/* In the dialog a click on a service moves on to its key at once. */}
-      {step === 1 && (
-        <ProviderChoiceList draft={draft} mode="navigate" onPicked={() => setStep(2)} />
-      )}
-      {step === 2 && draft.choice !== null && <ServiceKeyFields draft={draft} />}
-      {step === 3 && draft.choice !== null && <ServiceModelFields draft={draft} />}
-      {step !== 1 && draft.error !== null && <p className="mt-3 text-danger-text">{draft.error}</p>}
+      <ServiceForm draft={draft} />
     </Modal>
   );
 }

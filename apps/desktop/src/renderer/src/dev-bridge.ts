@@ -8,6 +8,11 @@
 //   empty            like ready, with no tasks
 //   no-agent         like empty, with no agent profiles
 //   offline          like ready, then the connection to the host drops
+// `?open=` opens a dialog at once, for screenshots (see `devOpen`):
+//   add-service      the 添加服务 chooser
+//   add-builtin      the 添加服务 form of OpenRouter, with a few models chosen
+//   add-custom       the 添加服务 form of an OpenAI-compatible address
+//   edit-<id>        the edit dialog of the service <id> (deepseek, gateway)
 
 import type {
   HostEvent,
@@ -36,6 +41,33 @@ function minutesAgo(n: number): string {
 const SIMS = ["fresh", "bound", "network", "ready", "empty", "no-agent", "offline"] as const;
 
 type Sim = (typeof SIMS)[number];
+
+const OPENROUTER_MODELS: readonly (readonly [string, string])[] = [
+  ["anthropic/claude-sonnet-4.5", "Anthropic: Claude Sonnet 4.5"],
+  ["anthropic/claude-opus-4.1", "Anthropic: Claude Opus 4.1"],
+  ["anthropic/claude-haiku-4.5", "Anthropic: Claude Haiku 4.5"],
+  ["openai/gpt-5", "OpenAI: GPT-5"],
+  ["openai/gpt-5-mini", "OpenAI: GPT-5 mini"],
+  ["openai/gpt-5-codex", "OpenAI: GPT-5 Codex"],
+  ["openai/gpt-oss-120b", "OpenAI: gpt-oss-120b"],
+  ["google/gemini-2.5-pro", "Google: Gemini 2.5 Pro"],
+  ["google/gemini-2.5-flash", "Google: Gemini 2.5 Flash"],
+  ["google/gemini-2.5-flash-lite", "Google: Gemini 2.5 Flash Lite"],
+  ["deepseek/deepseek-chat-v3.1", "DeepSeek: DeepSeek V3.1"],
+  ["deepseek/deepseek-r1-0528", "DeepSeek: R1 0528"],
+  ["qwen/qwen3-coder", "Qwen: Qwen3 Coder"],
+  ["qwen/qwen3-max", "Qwen: Qwen3 Max"],
+  ["qwen/qwen3-235b-a22b-2507", "Qwen: Qwen3 235B A22B 2507"],
+  ["moonshotai/kimi-k2-0905", "MoonshotAI: Kimi K2 0905"],
+  ["z-ai/glm-4.6", "Z.AI: GLM 4.6"],
+  ["z-ai/glm-4.5-air", "Z.AI: GLM 4.5 Air"],
+  ["x-ai/grok-4", "xAI: Grok 4"],
+  ["x-ai/grok-code-fast-1", "xAI: Grok Code Fast 1"],
+  ["mistralai/devstral-medium", "Mistral: Devstral Medium"],
+  ["mistralai/mistral-medium-3.1", "Mistral: Mistral Medium 3.1"],
+  ["meta-llama/llama-4-maverick", "Meta: Llama 4 Maverick"],
+  ["minimax/minimax-m2", "MiniMax: MiniMax M2"],
+];
 
 function simulation(): Sim {
   const value = new URLSearchParams(window.location.search).get("sim");
@@ -161,6 +193,14 @@ function installFakeBridge(): void {
         models: ["deepseek-chat", "deepseek-reasoner"],
         hasKey: true,
       },
+      {
+        id: "gateway",
+        name: "公司网关",
+        kind: "openai-compatible",
+        baseUrl: "https://llm.example.com/v1",
+        models: ["qwen3-coder-plus", "glm-4.6"],
+        hasKey: false,
+      },
     ],
     roles: herderChosen ? { herder: { serviceId: "deepseek", model: "deepseek-chat" } } : {},
   };
@@ -197,10 +237,8 @@ function installFakeBridge(): void {
     },
     {
       provider: "openrouter",
-      models: [
-        { id: "anthropic/claude-sonnet-4.5", name: "Anthropic: Claude Sonnet 4.5" },
-        { id: "qwen/qwen3-coder", name: "Qwen: Qwen3 Coder" },
-      ],
+      // Many models, so the model panes can be seen scrolling.
+      models: OPENROUTER_MODELS.map(([id, name]) => ({ id, name })),
     },
   ];
 
@@ -355,4 +393,13 @@ function installFakeBridge(): void {
   console.info("[AgentHerd] window.agentherd not found; using the in-memory dev bridge.");
 }
 
-if ((window as Partial<Window>).agentherd === undefined) installFakeBridge();
+let fakeInstalled = false;
+if ((window as Partial<Window>).agentherd === undefined) {
+  installFakeBridge();
+  fakeInstalled = true;
+}
+
+/** The dialog named by `?open=`; only with the fake bridge, so never in the real app. */
+export function devOpen(): string | null {
+  return fakeInstalled ? new URLSearchParams(window.location.search).get("open") : null;
+}

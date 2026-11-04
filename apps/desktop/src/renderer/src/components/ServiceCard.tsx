@@ -2,9 +2,11 @@
 
 import { CheckCircle2, Loader2, Play, XCircle } from "lucide-react";
 import { useState } from "react";
+import { devOpen } from "../dev-bridge";
 import { applyModels, call, errorText, host, type ServiceView, useApp } from "../store";
-import { parseModelList, providerName } from "./labels";
-import { ModelChecklist, ModelTextList } from "./ModelPicker";
+import { providerName } from "./labels";
+import { ModelPanes } from "./ModelPanes";
+import { FieldNote, SmallField } from "./ServiceForm";
 import { Badge, Button, Dot, Group, IconTile, inputClass, Modal } from "./ui";
 
 type TestResult =
@@ -16,7 +18,7 @@ export function ServiceCard({ service }: { service: ServiceView }) {
   const [tests, setTests] = useState<Record<string, TestResult>>({});
   const [keyOpen, setKeyOpen] = useState(false);
   const [key, setKey] = useState("");
-  const [editing, setEditing] = useState(false);
+  const [editing, setEditing] = useState(() => devOpen() === `edit-${service.id}`);
   const [armedDelete, setArmedDelete] = useState(false);
   const [busy, setBusy] = useState(false);
 
@@ -175,20 +177,25 @@ export function ServiceCard({ service }: { service: ServiceView }) {
   );
 }
 
+/** Edits a saved service: its key and its models, in the same form as adding one. */
 function EditModelsDialog({ service, onClose }: { service: ServiceView; onClose: () => void }) {
   const providers = useApp((s) => s.providers);
-  const catalog = providers.find((p) => p.provider === service.provider)?.models;
+  const catalog =
+    service.kind === "builtin"
+      ? (providers.find((p) => p.provider === service.provider)?.models ?? [])
+      : [];
   const [picked, setPicked] = useState<string[]>(service.models);
-  const [text, setText] = useState(service.models.join("\n"));
+  const [key, setKey] = useState("");
   const [saving, setSaving] = useState(false);
-  const useList = service.kind === "builtin" && catalog !== undefined;
-  const models = useList ? picked : parseModelList(text);
+  const problem = picked.length === 0 ? "至少选一个模型" : null;
 
   const save = async () => {
     setSaving(true);
     const { hasKey: _hasKey, ...plain } = service;
-    // `undefined` key keeps the saved key.
-    const result = await call((h) => h.putService({ ...plain, models }, undefined));
+    // An empty key keeps the saved key.
+    const result = await call((h) =>
+      h.putService({ ...plain, models: picked }, key === "" ? undefined : key),
+    );
     setSaving(false);
     if (result !== undefined) {
       applyModels(result);
@@ -198,25 +205,44 @@ function EditModelsDialog({ service, onClose }: { service: ServiceView; onClose:
 
   return (
     <Modal
-      title={`编辑模型 · ${service.name}`}
+      size="large"
+      title={`编辑 ${service.name}`}
+      description={
+        <span className="font-mono">
+          {service.kind === "builtin" ? providerName(service.provider ?? "") : service.baseUrl}
+        </span>
+      }
       onClose={onClose}
-      footer={
+      actions={
         <>
-          <span className="mr-auto text-ink-muted text-sm">
-            去掉的模型如果正被使用，对应用途会被清空。
-          </span>
-          <Button onClick={onClose}>取消</Button>
-          <Button variant="primary" onClick={save} disabled={saving || models.length === 0}>
+          <Button onClick={onClose} disabled={saving}>
+            取消
+          </Button>
+          <Button
+            variant="primary"
+            onClick={() => void save()}
+            disabled={saving || problem !== null}
+            title={problem ?? undefined}
+          >
             {saving && <Loader2 size={14} className="animate-spin" />}保存
           </Button>
         </>
       }
     >
-      {useList ? (
-        <ModelChecklist options={catalog} selected={picked} onChange={setPicked} />
-      ) : (
-        <ModelTextList text={text} onChange={setText} />
-      )}
+      <div className="shrink-0">
+        <SmallField label="API Key">
+          <input
+            type="password"
+            autoComplete="off"
+            className={`${inputClass} font-mono`}
+            placeholder={service.hasKey ? "已保存，留空不修改" : "sk-…（留空则不保存 Key）"}
+            value={key}
+            onChange={(e) => setKey(e.target.value)}
+          />
+        </SmallField>
+      </div>
+      <FieldNote error={null} hint="去掉的模型如果正被使用，对应用途会被清空。" />
+      <ModelPanes options={catalog} selected={picked} onChange={setPicked} disabled={saving} />
     </Modal>
   );
 }

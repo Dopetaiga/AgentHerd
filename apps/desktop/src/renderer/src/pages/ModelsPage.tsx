@@ -7,12 +7,32 @@ import { AddServiceDialog } from "../components/AddServiceDialog";
 import { RolePicker } from "../components/RolePicker";
 import { ServiceCard } from "../components/ServiceCard";
 import { Button, EmptyState, Group, Section } from "../components/ui";
+import { devOpen } from "../dev-bridge";
 import { useApp } from "../store";
+
+/** The dialog a dev preview asks for (`?open=` with the fake bridge); none in the app. */
+function previewAdd(): { provider?: string; models?: string[] } | null {
+  const open = devOpen();
+  if (open === "add-service") return {};
+  if (open === "add-custom") return { provider: "custom" };
+  if (open === "add-builtin")
+    return {
+      provider: "openrouter",
+      models: [
+        "anthropic/claude-sonnet-4.5",
+        "openai/gpt-5",
+        "qwen/qwen3-coder",
+        "my-private-model",
+      ],
+    };
+  return null;
+}
 
 /** The service list with an "添加服务" button; also used inside onboarding. */
 export function ServiceList() {
   const services = useApp((s) => s.models?.services);
-  const [adding, setAdding] = useState(false);
+  const [preview] = useState(previewAdd);
+  const [adding, setAdding] = useState(preview !== null);
   const list = [...(services ?? [])].sort((a, b) => a.name.localeCompare(b.name));
   const add = (
     <Button variant={list.length === 0 ? "primary" : "secondary"} onClick={() => setAdding(true)}>
@@ -41,7 +61,13 @@ export function ServiceList() {
           ))}
         </div>
       )}
-      {adding && <AddServiceDialog onClose={() => setAdding(false)} />}
+      {adding && (
+        <AddServiceDialog
+          onClose={() => setAdding(false)}
+          initialProvider={preview?.provider}
+          initialModels={preview?.models}
+        />
+      )}
     </Section>
   );
 }

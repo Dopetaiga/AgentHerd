@@ -6,16 +6,12 @@ import { type FormEvent, type ReactNode, useEffect, useRef, useState } from "rea
 import { flushSync } from "react-dom";
 import { useFeishuSetup } from "../components/FeishuSetup";
 import { Logo } from "../components/Logo";
-import {
-  ProviderChoiceList,
-  ServiceKeyFields,
-  ServiceModelFields,
-  useServiceDraft,
-} from "../components/ServiceDraft";
+import { useServiceDraft } from "../components/ServiceDraft";
+import { ServiceChooser, ServiceForm } from "../components/ServiceForm";
 import { Button } from "../components/ui";
+import { devOpen } from "../dev-bridge";
 import { useApp } from "../store";
 import {
-  BODY,
   DoneBody,
   FeishuBody,
   HerderBody,
@@ -25,8 +21,17 @@ import {
 import "./first-run.css";
 
 type Step = "welcome" | "feishu" | "service" | "herder" | "done";
-/** The parts of the service step: the saved list, then the picker, the key and the models. */
-type ServicePart = "list" | "pick" | "key" | "models";
+/** The parts of the service step: the saved list, the grid of services, then one form. */
+type ServicePart = "list" | "pick" | "form";
+
+/**
+ * The column of the service chooser and form: wider than the other steps, and as high as the
+ * window leaves, so the window itself does not scroll; the lists inside scroll on their own.
+ */
+const WIDE = "w-full max-w-[880px]";
+/** The form fills the height the window leaves; the chooser takes only what it needs. */
+const FILL = "h-[max(300px,calc(100vh-296px))]";
+const UP_TO = "max-h-[max(200px,calc(100vh-296px))]";
 
 const ORDER: readonly Step[] = ["welcome", "feishu", "service", "herder", "done"];
 /** The steps that get a dot; 欢迎 does not. */
@@ -73,10 +78,22 @@ export function FirstRun() {
   const flow = useFeishuSetup();
   const draft = useServiceDraft();
   const herder = useHerderChoice();
+  // Dev previews (`?open=first-run-pick` / `first-run-form`, fake bridge only) start at the
+  // service step.
+  const [preview] = useState(() => devOpen()?.match(/^first-run-(pick|form)$/)?.[1] ?? null);
   const [step, setStep] = useState<Step>(
-    window.location.hash === "#onboarding-done" ? "done" : "welcome",
+    preview !== null ? "service" : window.location.hash === "#onboarding-done" ? "done" : "welcome",
   );
-  const [part, setPart] = useState<ServicePart>(services.length > 0 ? "list" : "pick");
+  const [part, setPart] = useState<ServicePart>(
+    preview === "form" ? "form" : preview === "pick" || services.length === 0 ? "pick" : "list",
+  );
+  const previewed = useRef(false);
+  const preset = draft.shown.find((p) => p.provider === "openrouter");
+  if (preview === "form" && !previewed.current && preset !== undefined) {
+    previewed.current = true;
+    draft.pick({ kind: "builtin", provider: preset });
+    draft.setPicked(preset.models.slice(0, 3).map((m) => m.id));
+  }
   const running = useRef(flow.running);
   running.current = flow.running;
 
@@ -99,8 +116,7 @@ export function FirstRun() {
   const forward = () => go(ORDER[ORDER.indexOf(step) + 1] ?? "done");
 
   const back = () => {
-    if (step === "service" && part === "models") return goPart("key");
-    if (step === "service" && part === "key") return goPart("pick");
+    if (step === "service" && part === "form") return goPart("pick");
     if (step === "service" && part === "pick" && services.length > 0) return goPart("list");
     if (step === "herder") return go("service");
     go(ORDER[ORDER.indexOf(step) - 1] ?? "welcome");
@@ -138,42 +154,25 @@ export function FirstRun() {
         title = "添加模型服务";
         hint = "主管要用一个大模型来读懂任务。选择你有 Key 的服务。";
         body = (
-          <div className={BODY}>
-            <ProviderChoiceList
-              draft={draft}
-              mode="select"
-              listClassName="max-h-[max(150px,calc(100vh-420px))]"
-            />
+          <div className={`${WIDE} ${UP_TO} flex flex-col`}>
+            <ServiceChooser draft={draft} onPicked={() => goPart("form")} />
           </div>
         );
         ready = draft.choice !== null;
         reason = ready ? undefined : "先选一个服务";
-        onPrimary = () => goPart("key");
-      } else if (part === "key") {
-        title =
-          draft.choice?.kind === "custom"
-            ? "连接 OpenAI 兼容服务"
-            : `填写 ${draft.choiceName} 的 Key`;
-        hint = "Key 只保存在这台电脑的 ~/.agentherd/secrets.json 里，只有你的账户能读。";
-        body = (
-          <div className={BODY}>
-            <ServiceKeyFields draft={draft} showId={false} />
-          </div>
-        );
-        onPrimary = () => {
-          if (draft.checkDetails()) goPart("models");
-        };
+        onPrimary = () => goPart("form");
       } else {
-        title = "选择要启用的模型";
-        hint = "之后可以在「模型」页随时修改。";
+        title =
+          draft.choice?.kind === "custom" ? "连接 OpenAI 兼容服务" : `连接 ${draft.choiceName}`;
+        hint = "填写 Key，选择要启用的模型。之后可在「模型」页修改。";
         body = (
-          <div className={`${BODY} max-h-[max(160px,calc(100vh-400px))] overflow-y-auto`}>
-            <ServiceModelFields draft={draft} />
+          <div className={`${WIDE} ${FILL} flex flex-col gap-3`}>
+            <ServiceForm draft={draft} allowAdvanced={false} />
           </div>
         );
         primary = "保存";
-        ready = draft.models.length > 0;
-        reason = ready ? undefined : "至少选一个模型";
+        ready = draft.problem === null;
+        reason = draft.problem ?? undefined;
         busy = draft.saving;
         onPrimary = () => void saveService();
       }
@@ -193,6 +192,8 @@ export function FirstRun() {
       onPrimary = finish;
       break;
   }
+
+  const wide = step === "service" && part !== "list";
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
@@ -232,17 +233,16 @@ export function FirstRun() {
             </Button>
           </div>
         ) : (
-          <div className="my-auto flex w-full flex-col items-center gap-7 py-4">
+          <div
+            className={`my-auto flex w-full flex-col items-center py-4 ${wide ? "gap-5" : "gap-7"}`}
+          >
             <Dots step={step} />
             <div
               key={`${step}/${part}`}
-              className="ah-fr-step flex w-full flex-col items-center gap-7"
+              className={`ah-fr-step flex w-full flex-col items-center ${wide ? "gap-5" : "gap-7"}`}
             >
               <Heading title={title} hint={hint} />
               {body}
-              {step === "service" && part !== "list" && draft.error !== null && (
-                <p className={`${BODY} -mt-3 text-danger-text`}>{draft.error}</p>
-              )}
             </div>
             <div className="ah-fr-actions flex w-full max-w-[320px] flex-col items-center gap-3">
               <div className="flex w-full gap-2">
