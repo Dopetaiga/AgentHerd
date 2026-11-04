@@ -1,0 +1,31 @@
+{
+  "name": "@agentherd/host",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./api": "./src/api.ts",
+    "./server": "./src/server.ts"
+  },
+  "bin": {
+    "agentherd-host": "./bin/host.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p .",
+    "test": "vitest run --root ../.. packages/host"
+  },
+  "dependencies": {
+    "@agentherd/channel-feishu": "workspace:*",
+    "@agentherd/core": "workspace:*",
+    "@agentherd/herder": "workspace:*",
+    "@agentherd/protocol": "workspace:*",
+    "@napi-rs/keyring": "^2.1.2",
+    "qrcode": "^1.5.4"
+  },
+  "devDependencies": {
+    "@agentherd/channel-fake": "workspace:*",
+    "@agentherd/mock-agent": "workspace:*",
+    "@types/qrcode": "^1.5.6"
+  }
+}

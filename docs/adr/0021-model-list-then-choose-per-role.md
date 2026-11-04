@@ -33,8 +33,8 @@ Prior art, checked on 2026-11-04:
    `reviewer`; each points at `service/model` from the list.
 2. **No default.** No chosen Herder model → the Herder is off and only commands work.
 3. **No secrets in the settings.** Keys are stored per service under the account
-   `model:<serviceId>` in a `SecretStore` (macOS keychain in the CLI, `safeStorage` in the desktop
-   app). For `builtin` services the provider's environment variable is a fallback. Keys are
+   `model:<serviceId>` in a `SecretStore` (the macOS keychain, held by the host process for both the
+   CLI and the desktop app). For `builtin` services the provider's environment variable is a fallback. Keys are
    write-only: they can be replaced or removed, never shown.
 4. **One code path for CLI and GUI.** Validation and editing (`putService`, `removeService`,
    `chooseModel`, `modelFor`) live in core; turning a choice into a pi-ai model, the provider

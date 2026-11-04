@@ -17,7 +17,7 @@ import {
   type SecretStore,
 } from "@agentherd/core";
 import { builtinProviders, resolveModel, serviceKey, testModel } from "@agentherd/herder";
-import { readConfig, writeConfig } from "./config.ts";
+import { readConfig, writeConfig } from "@agentherd/host";
 
 export const MODEL_USAGE = `Usage: agentherd model <command>
 

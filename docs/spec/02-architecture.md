@@ -61,7 +61,7 @@ The flow for one permission request on the ACP path:
 | Process | What runs there | Notes |
 | --- | --- | --- |
 | Electron main | Window, tray, auto-update, OS keychain, keep-awake, starts the core | Thin. No business logic. |
-| Core (Electron `utilityProcess`) | ACP client, registry, Herder, inbox, channels, exporters, store, local API | Plain Node code. Must also run without Electron (tests, CLI). |
+| Host (Electron `utilityProcess`, or `agentherd start`) | ACP client, registry, Herder, inbox, channels, exporters, store, local API | Plain Node code (`packages/host` composes `core`). Must also run without Electron (tests, CLI). One host per `AGENTHERD_HOME`; the app connects to a running one. |
 | Renderer | Desktop UI | Talks to main through a typed preload bridge only. No Node access. |
 | Agent processes | One per ACP session group, started from a profile command | Children of the core. |
 
@@ -83,7 +83,8 @@ packages/
   channel-feishu/       Feishu channel: one-scan setup, long connection, cards
   channel-fake/         In-memory channel for tests; plays the owner
   mock-agent/           Scripted fake ACP agent for development and E2E tests
-  cli/                  `agentherd` development CLI: setup feishu, run, status
+  host/                 Composes core, Herder, channel and keychain; serves the local API
+  cli/                  `agentherd` development CLI: setup feishu, model, run, start, status
 ```
 
 Rules:
@@ -101,9 +102,12 @@ Rules:
 - Transport: a Unix domain socket at `~/.agentherd/run/herd.sock`, file mode `600`, in a
   directory with mode `700`. No TCP port.
 - Framing: newline-delimited JSON. Each message has `v` (protocol version), `id`, `type`.
-- Main messages: `session.list`, `session.watch`, `item.list`, `item.watch` (read-only;
-  owners decide in the channel), `rule.*`, `export.plan`, `export.apply`, `export.remove`,
-  `task.run`.
+- Calls are `{v, id, type:"call", method, params}`, answers `{v, id, type:"result", ok,
+  result|error}`, pushes `{v, type:"event", event:{topic, data}}` (`packages/host/src/api.ts`).
+- Methods now (plan 011): `status`, `tasks` (tasks and open items, read-only; owners decide in
+  the channel), `providers`, `models`, `putService`, `removeService`, `setKey`, `chooseModel`,
+  `testModel`, `setupFeishu`, `cancelSetup`, `setupState`, `updateSettings`. Later: `rule.*`,
+  `export.*`.
 
 ## 5. Storage
 
@@ -117,9 +121,10 @@ All state is under `~/.agentherd/` (overridable by `AGENTHERD_HOME`):
 | `logs/` | Rotated logs. Secrets redacted. |
 | `backups/` | Copies of agent config files before each export |
 
-Secrets (Feishu App Secret, model API keys) are stored with Electron `safeStorage`
-(OS keychain) in the desktop app (M2). The CLI stores them in the macOS keychain with
-`@napi-rs/keyring` (service `agentherd`, account `feishu:<appId>`). They are never written to
+Secrets (Feishu App Secret, model API keys) are stored in the macOS keychain with
+`@napi-rs/keyring` (service `agentherd`, accounts `feishu:<appId>` and `model:<serviceId>`).
+The host process holds them, so the desktop app and the CLI share them; the renderer and
+Electron main never see a key after it is saved (plan 011). They are never written to
 `config.json`, logs or `herd.db`.
 
 All TypeScript is erasable syntax only (`erasableSyntaxOnly`), so Node runs the sources

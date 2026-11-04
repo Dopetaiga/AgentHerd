@@ -2,8 +2,8 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { SecretStore } from "@agentherd/core";
+import { readConfig } from "@agentherd/host";
 import { describe, expect, it } from "vitest";
-import { readConfig } from "../src/config.ts";
 import { modelCommand } from "../src/models.ts";
 
 function setup(keys: string[] = []) {

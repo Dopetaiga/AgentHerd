@@ -125,7 +125,8 @@ export class Herd {
   private readonly texts: CoreTexts;
   private started = false;
   private relayTimer: Timer | undefined;
-  private readonly herder: HerderPort | undefined;
+  private herder: HerderPort | undefined;
+  private mode: Mode;
   /** Open questions from the Herder, by ask id. */
   private readonly asks = new Map<string, { ref: MessageRef; view: AskView }>();
 
@@ -133,6 +134,7 @@ export class Herd {
 
   constructor(opts: HerdOptions) {
     this.opts = opts;
+    this.mode = opts.mode;
     this.texts = coreTexts(opts.locale ?? DEFAULT_LOCALE);
     this.clock = opts.clock ?? systemClock;
     const storeOptions = opts.secrets === undefined ? {} : { secrets: opts.secrets };
@@ -168,6 +170,29 @@ export class Herd {
       if (f !== undefined) this.restage(f);
     });
     this.herder = opts.herder?.(this.herderHost());
+  }
+
+  /** Replaces the Herder, e.g. after the owner chose another model. `undefined` turns it off. */
+  async setHerder(factory: HerderFactory | undefined): Promise<void> {
+    const old = this.herder;
+    this.herder = undefined;
+    await old?.stop();
+    this.herder = factory?.(this.herderHost());
+    this.store.audit("herder.changed", { on: this.herder !== undefined });
+  }
+
+  hasHerder(): boolean {
+    return this.herder !== undefined;
+  }
+
+  getMode(): Mode {
+    return this.mode;
+  }
+
+  /** Applies to permission requests that arrive after the change. */
+  setMode(mode: Mode): void {
+    this.mode = mode;
+    this.store.audit("mode.changed", { mode });
   }
 
   private herderHost(): HerderHost {
@@ -225,7 +250,7 @@ export class Herd {
     // Sessions are not resumed after a restart, so an old relay points at nothing.
     this.store.deleteState(RELAY_KEY);
     await this.opts.channel.start(this.opts.binding, (inbound) => this.handle(inbound));
-    this.store.audit("herd.started", { mode: this.opts.mode, channel: this.opts.channel.id });
+    this.store.audit("herd.started", { mode: this.mode, channel: this.opts.channel.id });
   }
 
   /** Inbound from the channel. Errors are recorded, never thrown back into the channel. */
@@ -766,7 +791,7 @@ export class Herd {
       risk: "medium",
     };
     const result = decide(item, {
-      mode: this.opts.mode,
+      mode: this.mode,
       rules: this.store.listRules(),
       home: this.opts.userHome,
       ...(this.opts.extraGuards === undefined ? {} : { extraGuards: this.opts.extraGuards }),

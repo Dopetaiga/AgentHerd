@@ -1,4 +1,4 @@
-// CLI configuration: `<home>/config.json` (no secrets, mode 600) and the App Secret in the
+// Host configuration: `<home>/config.json` (no secrets, mode 600) and the App Secret in the
 // macOS keychain.
 
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -19,6 +19,8 @@ export interface CliConfig {
   profiles?: AgentProfile[];
   /** Model services and the model of each role (ADR 0021). Keys are in the keychain. */
   models?: ModelSettings;
+  /** Keep the Mac awake while tasks run (desktop app). */
+  keepAwake?: boolean;
 }
 
 export function agentherdHome(env: NodeJS.ProcessEnv = process.env): string {

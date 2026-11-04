@@ -5,20 +5,20 @@ import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { FeishuChannel } from "@agentherd/channel-feishu";
-import { emptyModelSettings, Herd, Store } from "@agentherd/core";
-import { herderFromSettings } from "@agentherd/herder";
-import type { Locale, Mode } from "@agentherd/protocol";
-import QRCode from "qrcode";
+import { Herd, Store } from "@agentherd/core";
 import {
   agentherdHome,
   getSecret,
   keychain,
   readConfig,
+  resolveProfile,
+  runHost,
   saveSecret,
   writeConfig,
-} from "./config.ts";
+} from "@agentherd/host";
+import type { Locale, Mode } from "@agentherd/protocol";
+import QRCode from "qrcode";
 import { MODEL_USAGE, modelCommand } from "./models.ts";
-import { availableProfiles, resolveProfile } from "./profiles.ts";
 
 export const USAGE = `Usage: agentherd <command>
 
@@ -186,46 +186,31 @@ async function start(home: string, args: string[], out: Out): Promise<number> {
   });
   const config = readConfig(home);
   if (config.channel === undefined) {
-    out('No channel. Run "agentherd setup feishu" first.');
-    return 1;
+    out('No channel. Run "agentherd setup feishu" first (or bind in the desktop app).');
   }
-  const mode = (values.mode ?? config.mode ?? "assist") as Mode;
-  if (mode !== "observe" && mode !== "assist") {
-    out(`--mode must be observe or assist, not "${mode}"`);
+  if (values.mode !== undefined && values.mode !== "observe" && values.mode !== "assist") {
+    out(`--mode must be observe or assist, not "${values.mode}"`);
     return 2;
   }
-  const profiles = availableProfiles({
-    script: values.script === undefined ? undefined : resolve(values.script),
-    configured: config.profiles ?? [],
-  });
-  if (profiles.length === 0) {
-    out(
-      "No agent profiles: install DeepSeek Harness, add profiles to config.json, or pass --script.",
-    );
-    return 1;
-  }
-  const herder = herderFromSettings(config.models ?? emptyModelSettings(), keychain);
-  if ("reason" in herder) out(`[herder] off: ${herder.reason}. Only commands work.`);
-  else out(`[herder] ${herder.ref}`);
-  const herd = new Herd({
+  const running = await runHost({
     home,
-    userHome: homedir(),
-    channel: feishuChannel(config.locale),
-    binding: config.channel,
-    mode,
-    ...(config.locale === undefined ? {} : { locale: config.locale }),
-    profiles,
-    ...("factory" in herder ? { herder: herder.factory } : {}),
+    ...(values.script === undefined ? {} : { script: resolve(values.script) }),
+    log: out,
   });
-  herd.registry.onChange((row, previous) =>
-    out(`[session] ${row.id.slice(0, 8)} ${previous ?? "new"} → ${row.state}`),
+  if (values.mode !== undefined) running.host.updateSettings({ mode: values.mode as Mode });
+  const status = running.host.status();
+  out(
+    status.herder.on
+      ? `[herder] ${status.herder.ref}`
+      : `[herder] off: ${status.herder.reason}. Only commands work.`,
   );
-  await herd.start();
-  out(`[herd] connected to Feishu; agents: ${profiles.map((p) => p.id).join(", ")}`);
+  if (status.profiles.length === 0) {
+    out("[herd] no agent profiles: install DeepSeek Harness, add profiles, or pass --script.");
+  }
   out("[herd] send /help to the bot. Ctrl-C to stop.");
   await new Promise<void>((done) => process.once("SIGINT", () => done()));
   out("[herd] stopping");
-  await herd.stop();
+  await running.stop();
   return 0;
 }
 

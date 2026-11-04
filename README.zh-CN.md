@@ -55,6 +55,16 @@ node packages/cli/bin/agentherd.ts model use herder deepseek/deepseek-flash
 node packages/cli/bin/agentherd.ts start
 ```
 
+### 桌面应用（M2，开发中）
+
+应用里可以绑定飞书、添加模型服务和 Key、给主管选模型，并查看任务和待处理的请求。它会自己启动后台服务，
+或者连上用 `agentherd start` 启动的那个。
+
+```bash
+pnpm --filter @agentherd/desktop build
+pnpm --filter @agentherd/desktop start
+```
+
 ## 文档
 
 - [规格](docs/spec/00-baseline.md)：AgentHerd 做什么

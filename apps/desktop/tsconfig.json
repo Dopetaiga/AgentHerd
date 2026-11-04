@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.base.json",
+  // tsc also reaches the herder-loop sources through type imports, and those keep Pi's settings.
+  "compilerOptions": {
+    "types": ["node"],
+    "jsx": "react-jsx",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "exactOptionalPropertyTypes": false,
+    "noUncheckedIndexedAccess": false
+  },
+  "include": ["src", "electron.vite.config.ts"]
+}

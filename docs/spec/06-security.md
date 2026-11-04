@@ -16,7 +16,8 @@ a mistake with the user's shell. This spec lists the rules that keep that power 
 
 ## 2. Secrets
 
-- App Secret and model keys live in the OS keychain through Electron `safeStorage`.
+- App Secret and model keys live in the macOS keychain, held by the host process; the UI can
+  replace or remove a key but never read it back.
 - Logs, `herd.db`, cards and model prompts are passed through a redaction step: known secret
   formats (API keys, tokens, private keys) and values of variables whose names contain
   `KEY`, `TOKEN`, `SECRET` or `PASSWORD` are replaced with `«redacted»`.

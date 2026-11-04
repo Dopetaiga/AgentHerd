@@ -61,6 +61,16 @@ node packages/cli/bin/agentherd.ts model use herder deepseek/deepseek-flash
 node packages/cli/bin/agentherd.ts start
 ```
 
+### Desktop app (M2, in development)
+
+The app binds Feishu, adds model services and keys, chooses the Herder's model, and shows tasks
+and open items. It starts the host itself, or connects to one started with `agentherd start`.
+
+```bash
+pnpm --filter @agentherd/desktop build
+pnpm --filter @agentherd/desktop start
+```
+
 ## Docs
 
 - [Specs](docs/spec/00-baseline.md): what AgentHerd does
