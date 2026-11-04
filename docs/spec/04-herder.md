@@ -1,23 +1,88 @@
 # 04. Herder
 
 Applied ADRs: [0003](../adr/0003-herder-on-pi-agent-core.md), [0007](../adr/0007-tiered-decisions-fail-open-to-human.md),
-[0008](../adr/0008-observe-first-rollout.md), [0012](../adr/0012-channel-is-the-only-decision-surface.md).
+[0008](../adr/0008-observe-first-rollout.md), [0012](../adr/0012-channel-is-the-only-decision-surface.md),
+[0017](../adr/0017-resident-herder-per-project.md).
 
-The Herder is the part of AgentHerd that decides. It is not a long-running chat agent. It is
-an event-driven pipeline: one event in, one decision out. It keeps no conversation between
-events; context comes from the session summary and decision memory.
+The Herder is the supervisor. There is **one resident Herder per project directory**: a Pi
+agent session that runs the strongest model the user picked, keeps the project's context
+across events, and manages the agent sessions working in that project. It does not write
+code itself; the agents do.
 
-## 1. Inputs and output
+Cheap, deterministic checks run before it, so most events never reach the model.
 
-Input for one event:
+## 1. Pipeline
 
-- the item that needs a decision (from an ACP `session/request_permission`, a stopped turn or
-  a loop);
-- a short summary of the session (task, recent turns, files changed), at most 2 000 tokens;
-- up to 5 past decisions from memory that look similar;
-- the rule set and the current mode.
+```mermaid
+flowchart TD
+  E["Event: permission request, stopped turn, loop, error, owner message"] --> G{"Guard list match?"}
+  G -- yes --> H["Escalate to owner, risk = high"]
+  G -- no --> L0{"Owner rule match?"}
+  L0 -- yes --> D["Decision (source = rule)"]
+  L0 -- no --> PF{"Pre-filter on?<br/>(off by default)"}
+  PF -- "on, confident" --> D1["Decision (source = prefilter)"]
+  PF -- "off, or unsure" --> HD["Resident Herder<br/>(strongest model)"]
+  HD -- "decides" --> D2["Decision (source = herder)"]
+  HD -- "unsure or high risk" --> H2["Escalate with suggestion"]
+```
 
-Output:
+Thresholds are configuration. Events of the same project are delivered to its Herder in
+order; events that arrive while it is busy are batched into its next turn.
+
+### Guard list (always escalate)
+
+Built in, can be extended, cannot be overridden by rules or models. It applies to agent
+requests **and to the Herder's own actions**. Examples: recursive delete outside the session's
+working directory, `git push --force` to a default branch, piping a download into a shell,
+reading `~/.ssh`, keychains or `.env` files, changing AgentHerd's own files or the agents'
+permission configs.
+
+### L0: rules
+
+A rule is a match plus an action. Match fields: agent profile, event type, tool name, command
+pattern (glob on the normalized command), path scope (inside the session `cwd` or a listed
+directory). Rules come from:
+
+- the "Always do this" button on a card. The generated rule is scoped to the session's project
+  directory by default; the owner can widen it later in the desktop rule editor;
+- the desktop rule editor.
+
+### Pre-filter (optional, off by default)
+
+One call to a small, cheap model with structured output: category, risk, proposed action and
+confidence. It may decide only `low` risk items with confidence ≥ 0.9 and a named precedent;
+everything else goes to the Herder. It exists to save cost for users who want it.
+
+## 2. The resident Herder
+
+### Context
+
+The Herder's session holds, per project:
+
+- the open tasks and the agent sessions working on them (state, last report, files changed);
+- recent decisions and the owner's answers (decision memory, [§5](#5-decision-memory));
+- the rule set and the current mode;
+- the project's own instructions (`AGENTS.md` / `CLAUDE.md`, if present).
+
+Agent output in events is untrusted data. It is quoted, and it cannot change rules, mode or
+the Herder's instructions ([06-security.md](06-security.md)). The session is compacted when it
+grows past a configured budget; a compaction keeps open tasks, open items and unresolved
+owner instructions verbatim.
+
+### Tools
+
+| Group | Tools | Notes |
+| --- | --- | --- |
+| Decide | `decide(itemId, action, text?, reason)` | Answers a pending item |
+| Manage agents | `session_prompt` (continue, steer), `session_cancel`, `session_start` (new task in this project), `session_list` | Goes through the ACP client |
+| Talk to the owner | `escalate(itemId, suggestion)`, `notify(text)` | Through the inbox and channel |
+| Read | `read`, `grep`, `list`, `git_diff`, `git_log`, `session_transcript` | Inside the project directory only |
+
+The Herder has no tool to write files or run arbitrary shell commands. Every tool call it
+makes is checked by the guard list first; a match escalates to the owner instead of running.
+Every tool call is written to the audit log.
+
+### Output
 
 ```ts
 interface Decision {
@@ -26,60 +91,21 @@ interface Decision {
   text?: string;           // the answer, or the instruction for "continue"
   confidence: number;      // 0..1; 1 for rules
   risk: "low" | "medium" | "high";
-  source: "rule" | "l1" | "l2" | "human";
-  reason: string;          // one sentence, shown to the user
+  source: "rule" | "prefilter" | "herder" | "human";
+  reason: string;          // one sentence, shown to the owner
   precedents: string[];    // ids of past decisions used
 }
 ```
 
-## 2. Pipeline
+### Lifecycle
 
-```mermaid
-flowchart TD
-  E["Event needs a decision"] --> G{"Guard list match?"}
-  G -- yes --> H["Escalate, risk = high"]
-  G -- no --> L0{"L0: user rule match?"}
-  L0 -- yes --> D["Decision (source = rule)"]
-  L0 -- no --> L1["L1: classify with a small model"]
-  L1 -- "confidence ≥ 0.9" --> D2["Decision (source = l1)"]
-  L1 -- "0.6 ≤ confidence < 0.9" --> L2["L2: read-only Pi agent"]
-  L1 -- "confidence < 0.6" --> H2["Escalate with suggestion"]
-  L2 -- "confidence ≥ 0.9" --> D3["Decision (source = l2)"]
-  L2 -- else --> H2
-```
-
-Thresholds are configuration; the values above are defaults.
-
-### Guard list (always escalate)
-
-Built in, can be extended, cannot be overridden by rules or models. Examples: recursive
-delete outside the session's working directory, `git push --force` to a default branch,
-piping a download into a shell, reading `~/.ssh`, keychains or `.env` files, changing
-AgentHerd's own files or the agents' permission configs.
-
-### L0: rules
-
-A rule is a match plus an action. Match fields: agent kind, event type, tool name, command
-pattern (glob on the normalized command), path scope (inside the session `cwd` or a listed
-directory). Rules come from:
-
-- the "Always do this" button on a card. The generated rule is scoped to the session's project
-  directory by default; the owner can widen it later in the desktop rule editor;
-- the desktop rule editor;
-- import of the agent's own allowlist (for example Claude Code `permissions.allow`).
-
-### L1: classify
-
-One call to a small, cheap model with structured output. It returns category (read-only,
-write inside cwd, network, install, destructive, secret access, outside cwd), risk, the
-proposed action and confidence. It must name the precedents it relied on; a high-confidence
-answer with no precedent is capped at 0.8 confidence.
-
-### L2: read-only Pi agent
-
-A Pi agent with read-only tools: read file, list, grep, `git status`, `git diff`, read the
-session transcript. Budget per item: 8 tool calls, 60 seconds, a token limit set in
-configuration. It cannot write files or run other commands. It is used when L1 is unsure.
+- A project's Herder starts with the first session in that project and stops after
+  `herderIdleMinutes` (default 60) with no open sessions or items. Its context is saved and
+  reloaded on the next start.
+- If the Herder fails (model error, timeout, invalid output), pending items escalate to the
+  owner. It never turns a failure into `allow`.
+- Like the Watchdog in dsh-superagent, the Herder also handles loops and agent errors
+  ([§6](#6-loop-detection)).
 
 ## 3. Where human decisions go
 
@@ -100,7 +126,7 @@ Applied ADR: [0012](../adr/0012-channel-is-the-only-decision-surface.md).
 | --- | --- | --- |
 | `observe` | Nothing. It records its suggestion and later compares it with the real answer. | Default for a new install. Builds the agreement metric. |
 | `assist` | L0 rule decisions only | After the user has rules they trust |
-| `auto` | L0, and L1/L2 decisions above threshold with risk `low` | After agreement ≥ 90% |
+| `auto` | L0, and pre-filter / Herder decisions above threshold with risk `low` or `medium` | After agreement ≥ 90% |
 
 Mode can be set globally and overridden per project directory. The desktop app shows the
 agreement metric next to the mode switch, so the user can see when `auto` is safe.
@@ -125,13 +151,13 @@ The registry marks a session `looping` when one of these happens:
 - 3 `turn.stopped` events in a row with no file change and almost the same last message;
 - `working` for longer than `maxQuietMinutes` (default 30) with no new event.
 
-A looping session becomes a notification item, not a decision. The owner can tell the
-agent to stop or give it an instruction.
+A looping session or an agent error goes to the Herder first. It may steer the agent, cancel
+the turn, or escalate. In `observe` mode it only suggests.
 
 ## 7. Model provider
 
-- The user picks the provider and models during onboarding, from the providers Pi supports.
-  AgentHerd ships no default provider. L1 and L2 can use different models; the onboarding
-  page explains that L1 should be fast and cheap and L2 stronger.
+- The user picks the provider and model during onboarding, from the providers Pi supports.
+  AgentHerd ships no default provider. The onboarding page recommends the strongest model the
+  user has access to for the Herder, and a cheap one if the pre-filter is turned on.
 - The model step can be skipped. Without a model, AgentHerd works with the guard list, rules
-  and the owner; L1 and L2 are off.
+  and the owner; the Herder is off.

@@ -1,6 +1,6 @@
 # ADR 0016: One rule source, exported to each agent's own config
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-11-04
 - Related: [03-agents.md](../spec/03-agents.md#2-rule-export), [04-herder.md](../spec/04-herder.md#l0-rules)
 

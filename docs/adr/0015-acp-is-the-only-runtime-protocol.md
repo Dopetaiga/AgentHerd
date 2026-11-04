@@ -1,6 +1,6 @@
 # ADR 0015: ACP is the only runtime protocol to agents
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-11-04
 - Related: [03-agents.md](../spec/03-agents.md#1-acp-runtime), supersedes [ADR 0006](0006-agent-adapters-attach-and-launch.md)
 

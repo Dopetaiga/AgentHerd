@@ -1,6 +1,6 @@
 # ADR 0014: ACP is the first real agent integration
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-11-04
 - Related: [03-agents.md](../spec/03-agents.md#1-acp-runtime), [07-delivery.md](../spec/07-delivery.md)
 

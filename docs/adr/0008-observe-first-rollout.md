@@ -1,6 +1,6 @@
 # ADR 0008: Observe-first rollout
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-11-04
 - Related: [04-herder.md](../spec/04-herder.md#4-modes)
 

@@ -1,6 +1,6 @@
 # ADR 0010: TypeScript pnpm monorepo
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-11-04
 - Related: [02-architecture.md](../spec/02-architecture.md#3-packages)
 

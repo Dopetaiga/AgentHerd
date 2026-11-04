@@ -7,7 +7,7 @@
 | M0 | Spec freeze | Specs 00–07 and ADRs 0001–0014 accepted | Baseline 0.1.0 marked Frozen |
 | M1 | Headless loop | `core`, `rules` (guard list + matcher), `acp-client`, `mock-agent`, `channel-feishu`, run from a CLI | E2E-APPROVE and E2E-OWNER-ONLY pass with `mock-agent` and a fake channel; one manual run with real Feishu |
 | M2 | DSH + desktop shell | DSH profile (`dsh acp`), `run` command from Feishu, desktop app with onboarding (QR, model choice), sessions list, read-only inbox, mode switch, keep-awake switch | A DSH task started from Feishu asks for approval and is approved from Feishu |
-| M3 | Herder + rule export | Guard list, L0 rules, "Always do this", L1, L2, observe metrics, decision memory; exporters for Claude Code and Codex, with export status per rule | Observe mode reports agreement on a replayed item set; exported Claude Code config passes `plan()` tests for every rule shape |
+| M3 | Herder + rule export | Guard list, L0 rules, "Always do this", resident Herder per project (tools, compaction, restore), optional pre-filter, observe metrics, decision memory; exporters for Claude Code and Codex, with export status per rule | Observe mode reports agreement on a replayed item set; exported Claude Code config passes `plan()` tests for every rule shape |
 | M4 | More agents | Built-in profiles for Claude Code (`claude-agent-acp`), Codex (`codex-acp`), Gemini CLI, OpenCode; exporters for Gemini CLI and OpenCode | Verified on a machine where these agents can run |
 | M5 | Release | Signed and notarized macOS build, auto-update, README with GIF | Fresh-machine install to first card in < 5 minutes |
 

@@ -1,6 +1,6 @@
 # ADR 0011: Keep running with the lid closed (macOS)
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-11-04
 - Related: [02-architecture.md](../spec/02-architecture.md#7-keep-running-with-the-lid-closed), [ADR 0004](0004-electron-app-with-headless-core.md)
 

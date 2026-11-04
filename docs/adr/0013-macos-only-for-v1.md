@@ -1,6 +1,6 @@
 # ADR 0013: macOS only for v1
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-11-04
 - Related: [00-baseline.md](../spec/00-baseline.md)
 

@@ -1,6 +1,6 @@
 # ADR 0009: MIT license, reference other projects without copying code
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-11-04
 - Related: [docs/references.md](../references.md)
 

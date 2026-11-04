@@ -1,6 +1,6 @@
 # ADR 0004: Electron desktop app with a headless core
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-11-04
 - Related: [02-architecture.md](../spec/02-architecture.md)
 

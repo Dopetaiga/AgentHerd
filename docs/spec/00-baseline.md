@@ -1,7 +1,7 @@
 # 00. Baseline
 
 - Baseline version: 0.1.0
-- Status: Draft. Waiting for maintainer review. Freeze it before the first implementation plan runs.
+- Status: Frozen on 2026-11-04 (version 0.1.0). Approved by the maintainer.
 - Date: 2026-11-04
 
 ## What the baseline is
@@ -41,10 +41,12 @@ These defaults hold until an ADR changes them.
 7. macOS 14 or later only ([ADR 0013](../adr/0013-macos-only-for-v1.md)).
 8. Every escalated item goes to the channel; the desktop app manages, it does not decide
    ([ADR 0012](../adr/0012-channel-is-the-only-decision-surface.md)).
-9. The Herder model is chosen by the user during onboarding; no default provider.
+9. The Herder model is chosen by the user during onboarding; no default provider. There is
+   one resident Herder per project on the strongest configured model
+   ([ADR 0017](../adr/0017-resident-herder-per-project.md)).
 
 ## Version history
 
 | Version | Date | Change |
 | --- | --- | --- |
-| 0.1.0 | 2026-11-04 | First draft; maintainer decisions on platform, decision surface, first real agent, model, rule scope, signing |
+| 0.1.0 | 2026-11-04 | Frozen. Maintainer decisions on platform, decision surface, ACP-only runtime, rule export, resident Herder, model, rule scope, signing |

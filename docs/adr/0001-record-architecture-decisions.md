@@ -1,6 +1,6 @@
 # ADR 0001: Record architecture decisions
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-11-04
 - Related: [docs/README.md](../README.md)
 

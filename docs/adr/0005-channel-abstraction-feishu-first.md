@@ -1,6 +1,6 @@
 # ADR 0005: Channel abstraction, Feishu first
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-11-04
 - Related: [05-channels.md](../spec/05-channels.md)
 

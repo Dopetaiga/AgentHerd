@@ -1,6 +1,6 @@
 # ADR 0002: English docs with a Chinese README mirror
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-11-04
 - Related: [ADR 0001](0001-record-architecture-decisions.md)
 
