@@ -45,6 +45,13 @@ node packages/cli/bin/agentherd.ts run --script packages/mock-agent/scripts/appr
 
 Tap **Allow** on the card. `node packages/cli/bin/agentherd.ts status` shows the decision.
 
+With [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) installed, run a real
+agent. DSH runs in read-only sandbox mode, so each write asks you first:
+
+```bash
+node packages/cli/bin/agentherd.ts run --profile dsh /tmp/demo "Create out.txt containing hello"
+```
+
 ## Docs
 
 - [Specs](docs/spec/00-baseline.md): what AgentHerd does

@@ -52,11 +52,21 @@ const OPTIONS: ItemView["options"] = [
 ];
 
 /** Card body: the command and the paths, at most 20 lines, redacted. */
+/** The agent's own reason for a tool call, e.g. DSH's `rawInput.justification`. */
+function justificationOf(rawInput: unknown): string | undefined {
+  if (typeof rawInput !== "object" || rawInput === null || !("justification" in rawInput))
+    return undefined;
+  const value = rawInput.justification;
+  return typeof value === "string" && value.trim() !== "" ? value.trim() : undefined;
+}
+
 export function itemBody(item: Item, secrets?: Record<string, string>): string {
   const lines: string[] = [];
   if (item.toolCall?.command !== undefined) lines.push(...item.toolCall.command.split("\n"));
   for (const path of item.toolCall?.paths ?? []) lines.push(path);
   if (lines.length === 0) lines.push(...item.body.split("\n"));
+  const justification = justificationOf(item.toolCall?.rawInput);
+  if (justification !== undefined) lines.push(`Reason: ${justification}`);
   const shown =
     lines.length > BODY_MAX_LINES
       ? [...lines.slice(0, BODY_MAX_LINES - 1), `… ${lines.length - BODY_MAX_LINES + 1} more lines`]

@@ -8,21 +8,15 @@ import { FeishuChannel } from "@agentherd/channel-feishu";
 import { Herd, Store } from "@agentherd/core";
 import type { AgentProfile, Mode } from "@agentherd/protocol";
 import QRCode from "qrcode";
-import {
-  agentherdHome,
-  getSecret,
-  mockProfile,
-  readConfig,
-  saveSecret,
-  writeConfig,
-} from "./config.ts";
+import { agentherdHome, getSecret, readConfig, saveSecret, writeConfig } from "./config.ts";
+import { resolveProfile } from "./profiles.ts";
 
 export const USAGE = `Usage: agentherd <command>
 
 Commands:
   setup feishu                 Create a Feishu bot with one QR scan and bind it to you
   run [options] <dir> <prompt> Run one task with an agent; approvals go to Feishu
-      --profile <id>           Agent profile (default: mock)
+      --profile <id>           Agent profile: mock, dsh, or one from config.json (default: mock)
       --script <yaml>          Script for the mock profile
       --mode <observe|assist>  Mode (default: from config, else assist)
   status                       Show recent sessions, open items and decisions
@@ -94,16 +88,6 @@ async function setupFeishu(home: string, out: Out): Promise<number> {
   return 0;
 }
 
-function profileFor(id: string, script: string | undefined, extra: AgentProfile[]): AgentProfile {
-  if (id === "mock") {
-    if (script === undefined) throw new Error("--script is required with the mock profile");
-    return mockProfile(resolve(script));
-  }
-  const found = extra.find((p) => p.id === id);
-  if (found === undefined) throw new Error(`unknown profile "${id}"`);
-  return found;
-}
-
 async function run(home: string, args: string[], out: Out): Promise<number> {
   const { values, positionals } = parseArgs({
     args,
@@ -132,7 +116,10 @@ async function run(home: string, args: string[], out: Out): Promise<number> {
   const dir = resolve(dirArg);
   mkdirSync(dir, { recursive: true });
   if (!statSync(dir).isDirectory()) throw new Error(`${dir} is not a directory`);
-  const profile = profileFor(values.profile, values.script, config.profiles ?? []);
+  const profile = resolveProfile(values.profile, {
+    script: values.script === undefined ? undefined : resolve(values.script),
+    configured: config.profiles ?? [],
+  });
 
   const herd = new Herd({
     home,

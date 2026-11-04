@@ -144,4 +144,15 @@ describe("item card", () => {
     expect(lines).toHaveLength(BODY_MAX_LINES);
     expect(lines.at(-1)).toBe("… 31 more lines");
   });
+
+  it("adds the agent's justification as the reason", () => {
+    const body = itemBody(
+      item({
+        command: "echo hello > out.txt",
+        rawInput: { command: "echo hello > out.txt", justification: " Needs a write. " },
+      }),
+    );
+    expect(body.split("\n")).toEqual(["echo hello > out.txt", "Reason: Needs a write."]);
+    expect(itemBody(item({ command: "ls", rawInput: { justification: 3 } }))).toBe("ls");
+  });
 });

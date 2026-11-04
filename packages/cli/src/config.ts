@@ -4,7 +4,6 @@
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
 import type { AgentProfile, ChannelBinding, Mode } from "@agentherd/protocol";
 import { Entry } from "@napi-rs/keyring";
 
@@ -52,17 +51,4 @@ export async function getSecret(appId: string): Promise<string> {
     throw new Error(`no App Secret for ${appId} in the keychain; run "agentherd setup feishu"`);
   }
   return secret;
-}
-
-const MOCK_BIN = fileURLToPath(new URL("../../mock-agent/bin/mock-agent.ts", import.meta.url));
-
-/** The built-in `mock` profile plays a YAML script. */
-export function mockProfile(script: string): AgentProfile {
-  return {
-    id: "mock",
-    name: "Mock agent",
-    command: [process.execPath, MOCK_BIN, "--script", script],
-    env: {},
-    exporter: null,
-  };
 }

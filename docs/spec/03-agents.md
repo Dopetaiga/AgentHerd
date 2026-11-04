@@ -35,7 +35,7 @@ An agent is a profile in configuration, not a package:
 
 | Agent | Command | Status |
 | --- | --- | --- |
-| DeepSeek Harness | `dsh acp` | Tested 2026-11-04: `initialize` returns `deepseek-harness-acp`, session `close`/`list`/`resume`. Asks over `session/request_permission` only when a command needs more than its sandbox mode allows; see [DSH approvals](#dsh-approvals) |
+| DeepSeek Harness | `dsh acp` | Tested 2026-11-04: `initialize` returns `deepseek-harness-acp`, session `close`/`list`/`resume`. Asks over `session/request_permission` only when a command needs more than its sandbox mode allows; see [DSH approvals](#dsh-approvals). Built-in profile `dsh` (found via `AGENTHERD_DSH`, `PATH`, or the app bundle); end-to-end run with Feishu passed 2026-11-04 |
 | Claude Code | `claude-agent-acp` (npm `@agentclientprotocol/claude-agent-acp`, 0.100.0) | Package exists; not run **(verify, Q01)** |
 | Codex | `codex-acp` (npm `@zed-industries/codex-acp`, 0.16.0) | Package exists; not run **(verify, Q01)** |
 | Gemini CLI, OpenCode, Qwen Code, others | Their ACP mode | **(verify, Q02)** |

@@ -40,6 +40,13 @@ node packages/cli/bin/agentherd.ts run --script packages/mock-agent/scripts/appr
 
 在卡片上点 **Allow**。`node packages/cli/bin/agentherd.ts status` 可以看到这次决定。
 
+装了 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 的话，可以跑真实 Agent。
+DSH 以只读沙箱模式运行，每次写文件都会先问你：
+
+```bash
+node packages/cli/bin/agentherd.ts run --profile dsh /tmp/demo "Create out.txt containing hello"
+```
+
 ## 文档
 
 - [规格](docs/spec/00-baseline.md)：AgentHerd 做什么
