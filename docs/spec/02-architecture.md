@@ -78,8 +78,10 @@ packages/
   acp-client/           Starts agents from profiles, maps ACP to registry events and back
   rules/                Rule model, matcher, guard list, command normalization
   exporter-claude-code/ exporter-codex/ exporter-gemini/ exporter-opencode/
-  channel-feishu/
+  channel-feishu/       Feishu channel: one-scan setup, long connection, cards
+  channel-fake/         In-memory channel for tests; plays the owner
   mock-agent/           Scripted fake ACP agent for development and E2E tests
+  cli/                  `agentherd` development CLI: setup feishu, run, status
 ```
 
 Rules:
@@ -114,7 +116,12 @@ All state is under `~/.agentherd/` (overridable by `AGENTHERD_HOME`):
 | `backups/` | Copies of agent config files before each export |
 
 Secrets (Feishu App Secret, model API keys) are stored with Electron `safeStorage`
-(OS keychain). They are never written to `config.json`, logs or `herd.db`.
+(OS keychain) in the desktop app (M2). The CLI stores them in the macOS keychain with
+`@napi-rs/keyring` (service `agentherd`, account `feishu:<appId>`). They are never written to
+`config.json`, logs or `herd.db`.
+
+All TypeScript is erasable syntax only (`erasableSyntaxOnly`), so Node runs the sources
+directly with type stripping; there is no build step for packages.
 
 ## 6. Cost
 

@@ -159,3 +159,16 @@ Unit: card rendering, inbound parsing. Contract: both channels. Manual: Step 6.
 
 - The CLI is a development tool until the desktop app exists; it stays useful for headless
   runs and E2E debugging.
+- Deviations from the steps, found while implementing:
+  - The protocol `Channel` has `send`/`update`/`pin` with a `View`; `card.ts` has one
+    `renderCard(view)` for every view kind. Callback values carry `{ target, action }`.
+  - The Feishu SDK sits behind a small `FeishuApi` interface (`src/api.ts`), so the contract
+    tests use a recording stub. `setup` takes `register` and `verify` seams for unit tests.
+  - `setup` gets the secret storage through `saveSecret(appId, secret)`; the binding holds only
+    `appId` and `brand`.
+  - The CLI runs with plain `node` (type stripping): `tsconfig.base.json` now sets
+    `erasableSyntaxOnly`, so parameter properties were replaced by fields. `tsx` still works.
+  - Store gained `recentSessions` and `recentDecisions` for `status`.
+  - Steps 1–5 done on 2026-11-04. Step 6 (manual run with real Feishu) waits for the
+    maintainer.
+

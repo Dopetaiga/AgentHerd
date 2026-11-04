@@ -32,6 +32,19 @@ really needs you.
   agrees with you. You turn on `assist` and `auto` when the numbers say so.
 - **Local only.** No AgentHerd server. Secrets stay in your OS keychain.
 
+## Try it (M1)
+
+M1 runs a scripted mock agent and sends its approval request to you in Feishu. Needs Node 22.18+
+and pnpm.
+
+```bash
+pnpm install
+node packages/cli/bin/agentherd.ts setup feishu   # scan the QR code with Feishu
+node packages/cli/bin/agentherd.ts run --script packages/mock-agent/scripts/approve.yaml /tmp/demo "run the tests"
+```
+
+Tap **Allow** on the card. `node packages/cli/bin/agentherd.ts status` shows the decision.
+
 ## Docs
 
 - [Specs](docs/spec/00-baseline.md): what AgentHerd does

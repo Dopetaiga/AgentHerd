@@ -28,6 +28,18 @@
   数据证明可靠后，再由你开启 `assist` 和 `auto`。
 - **只在本地运行。** 没有 AgentHerd 服务器，密钥保存在系统钥匙串里。
 
+## 试用（M1）
+
+M1 运行一个脚本化的模拟 Agent，把它的审批请求发到你的飞书。需要 Node 22.18+ 和 pnpm。
+
+```bash
+pnpm install
+node packages/cli/bin/agentherd.ts setup feishu   # 用飞书扫码
+node packages/cli/bin/agentherd.ts run --script packages/mock-agent/scripts/approve.yaml /tmp/demo "run the tests"
+```
+
+在卡片上点 **Allow**。`node packages/cli/bin/agentherd.ts status` 可以看到这次决定。
+
 ## 文档
 
 - [规格](docs/spec/00-baseline.md)：AgentHerd 做什么
