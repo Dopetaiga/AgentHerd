@@ -2,6 +2,7 @@
 // API (./api.ts). `agentherd start` and the desktop app both run one host; only one per home.
 
 import { homedir } from "node:os";
+import { join } from "node:path";
 import {
   chooseModel,
   emptyModelSettings,
@@ -26,7 +27,9 @@ import {
 import type { AgentProfile, Channel, Locale, Mode, SetupUI } from "@agentherd/protocol";
 import { DEFAULT_LOCALE } from "@agentherd/protocol";
 import QRCode from "qrcode";
+import { Agents } from "./agents.ts";
 import type {
+  AgentView,
   HostApi,
   HostEvent,
   HostStatus,
@@ -40,6 +43,7 @@ import type {
 } from "./api.ts";
 import { type CliConfig, readConfig, writeConfig } from "./config.ts";
 import { availableProfiles } from "./profiles.ts";
+import { type RuntimeLock, RuntimeStore } from "./runtimes.ts";
 
 export const HOST_VERSION = "0.0.0";
 
@@ -56,6 +60,13 @@ export interface HostOptions {
   /** Profiles override (tests). Default: availableProfiles(). */
   profiles?: () => AgentProfile[];
   log?: (line: string) => void;
+  /** Where downloaded agent CLIs go. Default: <home>/runtimes. */
+  runtimes?: RuntimeStore;
+  /** Pinned Pi build (tests). */
+  piRuntime?: RuntimeLock;
+  /** Agent lookup overrides (tests). */
+  findDsh?: () => string | undefined;
+  findSystemPi?: () => string | undefined;
 }
 
 export class Host implements HostApi {
@@ -71,8 +82,19 @@ export class Host implements HostApi {
   private profileList: AgentProfile[] = [];
   private stopped = false;
 
+  private readonly agentList: Agents;
+
   constructor(opts: HostOptions) {
     this.opts = opts;
+    this.agentList = new Agents({
+      store: opts.runtimes ?? new RuntimeStore(join(opts.home, "runtimes")),
+      ...(opts.piRuntime === undefined ? {} : { piRuntime: opts.piRuntime }),
+      ...(opts.env === undefined ? {} : { env: { ...process.env, ...opts.env } }),
+      ...(opts.findDsh === undefined ? {} : { findDsh: opts.findDsh }),
+      ...(opts.findSystemPi === undefined ? {} : { findSystemPi: opts.findSystemPi }),
+      onChange: () => this.agentsChanged(),
+      log: (line) => this.log(line),
+    });
   }
 
   onEvent(listener: (event: HostEvent) => void): () => void {
@@ -107,6 +129,7 @@ export class Host implements HostApi {
 
   async stop(): Promise<void> {
     this.stopped = true;
+    this.agentList.stop();
     this.setupRun++;
     await this.stopHerd();
   }
@@ -168,8 +191,43 @@ export class Host implements HostApi {
     return availableProfiles({
       script: this.opts.script,
       configured: config.profiles ?? [],
+      findDsh: () => this.agentList.dshPath(),
+      findPi: () => this.agentList.piPath(),
       ...("env" in pi ? { piModelEnv: pi.env } : {}),
     });
+  }
+
+  private agentsChanged(): void {
+    const before = this.profileList.map((p) => p.id).join(",");
+    this.profileList = this.buildProfiles();
+    this.herd?.setProfiles(this.profileList);
+    this.emit({ topic: "agents", data: this.agents() });
+    if (this.profileList.map((p) => p.id).join(",") !== before) this.emitStatus();
+  }
+
+  agents(): AgentView[] {
+    const pi = piModelEnv(this.settings(), this.opts.secrets, this.opts.env);
+    return this.agentList.views(this.config().profiles ?? [], "ref" in pi ? { pi: pi.ref } : {});
+  }
+
+  installAgent(id: string): AgentView[] {
+    this.agentList.install(id);
+    return this.agents();
+  }
+
+  cancelInstall(id: string): AgentView[] {
+    this.agentList.cancel(id);
+    return this.agents();
+  }
+
+  removeAgent(id: string): AgentView[] {
+    this.agentList.remove(id);
+    return this.agents();
+  }
+
+  /** Waits for agent downloads (tests). */
+  agentsIdle(): Promise<void> {
+    return this.agentList.idle();
   }
 
   private herderFactory() {
@@ -199,6 +257,7 @@ export class Host implements HostApi {
     this.herd?.setProfiles(this.profileList);
     this.log(`[herder] ${this.herderRef ?? `off: ${this.herderReason}`}`);
     this.emit({ topic: "models", data: this.models() });
+    this.emit({ topic: "agents", data: this.agents() });
     this.emitStatus();
   }
 

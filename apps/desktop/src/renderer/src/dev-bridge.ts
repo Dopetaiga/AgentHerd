@@ -8,6 +8,7 @@
 //   empty            like ready, with no tasks
 //   no-agent         like empty, with no agent profiles
 //   offline          like ready, then the connection to the host drops
+//   pi-failed        like empty, and the last Pi download failed
 // `?open=` opens a dialog at once, for screenshots (see `devOpen`):
 //   add-service      the 添加服务 chooser
 //   add-builtin      the 添加服务 form of OpenRouter, with a few models chosen
@@ -15,6 +16,7 @@
 //   edit-<id>        the edit dialog of the service <id> (deepseek, gateway)
 
 import type {
+  AgentView,
   HostEvent,
   HostStatus,
   ModelsView,
@@ -26,7 +28,16 @@ import { PLACEHOLDER_QR, providers, sampleServices, sampleTasks } from "./dev-fi
 
 type Listener<T> = (value: T) => void;
 
-const SIMS = ["fresh", "bound", "network", "ready", "empty", "no-agent", "offline"] as const;
+const SIMS = [
+  "fresh",
+  "bound",
+  "network",
+  "ready",
+  "empty",
+  "no-agent",
+  "offline",
+  "pi-failed",
+] as const;
 
 type Sim = (typeof SIMS)[number];
 
@@ -107,7 +118,88 @@ function installFakeBridge(): void {
     emit({ topic: "setup", data: structuredClone(setup) });
   };
 
+  let agents: AgentView[] = [
+    sim === "no-agent"
+      ? {
+          id: "dsh",
+          name: "DeepSeek Harness",
+          state: "missing",
+          canInstall: false,
+          canRemove: false,
+        }
+      : {
+          id: "dsh",
+          name: "DeepSeek Harness",
+          state: "ready",
+          source: "app",
+          path: "/Applications/DeepSeek Harness.app/Contents/Resources/runtime/cli/bin/dsh",
+          canInstall: false,
+          canRemove: false,
+        },
+    {
+      id: "pi",
+      name: "Pi",
+      state: "missing",
+      version: "1.5.0",
+      canInstall: true,
+      canRemove: false,
+      ...(sim === "pi-failed"
+        ? { error: "download failed: HTTP 503 for https://github.com/…" }
+        : {}),
+    },
+  ];
+  let installTimer: ReturnType<typeof setInterval> | undefined;
+  const setAgents = (next: AgentView[]): AgentView[] => {
+    agents = next;
+    const ids = agents.filter((a) => a.state === "ready").map((a) => a.id);
+    status = { ...status, profiles: ids };
+    emit({ topic: "agents", data: structuredClone(agents) });
+    emit({ topic: "status", data: structuredClone(status) });
+    return agents;
+  };
+  const patchPi = (patch: Partial<AgentView>): AgentView[] =>
+    setAgents(agents.map((a) => (a.id === "pi" ? ({ ...a, ...patch } as AgentView) : a)));
+
   const fake: RemoteHost = {
+    agents: () => delay(agents),
+    installAgent: () => {
+      const total = 48_027_930;
+      let received = 0;
+      const { error: _e, ...rest } = agents.find((a) => a.id === "pi") as AgentView;
+      patchPi({ ...rest, state: "installing", progress: { received, total } });
+      installTimer = setInterval(() => {
+        received = Math.min(total, received + 4_000_000);
+        if (received < total) {
+          patchPi({ progress: { received, total } });
+          return;
+        }
+        clearInterval(installTimer);
+        setAgents(
+          agents.map((a) =>
+            a.id === "pi"
+              ? {
+                  id: "pi",
+                  name: "Pi",
+                  state: "ready",
+                  source: "managed",
+                  version: "1.5.0",
+                  canInstall: false,
+                  canRemove: true,
+                }
+              : a,
+          ),
+        );
+      }, 300);
+      return delay(agents);
+    },
+    cancelInstall: () => {
+      clearInterval(installTimer);
+      return delay(
+        patchPi({ state: "missing", canInstall: true, canRemove: false, progress: undefined }),
+      );
+    },
+    removeAgent: () =>
+      delay(patchPi({ state: "missing", source: undefined, canInstall: true, canRemove: false })),
     status: () => delay(status),
     reconnect: () => {
       // The second try connects.

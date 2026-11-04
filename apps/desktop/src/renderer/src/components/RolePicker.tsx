@@ -97,12 +97,6 @@ export function RolePicker() {
         description="最强的模型，负责审查有风险的请求"
         trailing={<RoleSelect modelRole="reviewer" label="审查员的模型" />}
       />
-      <Row
-        className="min-h-14"
-        title="Pi"
-        description="Pi 做任务时用的模型；不选就用 Pi 自己的设置"
-        trailing={<RoleSelect modelRole="pi" label="Pi 的模型" />}
-      />
       {count === 0 && (
         <div className="bg-warning-soft/40 px-4 py-2.5 text-sm text-warning-text">
           还没有模型服务。先添加一个服务，再回来选模型。

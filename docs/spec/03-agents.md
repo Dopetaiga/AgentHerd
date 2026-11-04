@@ -36,7 +36,7 @@ An agent is a profile in configuration, not a package:
 | Agent | Command | Status |
 | --- | --- | --- |
 | DeepSeek Harness | `dsh acp` | Tested 2026-11-04: `initialize` returns `deepseek-harness-acp`, session `close`/`list`/`resume`. Asks over `session/request_permission` only when a command needs more than its sandbox mode allows; see [DSH approvals](#dsh-approvals). Built-in profile `dsh` (found via `AGENTHERD_DSH`, `PATH`, or the app bundle); end-to-end run with Feishu passed 2026-11-04 |
-| Pi | `node packages/pi-acp/bin/pi-acp.ts --pi <pi>` (bridge to `pi --mode rpc`) | Tested 2026-11-04 with Pi 1.5.0 and DeepSeek: allow writes the file, deny blocks it. Built-in profile `pi` (found via `AGENTHERD_PI` or `PATH`); see [Pi](#pi) and ADR 0022 |
+| Pi | `node packages/pi-acp/bin/pi-acp.ts --pi <pi>` (bridge to `pi --mode rpc`) | Tested 2026-11-04 with Pi 1.5.0 and DeepSeek: allow writes the file, deny blocks it. Built-in profile `pi` (found via `AGENTHERD_PI`, the copy the app downloaded, or `PATH`); see [Pi](#pi) and ADR 0022 |
 | Claude Code | `claude-agent-acp` (npm `@agentclientprotocol/claude-agent-acp`, 0.100.0) | Package exists; not run **(verify, Q01)** |
 | Codex | `codex-acp` (npm `@zed-industries/codex-acp`, 0.16.0) | Package exists; not run **(verify, Q01)** |
 | Gemini CLI, OpenCode, Qwen Code, others | Their ACP mode | **(verify, Q02)** |
@@ -98,6 +98,15 @@ ACP session:
   `extension/model.ts` registers it as provider `agentherd`.
 - The host searches the login shell's `PATH` plus `~/.local/bin`, `/opt/homebrew/bin`,
   `/usr/local/bin` so an app opened from Finder finds `dsh`, `pi` and `node`.
+
+### Managed downloads
+
+The desktop **Agent** page downloads Pi for the owner (ADR 0023). The host pins Pi 1.5.0 per
+platform in `packages/host/src/runtimes.ts` (GitHub release URL, SHA-256, size), installs it in
+`<home>/runtimes/pi/1.5.0/` after checking the hash and `pi --version`, and lists it as
+`source: managed`. 移除 deletes that folder. DSH is not downloadable; the page asks the owner to
+install the DeepSeek Harness app. Local API: `agents()`, `installAgent(id)`,
+`cancelInstall(id)`, `removeAgent(id)`, event topic `agents`.
 
 How each agent asks the user a question over ACP (permission request, or a message that ends
 the turn) is open **(verify, Q03)**.

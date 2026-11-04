@@ -2,6 +2,7 @@
 // The renderer reaches the host only through `window.agentherd` (see src/shared/bridge.ts).
 
 import type {
+  AgentView,
   HostApi,
   HostEvent,
   HostStatus,
@@ -24,7 +25,7 @@ export type ModelRef = NonNullable<Parameters<HostApi["chooseModel"]>[1]>;
 export type Stage = Task["stage"];
 export type Mode = HostStatus["mode"];
 
-export type Page = "tasks" | "herders" | "models" | "settings";
+export type Page = "tasks" | "herders" | "agents" | "models" | "settings";
 
 export interface Toast {
   id: number;
@@ -38,6 +39,7 @@ interface AppState {
   status: HostStatus | undefined;
   tasks: TasksView | undefined;
   models: ModelsView | undefined;
+  agents: AgentView[];
   providers: ProviderView[];
   setup: SetupState | undefined;
   page: Page;
@@ -53,7 +55,7 @@ interface AppState {
   dismissToast(id: number): void;
 }
 
-const PAGES: readonly Page[] = ["tasks", "herders", "models", "settings"];
+const PAGES: readonly Page[] = ["tasks", "herders", "agents", "models", "settings"];
 
 /** Set once the owner finished or skipped the first run. */
 const FIRST_RUN_DONE = "agentherd.firstRunDone";
@@ -78,6 +80,7 @@ export const useApp = create<AppState>()((set, get) => ({
   status: undefined,
   tasks: undefined,
   models: undefined,
+  agents: [],
   providers: [],
   setup: undefined,
   page: hashPage() ?? "tasks",
@@ -158,6 +161,9 @@ function applyEvent(event: HostEvent): void {
     case "models":
       useApp.setState({ models: event.data });
       break;
+    case "agents":
+      useApp.setState({ agents: event.data });
+      break;
     case "setup":
       useApp.setState({ setup: event.data });
       if (event.data.phase === "connected") void refreshStatus();
@@ -177,15 +183,25 @@ async function refreshStatus(): Promise<void> {
 export async function loadAll(quiet = false): Promise<boolean> {
   try {
     const h = host();
-    const [status, tasks, models, providers, setup] = await Promise.all([
+    const [status, tasks, models, providers, setup, agents] = await Promise.all([
       h.status(),
       h.tasks(),
       h.models(),
       h.providers(),
       h.setupState(),
+      h.agents(),
     ]);
     const first = !useApp.getState().loaded;
-    useApp.setState({ status, tasks, models, providers, setup, connected: true, loaded: true });
+    useApp.setState({
+      status,
+      tasks,
+      models,
+      providers,
+      setup,
+      agents,
+      connected: true,
+      loaded: true,
+    });
     // The first run opens by itself once, when setup is not finished. A page in the hash is a
     // preview of that page, so it does not.
     if (first && window.location.hash === "" && needsOnboarding(status, models) && !firstRunDone())
