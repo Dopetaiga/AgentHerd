@@ -359,6 +359,22 @@ export class Store {
     return this.stmtDecisionsFor.all(itemId).map(toDecisionRow);
   }
 
+  /** Newest first. */
+  recentSessions(limit = 20): SessionRow[] {
+    return this.db
+      .prepare("SELECT * FROM sessions ORDER BY updated_at DESC, rowid DESC LIMIT ?")
+      .all(limit)
+      .map(toSessionRow);
+  }
+
+  /** Newest first. */
+  recentDecisions(limit = 20): DecisionRow[] {
+    return this.db
+      .prepare("SELECT * FROM decisions ORDER BY created_at DESC, rowid DESC LIMIT ?")
+      .all(limit)
+      .map(toDecisionRow);
+  }
+
   insertRule(rule: Rule): void {
     this.stmtInsertRule.run(
       rule.id,

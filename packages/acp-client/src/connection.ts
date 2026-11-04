@@ -123,7 +123,10 @@ class Emitter {
 class StderrRing {
   private lines: string[] = [];
   private partial = "";
-  constructor(private readonly secrets: Record<string, string>) {}
+  private readonly secrets: Record<string, string>;
+  constructor(secrets: Record<string, string>) {
+    this.secrets = secrets;
+  }
   push(chunk: string): void {
     const parts = (this.partial + chunk).split("\n");
     this.partial = parts.pop() ?? "";

@@ -11,10 +11,13 @@ export class Registry {
   private readonly sessions = new Map<string, SessionRow>();
   private readonly listeners = new Set<SessionListener>();
 
-  constructor(
-    private readonly store: Store,
-    private readonly clock: Clock,
-  ) {}
+  private readonly store: Store;
+  private readonly clock: Clock;
+
+  constructor(store: Store, clock: Clock) {
+    this.store = store;
+    this.clock = clock;
+  }
 
   add(id: string, profileId: string, cwd: string): SessionRow {
     const now = this.clock.now().toISOString();

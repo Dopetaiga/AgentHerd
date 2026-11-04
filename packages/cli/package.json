@@ -1,0 +1,23 @@
+{
+  "name": "@agentherd/cli",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "agentherd": "./bin/agentherd.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p .",
+    "test": "vitest run --root ../.. packages/cli"
+  },
+  "dependencies": {
+    "@agentherd/channel-feishu": "workspace:*",
+    "@agentherd/core": "workspace:*",
+    "@agentherd/protocol": "workspace:*",
+    "@napi-rs/keyring": "^2.1.2",
+    "qrcode": "^1.5.4"
+  },
+  "devDependencies": {
+    "@types/qrcode": "^1.5.6"
+  }
+}

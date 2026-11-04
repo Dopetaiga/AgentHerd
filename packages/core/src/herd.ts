@@ -51,7 +51,10 @@ export class Herd {
   private readonly connections = new Set<AgentConnection>();
   private started = false;
 
-  constructor(private readonly opts: HerdOptions) {
+  private readonly opts: HerdOptions;
+
+  constructor(opts: HerdOptions) {
+    this.opts = opts;
     this.clock = opts.clock ?? systemClock;
     const storeOptions = opts.secrets === undefined ? {} : { secrets: opts.secrets };
     this.store = opts.store ?? Store.open(join(opts.home, "herd.db"), storeOptions);

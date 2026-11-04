@@ -27,7 +27,11 @@ export class FakeChannel implements Channel {
   private next = 1;
   private waiters: { match: (m: SentMessage) => boolean; resolve: (m: SentMessage) => void }[] = [];
 
-  constructor(private readonly ownerId = "owner") {}
+  private readonly ownerId: string;
+
+  constructor(ownerId = "owner") {
+    this.ownerId = ownerId;
+  }
 
   async setup(ui: SetupUI): Promise<ChannelBinding> {
     ui.showStatus("fake channel ready");

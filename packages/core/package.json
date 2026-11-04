@@ -17,6 +17,7 @@
   },
   "devDependencies": {
     "@agentherd/mock-agent": "workspace:*",
-    "@agentherd/channel-fake": "workspace:*"
+    "@agentherd/channel-fake": "workspace:*",
+    "@agentherd/channel-feishu": "workspace:*"
   }
 }

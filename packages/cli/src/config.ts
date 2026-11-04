@@ -1,0 +1,68 @@
+// CLI configuration: `<home>/config.json` (no secrets, mode 600) and the App Secret in the
+// macOS keychain.
+
+import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+import type { AgentProfile, ChannelBinding, Mode } from "@agentherd/protocol";
+import { Entry } from "@napi-rs/keyring";
+
+export const KEYCHAIN_SERVICE = "agentherd";
+
+export interface CliConfig {
+  channel?: ChannelBinding;
+  mode?: Mode;
+  /** Agent profiles in addition to the built-in `mock` profile. */
+  profiles?: AgentProfile[];
+}
+
+export function agentherdHome(env: NodeJS.ProcessEnv = process.env): string {
+  return env.AGENTHERD_HOME ?? join(homedir(), ".agentherd");
+}
+
+export function configPath(home: string): string {
+  return join(home, "config.json");
+}
+
+export function readConfig(home: string): CliConfig {
+  const path = configPath(home);
+  if (!existsSync(path)) return {};
+  return JSON.parse(readFileSync(path, "utf8")) as CliConfig;
+}
+
+export function writeConfig(home: string, config: CliConfig): void {
+  mkdirSync(home, { recursive: true, mode: 0o700 });
+  const path = configPath(home);
+  writeFileSync(path, `${JSON.stringify(config, null, 2)}\n`, { mode: 0o600 });
+  chmodSync(path, 0o600);
+}
+
+function keychainEntry(appId: string): Entry {
+  return new Entry(KEYCHAIN_SERVICE, `feishu:${appId}`);
+}
+
+export async function saveSecret(appId: string, secret: string): Promise<void> {
+  keychainEntry(appId).setPassword(secret);
+}
+
+export async function getSecret(appId: string): Promise<string> {
+  const secret = keychainEntry(appId).getPassword();
+  if (secret === null || secret === undefined || secret === "") {
+    throw new Error(`no App Secret for ${appId} in the keychain; run "agentherd setup feishu"`);
+  }
+  return secret;
+}
+
+const MOCK_BIN = fileURLToPath(new URL("../../mock-agent/bin/mock-agent.ts", import.meta.url));
+
+/** The built-in `mock` profile plays a YAML script. */
+export function mockProfile(script: string): AgentProfile {
+  return {
+    id: "mock",
+    name: "Mock agent",
+    command: [process.execPath, MOCK_BIN, "--script", script],
+    env: {},
+    exporter: null,
+  };
+}

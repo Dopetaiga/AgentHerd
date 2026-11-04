@@ -80,7 +80,10 @@ export class Inbox {
   private readonly queues = new Map<string, Entry[]>();
   private readonly remindMs: number;
 
-  constructor(private readonly opts: InboxOptions) {
+  private readonly opts: InboxOptions;
+
+  constructor(opts: InboxOptions) {
+    this.opts = opts;
     this.remindMs = (opts.remindMinutes ?? DEFAULT_REMIND_MINUTES) * 60_000;
   }
 

@@ -1,0 +1,10 @@
+# Used by the M1 manual run (plans/004): one command that needs the owner's approval.
+name: mock-agent
+turns:
+  - - message: "I will run the tests."
+    - tool_call:
+        { id: t1, title: "Run pnpm test", kind: execute, command: "pnpm test", status: pending }
+    - request_permission:
+        toolCall: { id: t1, title: "Run pnpm test", kind: execute, command: "pnpm test" }
+    - message: "Tests passed."
+    - end_turn: end_turn
