@@ -2,7 +2,7 @@
 
 Short mirror of [AGENTS.md](AGENTS.md). AGENTS.md wins if they differ.
 
-Policy-Sync: 2026-11-04.5
+Policy-Sync: 2026-11-04.6
 
 Non-negotiable:
 
@@ -18,6 +18,6 @@ Defaults:
 
 - Read `docs/spec/00-baseline.md`, the relevant spec pages, their ADRs, the plan, the glossary.
 - Same commit: behavior → spec; boundary → ADR; visible behavior → E2E scenario; README → README.zh-CN.
-- TypeScript strict, ESM, Node 22+, files under ~500 lines (`pnpm check` warns > 500, fails > 800), core without Electron.
+- TypeScript strict, ESM, Node 22+, files: `pnpm check` warns > 1000 lines, fails > 2000, core without Electron.
 - English everywhere in the repo; reply in the maintainer's language.
 - Conventional Commits with a "why" body. Do not claim unrun checks passed.
