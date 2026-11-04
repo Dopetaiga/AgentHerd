@@ -32,8 +32,6 @@ These defaults hold until an ADR changes them.
 1. The Herder runs on the user's machine. AgentHerd has no server of its own.
 2. When AgentHerd cannot decide, it asks the owner. It never answers "allow" because of an
    error. See [ADR 0007](../adr/0007-tiered-decisions-fail-open-to-human.md).
-10. ACP is the only runtime protocol to agents; terminal sessions get exported rules
-   ([ADR 0015](../adr/0015-acp-is-the-only-runtime-protocol.md), [ADR 0016](../adr/0016-one-rule-source-exported-to-agents.md)).
 3. A new install starts in `observe` mode. AgentHerd suggests decisions and applies none.
 4. Only the owner (the person who scanned the Feishu QR code) can approve, deny or answer.
 5. TypeScript everywhere. Node.js 22 or later. pnpm workspaces.
@@ -44,6 +42,8 @@ These defaults hold until an ADR changes them.
 9. The Herder model is chosen by the user during onboarding; no default provider. There is
    one resident Herder per project on the strongest configured model
    ([ADR 0017](../adr/0017-resident-herder-per-project.md)).
+10. ACP is the only runtime protocol to agents; terminal sessions get exported rules
+    ([ADR 0015](../adr/0015-acp-is-the-only-runtime-protocol.md), [ADR 0016](../adr/0016-one-rule-source-exported-to-agents.md)).
 
 ## Version history
 
