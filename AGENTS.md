@@ -4,7 +4,7 @@ Instructions for coding agents (and humans) who change this repo. This file is t
 `CLAUDE.md` is a short mirror; both carry the same `Policy-Sync` line. Change both in the
 same commit.
 
-Policy-Sync: 2026-11-04.3
+Policy-Sync: 2026-11-04.4
 
 ## 1. Non-negotiable
 
@@ -21,7 +21,8 @@ These rules protect the user's machine, data and trust. Never set them aside.
 6. **Do not copy code from PI-Desktop or OpenBot** (LGPL / noncommercial). See ADR 0009.
 7. **`packages/protocol` is a contract.** A change updates the spec, the ACP client, every exporter and channel,
    and the tests in the same change.
-8. **Git:** commit only; never `git push`. Commit author is `zszz3`
+8. **Git:** work on a branch, push it, open a pull request and merge it yourself; no review
+   is needed. Never commit straight to `main`. Commit author is `zszz3`
    (configured in the repo). Never use `git reset --hard`, `git push --force`, `--no-verify`.
 
 ## 2. Defaults

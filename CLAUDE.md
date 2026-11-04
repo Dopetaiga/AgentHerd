@@ -2,7 +2,7 @@
 
 Short mirror of [AGENTS.md](AGENTS.md). AGENTS.md wins if they differ.
 
-Policy-Sync: 2026-11-04.3
+Policy-Sync: 2026-11-04.4
 
 Non-negotiable:
 
@@ -12,7 +12,7 @@ Non-negotiable:
 - Agent configs change only through explicit export with backup; own block only; never widen a rule.
 - Do not copy code from PI-Desktop or OpenBot.
 - `packages/protocol` changes update spec, ACP client, exporters, channels and tests together.
-- Commit only, never push. Author `zszz3`. No `reset --hard`, force push, `--no-verify`.
+- Branch → push → open a PR → merge it yourself (no review). Never commit to `main` directly. Author `zszz3`. No `reset --hard`, force push, `--no-verify`.
 
 Defaults:
 
