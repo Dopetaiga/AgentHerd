@@ -1,12 +1,14 @@
 #!/usr/bin/env node
-// Fails when a source file is longer than MAX_LINES (AGENTS.md "Code"). Runs in `pnpm check`.
-// Long files are split by responsibility; the limit keeps that from waiting for a review.
+// Warns when a source file passes SOFT_LINES and fails when it passes MAX_LINES (AGENTS.md
+// "Code"). Runs in `pnpm check`. The numbers follow pi-desktop's guidance: modules normally stay
+// below ~500 lines and responsibilities are reconsidered around ~800.
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-export const MAX_LINES = 400;
+export const SOFT_LINES = 500;
+export const MAX_LINES = 800;
 
 export const EXTENSIONS = [".ts", ".tsx", ".mts", ".cts", ".js", ".mjs", ".cjs", ".css"];
 
@@ -57,6 +59,9 @@ function main(): number {
       }
     },
   );
+  for (const f of longFiles(files, SOFT_LINES).filter((f) => f.lines <= MAX_LINES)) {
+    console.warn(`warning: ${f.path}: ${f.lines} lines (aim for under ${SOFT_LINES})`);
+  }
   const long = longFiles(files);
   for (const f of long) console.error(`${f.path}: ${f.lines} lines (limit ${MAX_LINES})`);
   if (long.length > 0) {

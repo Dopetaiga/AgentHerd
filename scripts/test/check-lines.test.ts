@@ -27,7 +27,7 @@ describe("check-lines", () => {
         { path: "a.ts", text: text(MAX_LINES) },
         { path: "b.ts", text: text(MAX_LINES + 1) },
         { path: "c.tsx", text: text(MAX_LINES + 50) },
-        { path: "packages/herder-loop/src/big.ts", text: text(2000) },
+        { path: "packages/herder-loop/src/big.ts", text: text(MAX_LINES * 3) },
         { path: "notes.md", text: text(2000) },
       ]),
     ).toEqual([
