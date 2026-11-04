@@ -35,6 +35,30 @@ export interface HostStatus {
   profiles: string[];
 }
 
+/** Where an agent's CLI comes from. */
+export type AgentSource = "managed" | "system" | "app" | "config";
+
+export interface AgentView {
+  id: string;
+  name: string;
+  /** ready: can run tasks. missing: not found and can be downloaded or needs its app. */
+  state: "ready" | "missing" | "installing" | "unsupported";
+  source?: AgentSource;
+  path?: string;
+  /** Version the app downloads. */
+  version?: string;
+  /** Bytes, while installing. */
+  progress?: { received: number; total: number };
+  /** Last install error. */
+  error?: string;
+  /** The app can download it. */
+  canInstall: boolean;
+  /** A downloaded copy the owner can remove. */
+  canRemove: boolean;
+  /** Model passed to it ("service/model"), when it uses one from the model list. */
+  modelRef?: string;
+}
+
 export interface ItemSummary {
   id: string;
   sessionId: string;
@@ -111,6 +135,12 @@ export interface HostApi {
   updateSettings(patch: SettingsPatch): HostStatus;
   /** Connects the channel again, e.g. after a network failure. */
   reconnect(): Promise<HostStatus>;
+  agents(): AgentView[];
+  /** Starts downloading an agent's CLI; progress comes as "agents" events. */
+  installAgent(id: string): AgentView[];
+  cancelInstall(id: string): AgentView[];
+  /** Removes a downloaded CLI. */
+  removeAgent(id: string): AgentView[];
 }
 
 export type HostMethod = keyof HostApi;
@@ -130,13 +160,18 @@ export const HOST_METHODS: readonly HostMethod[] = [
   "setupState",
   "updateSettings",
   "reconnect",
+  "agents",
+  "installAgent",
+  "cancelInstall",
+  "removeAgent",
 ];
 
 export type HostEvent =
   | { topic: "status"; data: HostStatus }
   | { topic: "tasks"; data: TasksView }
   | { topic: "models"; data: ModelsView }
-  | { topic: "setup"; data: SetupState };
+  | { topic: "setup"; data: SetupState }
+  | { topic: "agents"; data: AgentView[] };
 
 /** The same API, asynchronous, as seen by a client. */
 export type RemoteHost = {

@@ -52,8 +52,9 @@ agent. DSH runs in read-only sandbox mode, so each write asks you first:
 node packages/cli/bin/agentherd.ts run --profile dsh /tmp/demo "Create out.txt containing hello"
 ```
 
-[Pi](https://github.com/earendil-works/pi) works the same way (`npm i -g
-@earendil-works/pi-coding-agent`). AgentHerd runs it behind a small ACP bridge that asks you
+[Pi](https://github.com/earendil-works/pi) works the same way. In the desktop app, open
+**Agent** and press 下载 (a pinned, hash-checked build); from a terminal you can also use `npm i -g
+@earendil-works/pi-coding-agent`. AgentHerd runs it behind a small ACP bridge that asks you
 before every tool call except reads inside the folder. Pi uses its own login, or the model you
 choose with `model use pi <service>/<model>`:
 

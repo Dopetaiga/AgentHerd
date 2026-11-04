@@ -1,11 +1,21 @@
 // The app shell: a sidebar on the window frame, and the page on a rounded card beside it.
 
-import { Bot, Boxes, ListTodo, Loader2, type LucideIcon, Settings, WifiOff } from "lucide-react";
+import {
+  Bot,
+  Boxes,
+  ListTodo,
+  Loader2,
+  type LucideIcon,
+  Settings,
+  SquareTerminal,
+  WifiOff,
+} from "lucide-react";
 import { useEffect } from "react";
 import { Logo } from "./components/Logo";
 import { SidebarStatus } from "./components/SidebarStatus";
 import { Dot, Toasts } from "./components/ui";
 import { FirstRun } from "./firstrun/FirstRun";
+import { AgentsPage } from "./pages/AgentsPage";
 import { HerdersPage } from "./pages/HerdersPage";
 import { ModelsPage } from "./pages/ModelsPage";
 import { SettingsPage } from "./pages/SettingsPage";
@@ -15,6 +25,7 @@ import { type Page, startStore, useApp } from "./store";
 const NAV: { page: Page; label: string; icon: LucideIcon }[] = [
   { page: "tasks", label: "任务", icon: ListTodo },
   { page: "herders", label: "主管", icon: Bot },
+  { page: "agents", label: "Agent", icon: SquareTerminal },
   { page: "models", label: "模型", icon: Boxes },
   { page: "settings", label: "设置", icon: Settings },
 ];
@@ -25,8 +36,9 @@ const HEADERS: Record<Page, { title: string; hint: string }> = {
     title: "主管",
     hint: "在飞书里回答你、帮你开任务、跟进进度；不会替你批准任何请求",
   },
+  agents: { title: "Agent", hint: "替你干活的编程 Agent；在飞书里用 /run 开任务" },
   models: { title: "模型", hint: "管理模型服务和 Key，选审查用的模型" },
-  settings: { title: "设置", hint: "飞书、Agent、工作模式、电源和数据目录" },
+  settings: { title: "设置", hint: "飞书、工作模式、电源和数据目录" },
 };
 
 function Sidebar() {
@@ -111,6 +123,8 @@ function CurrentPage() {
       return <TasksPage />;
     case "herders":
       return <HerdersPage />;
+    case "agents":
+      return <AgentsPage />;
     case "models":
       return <ModelsPage />;
     case "settings":

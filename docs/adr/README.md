@@ -26,3 +26,4 @@ Format and rules: [ADR 0001](0001-record-architecture-decisions.md).
 | [0020](0020-fork-pi-agent-loop-track-upstream.md) | Fork Pi's agent loop into the repo and follow its upstream; pi-ai pinned behind ModelClient | Accepted |
 | [0021](0021-model-list-then-choose-per-role.md) | The owner keeps a list of model services, then chooses a model for each role | Accepted |
 | [0022](0022-pi-through-a-bundled-acp-bridge.md) | Pi joins through a bundled ACP bridge with an approval gate | Accepted |
+| [0023](0023-app-downloads-pinned-agent-clis.md) | The app downloads pinned agent CLIs; the owner does not install them | Accepted |
