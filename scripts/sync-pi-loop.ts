@@ -13,7 +13,6 @@ export const MAPPING: ReadonlyArray<{ upstream: string; local: string }> = [
   { upstream: "packages/agent/src/", local: "src/" },
   { upstream: "packages/agent/test/", local: "test/" },
 ];
-export const SYNCED_DEPS = ["@earendil-works/pi-ai", "typebox"] as const;
 
 const BASE_LINE = /^Base: (\S+) \(([0-9a-f]{40})\)$/m;
 
@@ -93,25 +92,31 @@ export function mergeText(ours: string, base: string, theirs: string, label: str
   }
 }
 
-/** Returns the dependency versions of `deps` that differ, with the updated package.json text. */
+/**
+ * Makes the fork's `dependencies` equal to upstream's (added, changed and removed entries).
+ * The fork has no dependencies of its own; AgentHerd code lives in other packages.
+ */
 export function syncDeps(
   localPkg: string,
   upstreamPkg: string,
-): { text: string; changes: Array<{ name: string; from: string | undefined; to: string }> } {
+): {
+  text: string;
+  changes: Array<{ name: string; from: string | undefined; to: string | undefined }>;
+} {
   const local = JSON.parse(localPkg) as { dependencies?: Record<string, string> };
-  const upstream = JSON.parse(upstreamPkg) as { dependencies?: Record<string, string> };
-  const changes: Array<{ name: string; from: string | undefined; to: string }> = [];
-  local.dependencies ??= {};
-  for (const name of SYNCED_DEPS) {
-    const to = upstream.dependencies?.[name];
-    if (to === undefined) continue;
-    const from = local.dependencies[name];
-    if (from !== to) {
-      changes.push({ name, from, to });
-      local.dependencies[name] = to;
-    }
+  const target =
+    (JSON.parse(upstreamPkg) as { dependencies?: Record<string, string> }).dependencies ?? {};
+  const current = local.dependencies ?? {};
+  const changes: Array<{ name: string; from: string | undefined; to: string | undefined }> = [];
+  for (const name of [...new Set([...Object.keys(current), ...Object.keys(target)])].sort()) {
+    if (current[name] !== target[name])
+      changes.push({ name, from: current[name], to: target[name] });
   }
-  return { text: changes.length ? `${JSON.stringify(local, null, 2)}\n` : localPkg, changes };
+  if (!changes.length) return { text: localPkg, changes };
+  local.dependencies = Object.fromEntries(
+    Object.entries(target).sort(([a], [b]) => a.localeCompare(b)),
+  );
+  return { text: `${JSON.stringify(local, null, 2)}\n`, changes };
 }
 
 // ---- git access -------------------------------------------------------------------------
@@ -164,7 +169,7 @@ export interface SyncReport {
   from: { ref: string; sha: string };
   to: { ref: string; sha: string };
   files: Array<{ path: string; action: FileAction["kind"]; detail?: string }>;
-  deps: Array<{ name: string; from: string | undefined; to: string }>;
+  deps: Array<{ name: string; from: string | undefined; to: string | undefined }>;
   conflicts: number;
 }
 
@@ -244,7 +249,8 @@ function formatReport(r: SyncReport, dryRun: boolean): string {
   if (!r.files.length) lines.push("  no file changes");
   for (const f of r.files)
     lines.push(`  ${f.action.padEnd(8)} ${f.path}${f.detail ? `  — ${f.detail}` : ""}`);
-  for (const d of r.deps) lines.push(`  dep      ${d.name}: ${d.from ?? "(none)"} → ${d.to}`);
+  for (const d of r.deps)
+    lines.push(`  dep      ${d.name}: ${d.from ?? "(none)"} → ${d.to ?? "(removed)"}`);
   if (r.conflicts) {
     lines.push(`${r.conflicts} conflict(s). Resolve them, then set the Base line in UPSTREAM.md.`);
   } else if (!dryRun) {

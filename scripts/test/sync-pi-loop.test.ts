@@ -116,10 +116,16 @@ describe("pure helpers", () => {
     expect(bad.text).toContain("<<<<<<< f (local)");
   });
 
-  it("syncs pinned dependency versions only", () => {
-    const r = syncDeps(pkg("1.0.0"), pkg("2.0.0"));
-    expect(r.changes).toEqual([{ name: "@earendil-works/pi-ai", from: "1.0.0", to: "2.0.0" }]);
-    expect(JSON.parse(r.text).dependencies["@earendil-works/pi-ai"]).toBe("2.0.0");
+  it("mirrors upstream dependencies: changed, added and removed", () => {
+    const local = `${JSON.stringify({ name: "x", dependencies: { a: "1", gone: "1" } }, null, 2)}\n`;
+    const up = JSON.stringify({ dependencies: { a: "2", added: "1" } });
+    const r = syncDeps(local, up);
+    expect(r.changes).toEqual([
+      { name: "a", from: "1", to: "2" },
+      { name: "added", from: undefined, to: "1" },
+      { name: "gone", from: "1", to: undefined },
+    ]);
+    expect(JSON.parse(r.text).dependencies).toEqual({ a: "2", added: "1" });
     expect(syncDeps(pkg("1.0.0"), pkg("1.0.0")).changes).toEqual([]);
   });
 });
