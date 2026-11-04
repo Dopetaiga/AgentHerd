@@ -4,9 +4,10 @@
 
 import { ChevronLeft, Loader2 } from "lucide-react";
 import { useState } from "react";
+import { Modal } from "./Modal";
 import { useServiceDraft } from "./ServiceDraft";
 import { ServiceChooser, ServiceForm } from "./ServiceForm";
-import { Button, Modal } from "./ui";
+import { Button } from "./ui";
 
 export function AddServiceDialog({
   onClose,

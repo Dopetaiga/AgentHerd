@@ -1,188 +1,26 @@
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
-import type { SQLOutputValue, StatementSync } from "node:sqlite";
+import type { StatementSync } from "node:sqlite";
 import { DatabaseSync } from "node:sqlite";
-import type {
-  Decision,
-  Item,
-  MessageRef,
-  Risk,
-  Rule,
-  RuleMatch,
-  SessionState,
-  ToolCallInfo,
-} from "@agentherd/protocol";
+import type { Decision, Item, MessageRef, Rule } from "@agentherd/protocol";
 import { redact } from "@agentherd/rules";
+import {
+  type AuditRow,
+  type DecisionRow,
+  type SessionRow,
+  type StoredItem,
+  toAuditRow,
+  toDecisionRow,
+  toRule,
+  toSessionRow,
+  toStoredItem,
+} from "./store-rows.ts";
+import { LATEST_SCHEMA_VERSION, SCHEMA_SQL, STATE_TABLE_SQL } from "./store-schema.ts";
 
-export interface SessionRow {
-  id: string;
-  profileId: string;
-  cwd: string;
-  state: SessionState;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface StoredItem extends Item {
-  decidedAt?: string;
-  messageRef?: MessageRef;
-}
-
-export interface DecisionRow extends Decision {
-  ruleId?: string;
-  ownerId?: string;
-  createdAt: string;
-}
-
-export interface AuditRow {
-  id: number;
-  at: string;
-  kind: string;
-  data: Record<string, unknown>;
-}
+export type { AuditRow, DecisionRow, SessionRow, StoredItem } from "./store-rows.ts";
 
 export interface StoreOptions {
   secrets?: Record<string, string>;
-}
-
-// Added in schema version 2 so databases created before plan 008 get the table too.
-const STATE_TABLE_SQL = `CREATE TABLE IF NOT EXISTS state(
-  key TEXT PRIMARY KEY,
-  value_json TEXT NOT NULL,
-  updated_at TEXT NOT NULL
-);`;
-
-const LATEST_SCHEMA_VERSION = 2;
-
-const SCHEMA_SQL = `
-CREATE TABLE sessions(
-  id TEXT PRIMARY KEY,
-  profile_id TEXT NOT NULL,
-  cwd TEXT NOT NULL,
-  state TEXT NOT NULL,
-  created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL
-);
-CREATE TABLE items(
-  id TEXT PRIMARY KEY,
-  session_id TEXT NOT NULL,
-  profile_id TEXT NOT NULL,
-  cwd TEXT NOT NULL,
-  kind TEXT NOT NULL,
-  state TEXT NOT NULL,
-  tool_call_json TEXT,
-  title TEXT NOT NULL,
-  body TEXT NOT NULL,
-  risk TEXT NOT NULL,
-  created_at TEXT NOT NULL,
-  decided_at TEXT,
-  message_ref_json TEXT
-);
-CREATE TABLE decisions(
-  item_id TEXT NOT NULL,
-  action TEXT NOT NULL,
-  text TEXT,
-  source TEXT NOT NULL,
-  reason TEXT NOT NULL,
-  confidence REAL NOT NULL,
-  risk TEXT NOT NULL,
-  rule_id TEXT,
-  owner_id TEXT,
-  precedents_json TEXT NOT NULL,
-  created_at TEXT NOT NULL
-);
-CREATE TABLE rules(
-  id TEXT PRIMARY KEY,
-  action TEXT NOT NULL,
-  match_json TEXT NOT NULL,
-  created_by TEXT NOT NULL,
-  created_at TEXT NOT NULL
-);
-CREATE TABLE audit(
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  at TEXT NOT NULL,
-  kind TEXT NOT NULL,
-  data_json TEXT NOT NULL
-);
-${STATE_TABLE_SQL}
-`;
-
-function toSessionRow(row: Record<string, SQLOutputValue>): SessionRow {
-  return {
-    id: row.id as string,
-    profileId: row.profile_id as string,
-    cwd: row.cwd as string,
-    state: row.state as SessionState,
-    createdAt: row.created_at as string,
-    updatedAt: row.updated_at as string,
-  };
-}
-
-function toStoredItem(row: Record<string, SQLOutputValue>): StoredItem {
-  const item: StoredItem = {
-    id: row.id as string,
-    sessionId: row.session_id as string,
-    profileId: row.profile_id as string,
-    cwd: row.cwd as string,
-    kind: row.kind as Item["kind"],
-    state: row.state as Item["state"],
-    createdAt: row.created_at as string,
-    title: row.title as string,
-    body: row.body as string,
-    risk: row.risk as Risk,
-  };
-  if (row.tool_call_json !== null) {
-    item.toolCall = JSON.parse(row.tool_call_json as string) as ToolCallInfo;
-  }
-  if (row.decided_at !== null) {
-    item.decidedAt = row.decided_at as string;
-  }
-  if (row.message_ref_json !== null) {
-    item.messageRef = JSON.parse(row.message_ref_json as string) as MessageRef;
-  }
-  return item;
-}
-
-function toDecisionRow(row: Record<string, SQLOutputValue>): DecisionRow {
-  const decision: DecisionRow = {
-    itemId: row.item_id as string,
-    action: row.action as Decision["action"],
-    confidence: row.confidence as number,
-    risk: row.risk as Risk,
-    source: row.source as Decision["source"],
-    reason: row.reason as string,
-    precedents: JSON.parse(row.precedents_json as string) as string[],
-    createdAt: row.created_at as string,
-  };
-  if (row.text !== null) {
-    decision.text = row.text as string;
-  }
-  if (row.rule_id !== null) {
-    decision.ruleId = row.rule_id as string;
-  }
-  if (row.owner_id !== null) {
-    decision.ownerId = row.owner_id as string;
-  }
-  return decision;
-}
-
-function toRule(row: Record<string, SQLOutputValue>): Rule {
-  return {
-    id: row.id as string,
-    action: row.action as Rule["action"],
-    match: JSON.parse(row.match_json as string) as RuleMatch,
-    createdAt: row.created_at as string,
-    createdBy: row.created_by as Rule["createdBy"],
-  };
-}
-
-function toAuditRow(row: Record<string, SQLOutputValue>): AuditRow {
-  return {
-    id: row.id as number,
-    at: row.at as string,
-    kind: row.kind as string,
-    data: JSON.parse(row.data_json as string) as Record<string, unknown>,
-  };
 }
 
 export class Store {
