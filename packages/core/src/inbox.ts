@@ -30,6 +30,7 @@ interface Entry {
   item: Item;
   target: Answerable;
   reason: string;
+  taskLabel?: string;
   ref?: MessageRef;
   reminder?: Timer;
   closing: boolean;
@@ -86,6 +87,12 @@ export function itemView(item: Item, reason: string, secrets?: Record<string, st
   };
 }
 
+function entryView(entry: Entry, secrets?: Record<string, string>): ItemView {
+  const view = itemView(entry.item, entry.reason, secrets);
+  if (entry.taskLabel !== undefined) view.taskLabel = entry.taskLabel;
+  return view;
+}
+
 export class Inbox {
   private readonly queues = new Map<string, Entry[]>();
   private readonly remindMs: number;
@@ -104,10 +111,12 @@ export class Inbox {
     return n;
   }
 
-  async add(item: Item, target: Answerable, reason: string): Promise<void> {
+  /** Adds an item. `taskLabel` names the task on the card. */
+  async add(item: Item, target: Answerable, reason: string, taskLabel?: string): Promise<void> {
     const queue = this.queues.get(item.sessionId) ?? [];
     this.queues.set(item.sessionId, queue);
     const entry: Entry = { item, target, reason, closing: false };
+    if (taskLabel !== undefined) entry.taskLabel = taskLabel;
     queue.push(entry);
     if (queue.length === 1) await this.show(entry);
   }
@@ -166,7 +175,7 @@ export class Inbox {
 
   private async show(entry: Entry): Promise<void> {
     const { channel, store, secrets } = this.opts;
-    const ref = await channel.send(itemView(entry.item, entry.reason, secrets));
+    const ref = await channel.send(entryView(entry, secrets));
     entry.ref = ref;
     store.updateItem(entry.item.id, { messageRef: ref });
     store.audit("item.sent", { itemId: entry.item.id });
@@ -216,7 +225,7 @@ export class Inbox {
     store.updateItem(entry.item.id, { state, decidedAt: clock.now().toISOString() });
     store.audit(`item.${state}`, { itemId: entry.item.id, final });
     if (entry.ref !== undefined) {
-      const view: ItemView = { ...itemView(entry.item, entry.reason, secrets), options: [], final };
+      const view: ItemView = { ...entryView(entry, secrets), options: [], final };
       try {
         await channel.update(entry.ref, view);
       } catch (error) {

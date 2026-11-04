@@ -19,6 +19,6 @@ States: `TODO`, `IN PROGRESS`, `DONE`, `BLOCKED: <reason>`, `REJECTED: <reason>`
 | [004](004-feishu-channel-and-cli.md) | The owner approves a mock agent's request from a real Feishu card, started from a CLI | M1 | M | 003 | DONE |
 | [005](005-herder-loop-fork-and-sync.md) | Pi's agent loop lives in packages/herder-loop and one upstream sync has been done with the sync script | M2 | M | ADR 0020 | DONE |
 | [006](006-dsh-session-through-acp.md) | A DSH session runs through ACP and its permission requests reach the owner (Q07) | M2 | M | 004 | DONE |
-| 007 | Tasks have stages, a watchdog, a pinned board and completion reports | M2 | L | 006 | TODO (plan not written) |
+| [007](007-stages-watchdog-board-reports.md) | Tasks have stages, a watchdog, a pinned board and completion reports | M2 | L | 006 | DONE |
 | 008 | The Herder starts tasks from chat, relays, and never approves | M2 | L | 005, 007 | TODO (plan not written) |
 | 009 | The desktop app does onboarding and shows sessions and the read-only inbox | M2 | L | 008 | TODO (plan not written) |

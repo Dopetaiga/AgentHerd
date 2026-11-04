@@ -1,4 +1,4 @@
-import type { ItemOption, Risk, TextView, View } from "@agentherd/protocol";
+import type { ItemOption, Risk, Stage, TextView, View } from "@agentherd/protocol";
 
 /** Feishu card header template color for an item's risk level. */
 function riskTemplate(risk: Risk): string {
@@ -78,6 +78,62 @@ function makeCard(
   return card;
 }
 
+/** Feishu option color for a board row's stage. */
+function stageColor(stage: Stage): string {
+  switch (stage) {
+    case "queued":
+      return "neutral";
+    case "working":
+      return "blue";
+    case "needs-owner":
+      return "orange";
+    case "stuck":
+      return "red";
+    case "done":
+      return "green";
+    case "failed":
+      return "red";
+  }
+}
+
+/** Local-time HH:MM from an ISO timestamp, zero-padded. */
+function clock(iso: string): string {
+  const date = new Date(iso);
+  const hours = String(date.getHours()).padStart(2, "0");
+  const minutes = String(date.getMinutes()).padStart(2, "0");
+  return `${hours}:${minutes}`;
+}
+
+/** Header template color for a report title. */
+function reportTemplate(title: string): string {
+  if (title.startsWith("Failed")) return "red";
+  if (title.startsWith("Blocked")) return "orange";
+  return "green";
+}
+
+/** Maximum body length shown before a report body is folded. */
+export const FOLD_CHARS = 600;
+
+/** Shorten a long body, cutting at the last newline after position 200 when possible. */
+function foldBody(body: string): string {
+  const prefix = body.slice(0, FOLD_CHARS);
+  const lastNewline = prefix.lastIndexOf("\n");
+  if (lastNewline > 200) {
+    return body.slice(0, lastNewline);
+  }
+  return prefix;
+}
+
+/** A folded panel (e.g. "Show all") wrapping a markdown element. */
+function collapsiblePanel(title: string, content: string): Record<string, unknown> {
+  return {
+    tag: "collapsible_panel",
+    expanded: false,
+    header: { title: markdown(title) },
+    elements: [markdown(content)],
+  };
+}
+
 /** Render a channel-neutral view as Feishu Card JSON 2.0. */
 export function renderCard(view: View): Record<string, unknown> {
   switch (view.kind) {
@@ -120,17 +176,69 @@ export function renderCard(view: View): Record<string, unknown> {
       return makeCard(undefined, elements);
     }
     case "board": {
-      const lines = view.rows.map((row) => `${row.task} — ${row.stage} — ${row.lastReport}`);
-      return makeCard(undefined, [markdown(lines.join("\n"))]);
+      const header = { title: { tag: "plain_text", content: "Tasks" }, template: "blue" };
+      if (view.rows.length === 0) {
+        return makeCard(header, [markdown("No tasks yet.")]);
+      }
+      const table: Record<string, unknown> = {
+        tag: "table",
+        page_size: Math.min(10, view.rows.length),
+        row_height: "low",
+        freeze_first_column: true,
+        header_style: {
+          text_align: "left",
+          text_size: "normal",
+          background_style: "grey",
+          text_color: "default",
+          bold: true,
+          lines: 1,
+        },
+        columns: [
+          { name: "task", display_name: "Task", data_type: "text", width: "auto" },
+          { name: "stage", display_name: "Stage", data_type: "options", width: "120px" },
+          { name: "project", display_name: "Project", data_type: "text", width: "auto" },
+          { name: "agent", display_name: "Agent", data_type: "text", width: "100px" },
+          { name: "report", display_name: "Last report", data_type: "lark_md", width: "auto" },
+          { name: "updated", display_name: "Updated", data_type: "text", width: "90px" },
+        ],
+        rows: view.rows.map((row) => ({
+          task: row.task,
+          stage: [{ text: row.stage, color: stageColor(row.stage) }],
+          project: row.project,
+          agent: row.agent,
+          report: row.lastReport,
+          updated: clock(row.updatedAt),
+        })),
+      };
+      return makeCard(header, [table]);
     }
     case "report": {
-      const elements: Record<string, unknown>[] = [markdown(view.body)];
+      const elements: Record<string, unknown>[] = [];
+      if (view.body.length <= FOLD_CHARS) {
+        elements.push(markdown(view.body));
+      } else {
+        elements.push(markdown(`${foldBody(view.body)}…`));
+        elements.push(collapsiblePanel("Show all", view.body));
+      }
+      if (view.summarized && view.fullReply !== undefined) {
+        elements.push(collapsiblePanel("Full reply", view.fullReply));
+      }
       if (view.automaticDecisions.length > 0) {
         elements.push(
-          markdown(view.automaticDecisions.map((decision) => `- ${decision}`).join("\n")),
+          markdown(
+            `**Automatic decisions**\n${view.automaticDecisions
+              .map((decision) => `- ${decision}`)
+              .join("\n")}`,
+          ),
         );
       }
-      return makeCard({ title: { tag: "plain_text", content: view.title } }, elements);
+      return makeCard(
+        {
+          title: { tag: "plain_text", content: view.title },
+          template: reportTemplate(view.title),
+        },
+        elements,
+      );
     }
     case "relay": {
       const content = view.active ? `Now talking to ${view.taskLabel}` : "Back to the Herder";
