@@ -45,6 +45,15 @@ export interface StoreOptions {
   secrets?: Record<string, string>;
 }
 
+// Added in schema version 2 so databases created before plan 008 get the table too.
+const STATE_TABLE_SQL = `CREATE TABLE IF NOT EXISTS state(
+  key TEXT PRIMARY KEY,
+  value_json TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);`;
+
+const LATEST_SCHEMA_VERSION = 2;
+
 const SCHEMA_SQL = `
 CREATE TABLE sessions(
   id TEXT PRIMARY KEY,
@@ -95,6 +104,7 @@ CREATE TABLE audit(
   kind TEXT NOT NULL,
   data_json TEXT NOT NULL
 );
+${STATE_TABLE_SQL}
 `;
 
 function toSessionRow(row: Record<string, SQLOutputValue>): SessionRow {
@@ -192,6 +202,9 @@ export class Store {
   private readonly stmtInsertAudit: StatementSync;
   private readonly stmtAuditRows: StatementSync;
   private readonly stmtAuditRowsByKind: StatementSync;
+  private readonly stmtGetState: StatementSync;
+  private readonly stmtSetState: StatementSync;
+  private readonly stmtDeleteState: StatementSync;
 
   private constructor(path: string, options?: StoreOptions) {
     if (path !== ":memory:") {
@@ -204,10 +217,17 @@ export class Store {
     const versionRow = this.db.prepare("SELECT version FROM schema_version LIMIT 1").get();
     if (versionRow === undefined) {
       this.db.exec(SCHEMA_SQL);
-      this.db.prepare("INSERT INTO schema_version(version) VALUES (?)").run(1);
-    } else if (versionRow.version !== 1) {
-      this.db.close();
-      throw new Error(`unsupported herd.db schema version ${versionRow.version}`);
+      this.db.prepare("INSERT INTO schema_version(version) VALUES (?)").run(LATEST_SCHEMA_VERSION);
+    } else {
+      const version = versionRow.version as number;
+      if (version < 1 || version > LATEST_SCHEMA_VERSION) {
+        this.db.close();
+        throw new Error(`unsupported herd.db schema version ${version}`);
+      }
+      if (version < 2) {
+        this.db.exec(STATE_TABLE_SQL);
+        this.db.prepare("UPDATE schema_version SET version = ?").run(2);
+      }
     }
 
     if (path !== ":memory:") {
@@ -249,6 +269,11 @@ export class Store {
     this.stmtAuditRowsByKind = this.db.prepare(
       "SELECT id, at, kind, data_json FROM audit WHERE kind = ? ORDER BY id",
     );
+    this.stmtGetState = this.db.prepare("SELECT value_json FROM state WHERE key = ?");
+    this.stmtSetState = this.db.prepare(
+      "INSERT OR REPLACE INTO state(key, value_json, updated_at) VALUES (?, ?, ?)",
+    );
+    this.stmtDeleteState = this.db.prepare("DELETE FROM state WHERE key = ?");
   }
 
   static open(path: string, options?: StoreOptions): Store {
@@ -405,5 +430,18 @@ export class Store {
   auditRows(kind?: string): AuditRow[] {
     const rows = kind === undefined ? this.stmtAuditRows.all() : this.stmtAuditRowsByKind.all(kind);
     return rows.map(toAuditRow);
+  }
+
+  getState<T>(key: string): T | undefined {
+    const row = this.stmtGetState.get(key);
+    return row === undefined ? undefined : (JSON.parse(row.value_json as string) as T);
+  }
+
+  setState(key: string, value: unknown, at?: Date): void {
+    this.stmtSetState.run(key, JSON.stringify(value), (at ?? new Date()).toISOString());
+  }
+
+  deleteState(key: string): void {
+    this.stmtDeleteState.run(key);
   }
 }

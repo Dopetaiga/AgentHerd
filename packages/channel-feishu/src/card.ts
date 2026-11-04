@@ -59,6 +59,27 @@ function itemButton(itemId: string, option: ItemOption): Record<string, unknown>
   };
 }
 
+/** A one-button row for a relay/end-relay action with a {target, action} value. */
+function actionRow(target: string, action: string, label: string): Record<string, unknown> {
+  return {
+    tag: "column_set",
+    columns: [
+      {
+        tag: "column",
+        width: "auto",
+        elements: [
+          {
+            tag: "button",
+            text: { tag: "plain_text", content: label },
+            type: "default",
+            behaviors: [{ type: "callback", value: { target, action } }],
+          },
+        ],
+      },
+    ],
+  };
+}
+
 function markdown(content: string): Record<string, unknown> {
   return { tag: "markdown", content };
 }
@@ -172,7 +193,12 @@ export function renderCard(view: View): Record<string, unknown> {
       if (view.taskLabel !== undefined) {
         elements.push(markdown(`**${view.taskLabel}**`));
       }
-      elements.push(markdown(view.text));
+      if (view.text.length <= FOLD_CHARS) {
+        elements.push(markdown(view.text));
+      } else {
+        elements.push(markdown(`${foldBody(view.text)}…`));
+        elements.push(collapsiblePanel("Show all", view.text));
+      }
       return makeCard(undefined, elements);
     }
     case "board": {
@@ -232,6 +258,7 @@ export function renderCard(view: View): Record<string, unknown> {
           ),
         );
       }
+      elements.push(actionRow(view.taskId, "relay", "Relay to this task"));
       return makeCard(
         {
           title: { tag: "plain_text", content: view.title },
@@ -241,8 +268,18 @@ export function renderCard(view: View): Record<string, unknown> {
       );
     }
     case "relay": {
-      const content = view.active ? `Now talking to ${view.taskLabel}` : "Back to the Herder";
-      return makeCard(undefined, [markdown(content)]);
+      const elements: Record<string, unknown>[] = [];
+      if (view.active) {
+        elements.push(
+          markdown(
+            `Now talking to **${view.taskLabel}**. Plain messages go to this task. /end to stop.`,
+          ),
+        );
+        elements.push(actionRow(view.taskId, "end-relay", "End relay"));
+      } else {
+        elements.push(markdown("Back to the Herder"));
+      }
+      return makeCard(undefined, elements);
     }
   }
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DSH_APP_BIN, findDsh, resolveProfile } from "../src/profiles.ts";
+import { availableProfiles, DSH_APP_BIN, findDsh, resolveProfile } from "../src/profiles.ts";
 
 describe("findDsh", () => {
   const has =
@@ -46,5 +46,27 @@ describe("resolveProfile", () => {
   });
   it("lists known profiles for an unknown id", () => {
     expect(() => resolveProfile("nope", { configured: [] })).toThrow(/known: mock, dsh/);
+  });
+});
+
+describe("availableProfiles", () => {
+  it("lists configured profiles, then dsh when installed, then mock with a script", () => {
+    const custom = { id: "x", name: "X", command: ["x"], env: {}, exporter: null };
+    const ids = availableProfiles({
+      configured: [custom],
+      script: "/s.yaml",
+      findDsh: () => "/bin/dsh",
+    }).map((p) => p.id);
+    expect(ids).toEqual(["x", "dsh", "mock"]);
+  });
+
+  it("skips dsh when not installed and mock without a script", () => {
+    expect(availableProfiles({ configured: [], findDsh: () => undefined })).toEqual([]);
+  });
+
+  it("a configured dsh profile wins over the built-in one", () => {
+    const mine = { id: "dsh", name: "My DSH", command: ["d"], env: {}, exporter: null };
+    const list = availableProfiles({ configured: [mine], findDsh: () => "/bin/dsh" });
+    expect(list).toEqual([mine]);
   });
 });

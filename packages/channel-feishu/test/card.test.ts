@@ -8,6 +8,7 @@ import type {
 } from "@agentherd/protocol";
 import { describe, expect, it } from "vitest";
 import { FOLD_CHARS, renderCard, renderText } from "../src/card.ts";
+import { parseCardAction } from "../src/inbound.ts";
 
 const allowDenyItem: ItemView = {
   kind: "item",
@@ -130,6 +131,36 @@ function makeReport(overrides: Partial<ReportView> = {}): ReportView {
     automaticDecisions: [],
     ...overrides,
   };
+}
+
+function buttonRow(label: string, target: string, action: string): Record<string, unknown> {
+  return {
+    tag: "column_set",
+    columns: [
+      {
+        tag: "column",
+        width: "auto",
+        elements: [
+          {
+            tag: "button",
+            text: { tag: "plain_text", content: label },
+            type: "default",
+            behaviors: [{ type: "callback", value: { target, action } }],
+          },
+        ],
+      },
+    ],
+  };
+}
+
+/** Pull the {target, action} callback value out of a one-button row. */
+function buttonValue(row: Record<string, unknown>): Record<string, unknown> {
+  const columns = row.columns as Record<string, unknown>[];
+  const column = must(columns[0]);
+  const elements = column.elements as Record<string, unknown>[];
+  const button = must(elements[0]);
+  const behaviors = button.behaviors as Record<string, unknown>[];
+  return must(behaviors[0]).value as Record<string, unknown>;
 }
 
 describe("renderCard board", () => {
@@ -272,16 +303,17 @@ describe("renderCard report", () => {
     });
   });
 
-  it("shows a short body as a single markdown element", () => {
+  it("shows a short body as a single markdown element plus the relay button row", () => {
     expect(bodyElements(renderCard(makeReport({ body: "hello" })))).toEqual([
       { tag: "markdown", content: "hello" },
+      buttonRow("Relay to this task", "r1", "relay"),
     ]);
   });
 
   it("folds a long body with no newline and adds a Show all panel", () => {
     const body = "x".repeat(FOLD_CHARS + 50);
     const elements = bodyElements(renderCard(makeReport({ body })));
-    expect(elements).toHaveLength(2);
+    expect(elements).toHaveLength(3);
     expect(elements[0]).toEqual({ tag: "markdown", content: `${"x".repeat(FOLD_CHARS)}…` });
     expect(elements[1]).toEqual({
       tag: "collapsible_panel",
@@ -289,6 +321,7 @@ describe("renderCard report", () => {
       header: { title: { tag: "markdown", content: "Show all" } },
       elements: [{ tag: "markdown", content: body }],
     });
+    expect(elements[2]).toEqual(buttonRow("Relay to this task", "r1", "relay"));
   });
 
   it("cuts at the last newline after position 200", () => {
@@ -310,18 +343,20 @@ describe("renderCard report", () => {
     const elements = bodyElements(
       renderCard(makeReport({ summarized: true, fullReply: "the whole reply" })),
     );
-    expect(elements).toHaveLength(2);
+    expect(elements).toHaveLength(3);
     expect(elements[1]).toEqual({
       tag: "collapsible_panel",
       expanded: false,
       header: { title: { tag: "markdown", content: "Full reply" } },
       elements: [{ tag: "markdown", content: "the whole reply" }],
     });
+    expect(elements[2]).toEqual(buttonRow("Relay to this task", "r1", "relay"));
   });
 
   it("omits the Full reply panel when not summarized", () => {
     expect(bodyElements(renderCard(makeReport({ fullReply: "the whole reply" })))).toEqual([
       { tag: "markdown", content: "short body" },
+      buttonRow("Relay to this task", "r1", "relay"),
     ]);
   });
 
@@ -329,16 +364,100 @@ describe("renderCard report", () => {
     const elements = bodyElements(
       renderCard(makeReport({ automaticDecisions: ["Allow lint", "Deny deploy"] })),
     );
-    expect(elements).toHaveLength(2);
+    expect(elements).toHaveLength(3);
     expect(elements[1]).toEqual({
       tag: "markdown",
       content: "**Automatic decisions**\n- Allow lint\n- Deny deploy",
     });
+    expect(elements[2]).toEqual(buttonRow("Relay to this task", "r1", "relay"));
   });
 
   it("omits the decisions block when empty", () => {
     expect(bodyElements(renderCard(makeReport({ automaticDecisions: [] })))).toEqual([
       { tag: "markdown", content: "short body" },
+      buttonRow("Relay to this task", "r1", "relay"),
+    ]);
+  });
+
+  it("round-trips the Relay to this task button through parseCardAction", () => {
+    const elements = bodyElements(renderCard(makeReport()));
+    const value = buttonValue(must(elements[elements.length - 1]));
+    expect(value).toEqual({ target: "r1", action: "relay" });
+
+    const payload = {
+      event: {
+        operator: { open_id: "ou_owner000" },
+        action: { value },
+      },
+    };
+    expect(parseCardAction(payload)).toEqual({
+      kind: "action",
+      target: "r1",
+      action: "relay",
+      from: "ou_owner000",
+    });
+  });
+});
+
+describe("renderCard relay", () => {
+  it("shows the talking content and an End relay button when active", () => {
+    const elements = bodyElements(
+      renderCard({ kind: "relay", taskId: "t1", taskLabel: "Build", active: true }),
+    );
+    expect(elements).toHaveLength(2);
+    expect(elements[0]).toEqual({
+      tag: "markdown",
+      content: "Now talking to **Build**. Plain messages go to this task. /end to stop.",
+    });
+    expect(elements[1]).toEqual(buttonRow("End relay", "t1", "end-relay"));
+  });
+
+  it("shows Back to the Herder with no button when inactive", () => {
+    expect(
+      bodyElements(renderCard({ kind: "relay", taskId: "t1", taskLabel: "Build", active: false })),
+    ).toEqual([{ tag: "markdown", content: "Back to the Herder" }]);
+  });
+
+  it("round-trips the End relay button through parseCardAction", () => {
+    const elements = bodyElements(
+      renderCard({ kind: "relay", taskId: "t1", taskLabel: "Build", active: true }),
+    );
+    const value = buttonValue(must(elements[1]));
+    expect(value).toEqual({ target: "t1", action: "end-relay" });
+
+    const payload = {
+      event: {
+        operator: { open_id: "ou_owner000" },
+        action: { value },
+      },
+    };
+    expect(parseCardAction(payload)).toEqual({
+      kind: "action",
+      target: "t1",
+      action: "end-relay",
+      from: "ou_owner000",
+    });
+  });
+});
+
+describe("renderCard text folding", () => {
+  it("shows a long text folded with a Show all panel", () => {
+    const text = "x".repeat(FOLD_CHARS + 30);
+    const elements = bodyElements(renderCard({ kind: "text", text }));
+    expect(elements).toHaveLength(2);
+    expect(elements[0]).toEqual({ tag: "markdown", content: `${"x".repeat(FOLD_CHARS)}…` });
+    expect(elements[1]).toEqual({
+      tag: "collapsible_panel",
+      expanded: false,
+      header: { title: { tag: "markdown", content: "Show all" } },
+      elements: [{ tag: "markdown", content: text }],
+    });
+  });
+
+  it("keeps a text at or under FOLD_CHARS as a single markdown element", () => {
+    const text = "x".repeat(FOLD_CHARS);
+    expect(bodyElements(renderCard({ kind: "text", text }))).toEqual([
+      { tag: "markdown", content: text },
     ]);
   });
 });

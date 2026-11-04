@@ -272,9 +272,74 @@ describe("Store (file-backed)", () => {
     first.close();
 
     const raw = new DatabaseSync(dbPath);
-    raw.exec("UPDATE schema_version SET version = 2");
+    raw.exec("UPDATE schema_version SET version = 3");
     raw.close();
 
-    expect(() => Store.open(dbPath)).toThrow("unsupported herd.db schema version 2");
+    expect(() => Store.open(dbPath)).toThrow("unsupported herd.db schema version 3");
+  });
+});
+
+describe("Store (state)", () => {
+  it("round-trips a value and returns undefined for a missing key", () => {
+    const store = Store.open(":memory:");
+    store.setState("mode", "relay");
+    expect(store.getState<string>("mode")).toBe("relay");
+    expect(store.getState("missing")).toBeUndefined();
+  });
+
+  it("overwrites an existing key", () => {
+    const store = Store.open(":memory:");
+    store.setState("count", 1);
+    store.setState("count", 2);
+    expect(store.getState<number>("count")).toBe(2);
+  });
+
+  it("deletes a key", () => {
+    const store = Store.open(":memory:");
+    store.setState("token", "abc");
+    expect(store.getState("token")).toBe("abc");
+    store.deleteState("token");
+    expect(store.getState("token")).toBeUndefined();
+  });
+
+  it("round-trips a structured value through JSON", () => {
+    const store = Store.open(":memory:");
+    const value = { taskId: "task-1", startedAt: "2026-11-04T00:00:00.000Z" };
+    store.setState("relay", value);
+    expect(store.getState<typeof value>("relay")).toEqual(value);
+  });
+
+  it("keeps a value across a close and reopen of the same file", () => {
+    const dir = mkdtempSync(join(tmpdir(), "agentherd-core-"));
+    const dbPath = join(dir, "herd.db");
+
+    const first = Store.open(dbPath);
+    first.setState("relay", { taskId: "task-1", startedAt: NOW });
+    first.close();
+
+    const reopened = Store.open(dbPath);
+    expect(reopened.getState<{ taskId: string; startedAt: string }>("relay")).toEqual({
+      taskId: "task-1",
+      startedAt: NOW,
+    });
+    reopened.close();
+  });
+
+  it("migrates a version-1 database to version 2 and adds the state table", () => {
+    const dir = mkdtempSync(join(tmpdir(), "agentherd-core-"));
+    const dbPath = join(dir, "herd.db");
+
+    const first = Store.open(dbPath);
+    first.close();
+
+    const raw = new DatabaseSync(dbPath);
+    raw.exec("DROP TABLE state");
+    raw.exec("UPDATE schema_version SET version = 1");
+    raw.close();
+
+    const migrated = Store.open(dbPath);
+    migrated.setState("relay", { taskId: "task-1" });
+    expect(migrated.getState<{ taskId: string }>("relay")).toEqual({ taskId: "task-1" });
+    migrated.close();
   });
 });

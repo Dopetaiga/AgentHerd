@@ -2,6 +2,8 @@ export type { BoardOptions } from "./board.ts";
 export { BOARD_DEBOUNCE_MS, BOARD_MAX_ROWS, Board, boardView } from "./board.ts";
 export type { Clock, Timer } from "./clock.ts";
 export { FakeClock, systemClock } from "./clock.ts";
+export type { Command } from "./commands.ts";
+export { HELP_TEXT, parseCommand } from "./commands.ts";
 export type { HerdOptions, RunResult } from "./herd.ts";
 export { Herd } from "./herd.ts";
 export type { Answerable, InboxOptions, OwnerAnswer } from "./inbox.ts";

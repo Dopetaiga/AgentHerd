@@ -86,3 +86,16 @@ export function resolveProfile(id: string, opts: ResolveOptions): AgentProfile {
   const known = ["mock", "dsh", ...opts.configured.map((p) => p.id)].join(", ");
   throw new Error(`unknown profile "${id}" (known: ${known})`);
 }
+
+/**
+ * Profiles for `agentherd start`: config.json profiles, then `dsh` when installed, then `mock`
+ * when a script is given. A configured profile with the same id wins.
+ */
+export function availableProfiles(opts: ResolveOptions): AgentProfile[] {
+  const profiles = [...opts.configured];
+  const has = (id: string) => profiles.some((p) => p.id === id);
+  const bin = (opts.findDsh ?? findDsh)();
+  if (!has("dsh") && bin !== undefined) profiles.push(dshProfile(bin));
+  if (!has("mock") && opts.script !== undefined) profiles.push(mockProfile(opts.script));
+  return profiles;
+}

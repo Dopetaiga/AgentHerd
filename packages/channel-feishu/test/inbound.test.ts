@@ -38,6 +38,36 @@ describe("parseCardAction", () => {
     });
   });
 
+  it("parses a relay action", () => {
+    const payload = {
+      event: {
+        operator: { open_id: "ou_owner000" },
+        action: { value: { target: "r1", action: "relay" } },
+      },
+    };
+    expect(parseCardAction(payload)).toEqual({
+      kind: "action",
+      target: "r1",
+      action: "relay",
+      from: "ou_owner000",
+    });
+  });
+
+  it("parses an end-relay action", () => {
+    const payload = {
+      event: {
+        operator: { open_id: "ou_owner000" },
+        action: { value: { target: "t1", action: "end-relay" } },
+      },
+    };
+    expect(parseCardAction(payload)).toEqual({
+      kind: "action",
+      target: "t1",
+      action: "end-relay",
+      from: "ou_owner000",
+    });
+  });
+
   it("returns null for a value that is not valid JSON", () => {
     const payload = {
       event: {
