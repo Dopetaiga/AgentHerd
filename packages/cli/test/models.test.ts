@@ -29,7 +29,7 @@ function setup(keys: string[] = []) {
 }
 
 describe("agentherd model", () => {
-  it("adds a builtin provider, saves its key in the keychain only, and chooses the Herder", async () => {
+  it("adds a builtin provider, saves its key in the secret store only, and chooses the Herder", async () => {
     const t = setup(["sk-1"]);
     expect(await t.run("add", "deepseek", "--models", "deepseek-flash")).toBe(0);
     expect(t.saved).toEqual({ "model:deepseek": "sk-1" });

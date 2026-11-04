@@ -1,5 +1,18 @@
 // A fake bridge for previewing the UI in a plain browser (vite dev without Electron).
 // It is installed only when the preload script did not set `window.agentherd`.
+// `?sim=` picks the starting state:
+//   fresh (default)  not bound, no Herder model: the first run opens
+//   bound            bound and connected, no Herder model
+//   network          bound, but connecting to Feishu failed; 重新连接 then works
+//   ready            bound, connected, Herder chosen
+//   empty            like ready, with no tasks
+//   no-agent         like empty, with no agent profiles
+//   offline          like ready, then the connection to the host drops
+// `?open=` opens a dialog at once, for screenshots (see `devOpen`):
+//   add-service      the 添加服务 chooser
+//   add-builtin      the 添加服务 form of OpenRouter, with a few models chosen
+//   add-custom       the 添加服务 form of an OpenAI-compatible address
+//   edit-<id>        the edit dialog of the service <id> (deepseek, gateway)
 
 import type {
   HostEvent,
@@ -25,7 +38,45 @@ function minutesAgo(n: number): string {
   return new Date(Date.now() - n * 60_000).toISOString();
 }
 
+const SIMS = ["fresh", "bound", "network", "ready", "empty", "no-agent", "offline"] as const;
+
+type Sim = (typeof SIMS)[number];
+
+const OPENROUTER_MODELS: readonly (readonly [string, string])[] = [
+  ["anthropic/claude-sonnet-4.5", "Anthropic: Claude Sonnet 4.5"],
+  ["anthropic/claude-opus-4.1", "Anthropic: Claude Opus 4.1"],
+  ["anthropic/claude-haiku-4.5", "Anthropic: Claude Haiku 4.5"],
+  ["openai/gpt-5", "OpenAI: GPT-5"],
+  ["openai/gpt-5-mini", "OpenAI: GPT-5 mini"],
+  ["openai/gpt-5-codex", "OpenAI: GPT-5 Codex"],
+  ["openai/gpt-oss-120b", "OpenAI: gpt-oss-120b"],
+  ["google/gemini-2.5-pro", "Google: Gemini 2.5 Pro"],
+  ["google/gemini-2.5-flash", "Google: Gemini 2.5 Flash"],
+  ["google/gemini-2.5-flash-lite", "Google: Gemini 2.5 Flash Lite"],
+  ["deepseek/deepseek-chat-v3.1", "DeepSeek: DeepSeek V3.1"],
+  ["deepseek/deepseek-r1-0528", "DeepSeek: R1 0528"],
+  ["qwen/qwen3-coder", "Qwen: Qwen3 Coder"],
+  ["qwen/qwen3-max", "Qwen: Qwen3 Max"],
+  ["qwen/qwen3-235b-a22b-2507", "Qwen: Qwen3 235B A22B 2507"],
+  ["moonshotai/kimi-k2-0905", "MoonshotAI: Kimi K2 0905"],
+  ["z-ai/glm-4.6", "Z.AI: GLM 4.6"],
+  ["z-ai/glm-4.5-air", "Z.AI: GLM 4.5 Air"],
+  ["x-ai/grok-4", "xAI: Grok 4"],
+  ["x-ai/grok-code-fast-1", "xAI: Grok Code Fast 1"],
+  ["mistralai/devstral-medium", "Mistral: Devstral Medium"],
+  ["mistralai/mistral-medium-3.1", "Mistral: Mistral Medium 3.1"],
+  ["meta-llama/llama-4-maverick", "Meta: Llama 4 Maverick"],
+  ["minimax/minimax-m2", "MiniMax: MiniMax M2"],
+];
+
+function simulation(): Sim {
+  const value = new URLSearchParams(window.location.search).get("sim");
+  return SIMS.find((s) => s === value) ?? "fresh";
+}
+
 function installFakeBridge(): void {
+  const sim = simulation();
+  const herderChosen = sim !== "fresh" && sim !== "bound" && sim !== "network";
   const eventListeners = new Set<Listener<HostEvent>>();
   const connectionListeners = new Set<Listener<boolean>>();
   const keys = new Map<string, string>([["deepseek", "sk-fake"]]);
@@ -34,53 +85,103 @@ function installFakeBridge(): void {
   let status: HostStatus = {
     version: "0.0.0-dev",
     home: "~/.agentherd",
-    channel: { bound: false, connected: false, error: "尚未绑定飞书" },
-    herder: { on: false, reason: "没有给主管选模型" },
+    channel:
+      sim === "fresh"
+        ? { bound: false, connected: false }
+        : sim === "network"
+          ? {
+              bound: true,
+              appId: "cli_fake123",
+              connected: false,
+              error: "getaddrinfo ENOTFOUND open.feishu.cn",
+            }
+          : { bound: true, appId: "cli_fake123", connected: true },
+    herder: herderChosen
+      ? { on: true, ref: "deepseek/deepseek-chat" }
+      : { on: false, reason: "no model chosen for the Herder" },
     mode: "observe",
     locale: "zh-CN",
     keepAwake: true,
-    profiles: ["dsh"],
+    profiles: sim === "no-agent" ? [] : ["dsh"],
   };
 
-  const tasks: TasksView = {
-    tasks: [
-      {
-        id: "s1",
-        title: "修复登录页在 Safari 上的白屏",
-        project: "web-portal",
-        agent: "dsh",
-        stage: "needs-owner",
-        lastReport: "想执行 npm publish，等你批准",
-        startedAt: minutesAgo(42),
-        updatedAt: minutesAgo(3),
-        automaticDecisions: [],
-      },
-      {
-        id: "s2",
-        title: "给订单服务补单元测试",
-        project: "order-service",
-        agent: "dsh",
-        stage: "working",
-        lastReport: "已写完 12 个测试，正在跑 npm test",
-        startedAt: minutesAgo(25),
-        updatedAt: minutesAgo(1),
-        automaticDecisions: ["按规则 r1 自动批准：npm test"],
-      },
-    ],
-    items: [
-      {
-        id: "i1",
-        sessionId: "s1",
-        title: "执行命令",
-        body: "npm publish --access public --tag next ./packages/web-portal",
-        risk: "high",
-        createdAt: minutesAgo(3),
-        cwd: "/Users/me/code/web-portal",
-        profileId: "dsh",
-        taskTitle: "修复登录页在 Safari 上的白屏",
-      },
-    ],
-  };
+  const task = (
+    id: string,
+    title: string,
+    project: string,
+    stage: TasksView["tasks"][number]["stage"],
+    lastReport: string,
+    updated: number,
+  ): TasksView["tasks"][number] => ({
+    id,
+    title,
+    project,
+    agent: "dsh",
+    stage,
+    lastReport,
+    startedAt: minutesAgo(updated + 30),
+    updatedAt: minutesAgo(updated),
+    automaticDecisions: [],
+  });
+
+  const tasks: TasksView =
+    sim === "empty" || sim === "no-agent"
+      ? { tasks: [], items: [] }
+      : {
+          tasks: [
+            task(
+              "s1",
+              "修复登录页在 Safari 上的白屏",
+              "web-portal",
+              "needs-owner",
+              "修好了，想发一个 next 版本验证，等你批准",
+              3,
+            ),
+            task(
+              "s2",
+              "给订单服务补单元测试",
+              "order-service",
+              "working",
+              "已写完 12 个测试，正在跑 npm test",
+              1,
+            ),
+            task("s3", "把日志库换成 pino", "order-service", "queued", "", 6),
+            task(
+              "s4",
+              "升级 Node 到 24",
+              "infra",
+              "stuck",
+              "CI 里的镜像拉不下来，已经重试 3 次",
+              18,
+            ),
+            task("s5", "整理 README 的安装步骤", "web-portal", "done", "已提交 PR #128", 55),
+            task("s6", "迁移旧的用户表", "order-service", "failed", "迁移脚本报错：外键冲突", 120),
+            task("s7", "给首页加骨架屏", "web-portal", "done", "已提交 PR #127", 240),
+          ],
+          items: [
+            {
+              id: "i1",
+              sessionId: "s1",
+              title: "执行命令",
+              body: "npm publish --access public --tag next ./packages/web-portal",
+              risk: "high",
+              createdAt: minutesAgo(3),
+              cwd: "/Users/me/code/web-portal",
+              profileId: "dsh",
+              taskTitle: "修复登录页在 Safari 上的白屏",
+            },
+            {
+              id: "i2",
+              sessionId: "s0",
+              title: "写入文件",
+              body: "~/.npmrc: registry=https://npm.example.com/",
+              risk: "medium",
+              createdAt: minutesAgo(9),
+              cwd: "/Users/me/code/scratch",
+              profileId: "dsh",
+            },
+          ],
+        };
 
   let models: ModelsView = {
     services: [
@@ -92,8 +193,16 @@ function installFakeBridge(): void {
         models: ["deepseek-chat", "deepseek-reasoner"],
         hasKey: true,
       },
+      {
+        id: "gateway",
+        name: "公司网关",
+        kind: "openai-compatible",
+        baseUrl: "https://llm.example.com/v1",
+        models: ["qwen3-coder-plus", "glm-4.6"],
+        hasKey: false,
+      },
     ],
-    roles: {},
+    roles: herderChosen ? { herder: { serviceId: "deepseek", model: "deepseek-chat" } } : {},
   };
 
   const providers: ProviderView[] = [
@@ -128,10 +237,8 @@ function installFakeBridge(): void {
     },
     {
       provider: "openrouter",
-      models: [
-        { id: "anthropic/claude-sonnet-4.5", name: "Anthropic: Claude Sonnet 4.5" },
-        { id: "qwen/qwen3-coder", name: "Qwen: Qwen3 Coder" },
-      ],
+      // Many models, so the model panes can be seen scrolling.
+      models: OPENROUTER_MODELS.map(([id, name]) => ({ id, name })),
     },
   ];
 
@@ -146,7 +253,7 @@ function installFakeBridge(): void {
   const herderStatus = (): HostStatus["herder"] => {
     const ref = models.roles.herder;
     return ref === undefined
-      ? { on: false, reason: "没有给主管选模型" }
+      ? { on: false, reason: "no model chosen for the Herder" }
       : { on: true, ref: `${ref.serviceId}/${ref.model}` };
   };
   const modelsChanged = (): ModelsView => {
@@ -171,6 +278,17 @@ function installFakeBridge(): void {
 
   const fake: RemoteHost = {
     status: () => delay(status),
+    reconnect: () => {
+      // The second try connects.
+      if (status.channel.bound) {
+        status = {
+          ...status,
+          channel: { bound: true, appId: status.channel.appId, connected: true },
+        };
+        emit({ topic: "status", data: structuredClone(status) });
+      }
+      return delay(status, 900);
+    },
     tasks: () => delay(tasks),
     providers: () => delay(providers),
     models: () => delay(models),
@@ -267,6 +385,7 @@ function installFakeBridge(): void {
     onConnection: (listener) => {
       connectionListeners.add(listener);
       setTimeout(() => listener(true), 0);
+      if (sim === "offline") setTimeout(() => listener(false), 1000);
       return () => connectionListeners.delete(listener);
     },
   };
@@ -274,4 +393,13 @@ function installFakeBridge(): void {
   console.info("[AgentHerd] window.agentherd not found; using the in-memory dev bridge.");
 }
 
-if ((window as Partial<Window>).agentherd === undefined) installFakeBridge();
+let fakeInstalled = false;
+if ((window as Partial<Window>).agentherd === undefined) {
+  installFakeBridge();
+  fakeInstalled = true;
+}
+
+/** The dialog named by `?open=`; only with the fake bridge, so never in the real app. */
+export function devOpen(): string | null {
+  return fakeInstalled ? new URLSearchParams(window.location.search).get("open") : null;
+}

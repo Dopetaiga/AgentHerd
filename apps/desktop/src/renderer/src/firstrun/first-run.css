@@ -1,0 +1,67 @@
+/* First-run motion: the step leaves with a short fade and blur, the next one comes in softly. */
+
+.ah-fr {
+  animation: ah-fr-open 420ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.ah-fr-step {
+  view-transition-name: ah-fr-step;
+}
+
+.ah-fr-actions {
+  view-transition-name: ah-fr-actions;
+}
+
+.ah-fr-dots {
+  view-transition-name: ah-fr-dots;
+}
+
+/* The rest of the window does not move between steps. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+}
+
+::view-transition-old(ah-fr-step) {
+  animation: ah-fr-out 200ms ease-in both;
+}
+
+::view-transition-new(ah-fr-step) {
+  animation: ah-fr-in 420ms cubic-bezier(0.2, 0.8, 0.2, 1) 40ms both;
+}
+
+::view-transition-group(ah-fr-actions),
+::view-transition-group(ah-fr-dots) {
+  animation-duration: 320ms;
+  animation-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+@keyframes ah-fr-open {
+  from {
+    opacity: 0;
+    filter: blur(8px);
+  }
+}
+
+@keyframes ah-fr-out {
+  to {
+    opacity: 0;
+    filter: blur(6px);
+  }
+}
+
+@keyframes ah-fr-in {
+  from {
+    opacity: 0;
+    filter: blur(6px);
+    transform: translateY(6px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ah-fr,
+  ::view-transition-old(ah-fr-step),
+  ::view-transition-new(ah-fr-step) {
+    animation: none;
+  }
+}

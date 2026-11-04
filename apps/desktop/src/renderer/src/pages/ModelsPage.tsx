@@ -1,50 +1,83 @@
-// 模型: choose a model per role, then manage the list of model services (ADR 0021).
+// 模型: the model used for reviews, and the list of model services (ADR 0021).
+// The Herder's model is chosen on the 主管 page.
 
 import { Boxes, Plus } from "lucide-react";
 import { useState } from "react";
 import { AddServiceDialog } from "../components/AddServiceDialog";
 import { RolePicker } from "../components/RolePicker";
 import { ServiceCard } from "../components/ServiceCard";
-import { Button, Card, EmptyState, SectionTitle } from "../components/ui";
+import { Button, EmptyState, Group, Section } from "../components/ui";
+import { devOpen } from "../dev-bridge";
 import { useApp } from "../store";
+
+/** The dialog a dev preview asks for (`?open=` with the fake bridge); none in the app. */
+function previewAdd(): { provider?: string; models?: string[] } | null {
+  const open = devOpen();
+  if (open === "add-service") return {};
+  if (open === "add-custom") return { provider: "custom" };
+  if (open === "add-builtin")
+    return {
+      provider: "openrouter",
+      models: [
+        "anthropic/claude-sonnet-4.5",
+        "openai/gpt-5",
+        "qwen/qwen3-coder",
+        "my-private-model",
+      ],
+    };
+  return null;
+}
 
 /** The service list with an "添加服务" button; also used inside onboarding. */
 export function ServiceList() {
   const services = useApp((s) => s.models?.services);
-  const [adding, setAdding] = useState(false);
+  const [preview] = useState(previewAdd);
+  const [adding, setAdding] = useState(preview !== null);
   const list = [...(services ?? [])].sort((a, b) => a.name.localeCompare(b.name));
+  const add = (
+    <Button variant={list.length === 0 ? "primary" : "secondary"} onClick={() => setAdding(true)}>
+      <Plus size={14} /> 添加服务
+    </Button>
+  );
   return (
-    <div className="flex flex-col gap-3">
-      <div className="flex items-center justify-between">
-        <SectionTitle hint="Key 只保存在本机，保存后不再显示">模型服务</SectionTitle>
-        <Button variant="primary" size="sm" onClick={() => setAdding(true)}>
-          <Plus size={14} /> 添加服务
-        </Button>
-      </div>
+    <Section
+      title="模型服务"
+      hint="Key 只保存在本机，保存后不再显示"
+      actions={list.length > 0 ? add : undefined}
+    >
       {list.length === 0 ? (
-        <Card>
+        <Group>
           <EmptyState
-            icon={<Boxes size={28} />}
-            text="还没有模型服务。添加一个服务商（比如 DeepSeek），或一个 OpenAI 兼容地址。"
+            icon={<Boxes size={18} strokeWidth={1.75} />}
+            title="还没有模型服务"
+            text="添加一个服务商（比如 DeepSeek），或一个 OpenAI 兼容地址。"
+            action={add}
           />
-        </Card>
+        </Group>
       ) : (
-        list.map((s) => <ServiceCard key={s.id} service={s} />)
+        <div className="flex flex-col gap-3">
+          {list.map((s) => (
+            <ServiceCard key={s.id} service={s} />
+          ))}
+        </div>
       )}
-      {adding && <AddServiceDialog onClose={() => setAdding(false)} />}
-    </div>
+      {adding && (
+        <AddServiceDialog
+          onClose={() => setAdding(false)}
+          initialProvider={preview?.provider}
+          initialModels={preview?.models}
+        />
+      )}
+    </Section>
   );
 }
 
 export function ModelsPage() {
   return (
-    <div className="flex flex-col gap-6">
-      <div>
-        <SectionTitle hint="从下面的模型列表里选">用途</SectionTitle>
-        <Card>
-          <RolePicker />
-        </Card>
-      </div>
+    <div className="flex flex-col gap-7">
+      <Section title="用途" hint="主管用的模型在「主管」页选">
+        <RolePicker />
+      </Section>
       <ServiceList />
     </div>
   );

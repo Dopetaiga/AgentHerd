@@ -83,3 +83,7 @@ instead of CLI keys.
 ## Maintenance notes
 
 - 2026-11-04: written and implemented in one go after the owner asked for the GUI.
+- 2026-11-04: secrets moved from the macOS keychain to `<home>/secrets.json` (mode 600). The
+  owner did not want them in the keychain, and reading an item from a different binary (Electron
+  instead of the node that saved it) raised an access prompt that, when missed, failed the
+  connection with "Platform failure: User canceled the operation.". `@napi-rs/keyring` removed.

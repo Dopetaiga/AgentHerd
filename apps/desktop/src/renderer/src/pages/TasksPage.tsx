@@ -1,193 +1,250 @@
-// 任务: the board (read only) and the open requests that wait for the owner in Feishu.
+// 任务: tasks only, grouped by what the owner should do about them. An open request shows inside
+// its task; a request whose task the board does not have goes to 其他请求 at the top.
 
-import { AlertTriangle, Bot, Inbox, ListTodo, MessageSquare } from "lucide-react";
-import type { ReactNode } from "react";
-import {
-  herderReasonLabel,
-  hhmm,
-  RISK_LABEL,
-  STAGE_LABEL,
-  STAGE_ORDER,
-} from "../components/labels";
-import { Badge, Card, EmptyState, SectionTitle } from "../components/ui";
-import { type Task, useApp } from "../store";
+import { AlertTriangle, ChevronRight, ListTodo } from "lucide-react";
+import { type ReactNode, useState } from "react";
+import { hhmm, RISK_LABEL, STAGE_LABEL, STAGE_ORDER } from "../components/labels";
+import { Badge, Dot, EmptyState, Group, Section, Segmented, type Tone } from "../components/ui";
+import { type ItemSummary, type Task, useApp } from "../store";
 
-function sortTasks(tasks: readonly Task[]): Task[] {
-  return [...tasks].sort(
-    (a, b) => STAGE_ORDER[a.stage] - STAGE_ORDER[b.stage] || b.updatedAt.localeCompare(a.updatedAt),
-  );
+type Filter = "all" | "owner" | "active";
+
+const FILTERS: readonly { value: Filter; label: string }[] = [
+  { value: "all", label: "全部" },
+  { value: "owner", label: "等你处理" },
+  { value: "active", label: "进行中" },
+];
+
+const FILTER_EMPTY: Record<Filter, string> = {
+  all: "",
+  owner: "现在没有等你处理的任务。",
+  active: "现在没有进行中的任务。",
+};
+
+function projectOf(cwd: string): string {
+  return cwd.split("/").filter(Boolean).at(-1) ?? cwd;
 }
 
-function StatusStrip() {
-  const status = useApp((s) => s.status);
-  if (status === undefined) return null;
-  const { channel, herder, profiles } = status;
+/** A dot, a title with the time on the right, one line of details, and open requests below. */
+function BoardRow({
+  dot,
+  pulse = false,
+  title,
+  badge,
+  time,
+  details,
+  items,
+}: {
+  dot: Tone;
+  pulse?: boolean;
+  title: string;
+  badge?: ReactNode;
+  time: string;
+  details: readonly string[];
+  items: readonly ItemSummary[];
+}) {
+  const line = details.filter((d) => d !== "");
   return (
-    <div className="flex flex-col gap-2">
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-        <StripItem
-          icon={<MessageSquare size={16} />}
-          label="飞书"
-          ok={channel.connected}
-          value={channel.connected ? "已连接" : channel.bound ? "未连接" : "未绑定"}
-          detail={channel.error}
-        />
-        <StripItem
-          icon={<Bot size={16} />}
-          label="主管"
-          ok={herder.on}
-          value={herder.on ? "工作中" : "已关闭"}
-          detail={herder.on ? herder.ref : herderReasonLabel(herder.reason)}
-        />
-        <StripItem
-          icon={<ListTodo size={16} />}
-          label="可用 Agent"
-          ok={profiles.length > 0}
-          value={profiles.length > 0 ? profiles.join("、") : "无"}
-        />
-      </div>
-      {profiles.length === 0 && (
-        <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
-          <AlertTriangle size={14} />
-          没有可用的 Agent：请安装 DeepSeek Harness
+    <div className="flex items-start gap-3 px-4 py-2.5">
+      <span className="flex h-[18px] items-center">
+        <Dot tone={dot} pulse={pulse} />
+      </span>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <span className="truncate font-medium text-ink" title={title}>
+            {title}
+          </span>
+          {badge}
+          <span className="ml-auto shrink-0 text-ink-muted text-sm tabular-nums" title={time}>
+            {hhmm(time)}
+          </span>
         </div>
-      )}
+        <div className="selectable mt-0.5 truncate text-ink-muted text-sm" title={line.join(" · ")}>
+          {line.join(" · ")}
+        </div>
+        {items.length > 0 && (
+          <div className="mt-2 flex flex-col gap-1">
+            {items.map((item) => (
+              <RequestLine key={item.id} item={item} />
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
 
-function StripItem({
-  icon,
-  label,
-  ok,
-  value,
-  detail,
-}: {
-  icon: ReactNode;
-  label: string;
-  ok: boolean;
-  value: string;
-  detail?: string | undefined;
-}) {
+function RequestLine({ item }: { item: ItemSummary }) {
+  const risk = RISK_LABEL[item.risk];
   return (
-    <Card className="flex items-center gap-3 py-3">
+    <div className="flex min-h-7 items-center gap-2 rounded-md bg-inset py-1 pr-2.5 pl-1.5">
+      <Badge tone={risk.tone}>{risk.text}</Badge>
       <span
-        className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-md ${
-          ok
-            ? "bg-emerald-50 text-emerald-600 dark:bg-emerald-950 dark:text-emerald-400"
-            : "bg-zinc-100 text-zinc-500 dark:bg-zinc-800"
-        }`}
+        className="selectable min-w-0 flex-1 truncate font-mono text-ink-2 text-sm"
+        title={`${item.title}\n${item.body}`}
       >
-        {icon}
+        {item.body === "" ? item.title : item.body}
       </span>
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-1.5 text-xs text-zinc-500">
-          <span className={`h-1.5 w-1.5 rounded-full ${ok ? "bg-emerald-500" : "bg-zinc-400"}`} />
-          {label}
-        </div>
-        <div className="truncate font-medium text-sm text-zinc-900 dark:text-zinc-100">{value}</div>
-        {detail !== undefined && detail !== "" && (
-          <div
-            className={`selectable truncate text-xs ${ok ? "font-mono text-zinc-500" : "text-red-600 dark:text-red-400"}`}
-            title={detail}
-          >
-            {detail}
-          </div>
-        )}
-      </div>
-    </Card>
+      <span className="shrink-0 text-ink-muted text-xs">在飞书里批准或拒绝</span>
+    </div>
+  );
+}
+
+function TaskRow({ task, items }: { task: Task; items: readonly ItemSummary[] }) {
+  const stage = STAGE_LABEL[task.stage];
+  // The group already says the stage; a badge only tells apart stages that share a group.
+  const badge =
+    task.stage === "queued" || task.stage === "failed" ? (
+      <Badge tone={stage.tone}>{stage.text}</Badge>
+    ) : undefined;
+  return (
+    <BoardRow
+      dot={items.length > 0 ? "amber" : stage.tone}
+      pulse={task.stage === "working"}
+      title={task.title}
+      badge={badge}
+      time={task.updatedAt}
+      details={[task.project, task.agent, task.lastReport]}
+      items={items}
+    />
+  );
+}
+
+function CountTitle({ title, count }: { title: string; count: number }) {
+  return (
+    <span className="flex items-center gap-1.5">
+      {title}
+      <span className="font-normal text-ink-muted text-sm tabular-nums">{count}</span>
+    </span>
   );
 }
 
 export function TasksPage() {
   const view = useApp((s) => s.tasks);
-  const tasks = sortTasks(view?.tasks ?? []);
+  const noAgent = useApp((s) => s.status?.profiles.length === 0);
+  const [filter, setFilter] = useState<Filter>("all");
+  const [showEnded, setShowEnded] = useState(false);
+
+  const tasks = view?.tasks ?? [];
   const items = view?.items ?? [];
+  const known = new Set(tasks.map((t) => t.id));
+  const itemsOf = (task: Task) => items.filter((i) => i.sessionId === task.id);
+  const others = items.filter((i) => !known.has(i.sessionId));
+
+  const recent = (a: Task, b: Task) => b.updatedAt.localeCompare(a.updatedAt);
+  const byStage = (a: Task, b: Task) => STAGE_ORDER[a.stage] - STAGE_ORDER[b.stage] || recent(a, b);
+  // A task with an open request waits for the owner whatever its stage says.
+  const waiting = (t: Task) => t.stage === "needs-owner" || itemsOf(t).length > 0;
+  const owner = tasks.filter(waiting).sort(recent);
+  const rest = tasks.filter((t) => !waiting(t));
+  const active = rest.filter((t) => t.stage === "working" || t.stage === "queued").sort(byStage);
+  const stuck = rest.filter((t) => t.stage === "stuck").sort(recent);
+  const ended = rest.filter((t) => t.stage === "done" || t.stage === "failed").sort(recent);
+
+  const warning = noAgent && (
+    <div className="flex items-center gap-2 rounded-lg border border-line px-3 py-2 text-ink-2 text-md">
+      <AlertTriangle size={14} className="shrink-0 text-warning-text" />
+      没有可用的 Agent：请安装 DeepSeek Harness
+    </div>
+  );
+
+  if (tasks.length === 0 && items.length === 0) {
+    return (
+      <div className="flex flex-1 flex-col gap-3">
+        {warning}
+        <div className="flex flex-1 items-center justify-center pb-14">
+          <EmptyState
+            icon={<ListTodo size={18} strokeWidth={1.75} />}
+            title="还没有任务"
+            text={
+              <>
+                在飞书里给 AgentHerd 发消息，或者发{" "}
+                <code className="rounded-xs bg-control-hover px-1 py-px font-mono text-ink-2 text-sm">
+                  /run
+                </code>{" "}
+                开始一个任务。
+              </>
+            }
+          />
+        </div>
+      </div>
+    );
+  }
+
+  const taskGroup = (title: string, list: readonly Task[]) =>
+    list.length > 0 && (
+      <Section title={<CountTitle title={title} count={list.length} />}>
+        <Group>
+          {list.map((t) => (
+            <TaskRow key={t.id} task={t} items={itemsOf(t)} />
+          ))}
+        </Group>
+      </Section>
+    );
+
+  const showOwner = filter !== "active";
+  const showActive = filter !== "owner";
+  const showRest = filter === "all";
+  const nothing =
+    (filter === "owner" && owner.length === 0 && others.length === 0) ||
+    (filter === "active" && active.length === 0);
 
   return (
     <div className="flex flex-col gap-6">
-      <StatusStrip />
+      {warning}
+      <Segmented label="筛选任务" options={FILTERS} value={filter} onChange={setFilter} />
+      {nothing && <p className="px-0.5 text-ink-muted text-md">{FILTER_EMPTY[filter]}</p>}
 
-      <div>
-        <SectionTitle hint="请在飞书里批准或拒绝">等你处理的请求</SectionTitle>
-        <Card className="p-0">
-          {items.length === 0 ? (
-            <EmptyState icon={<Inbox size={28} />} text="没有等你处理的请求" />
-          ) : (
-            <ul className="divide-y divide-zinc-100 dark:divide-zinc-800">
-              {items.map((item) => {
-                const risk = RISK_LABEL[item.risk];
-                return (
-                  <li key={item.id} className="flex flex-col gap-1.5 px-4 py-3">
-                    <div className="flex items-center gap-2">
-                      <span className="truncate font-medium text-sm text-zinc-900 dark:text-zinc-100">
-                        {item.title}
-                      </span>
-                      <Badge tone={risk.tone}>{risk.text}</Badge>
-                      <span className="ml-auto shrink-0 text-xs text-zinc-500">
-                        {hhmm(item.createdAt)}
-                      </span>
-                    </div>
-                    <pre className="selectable truncate rounded bg-zinc-50 px-2 py-1 font-mono text-xs text-zinc-700 dark:bg-zinc-800/60 dark:text-zinc-300">
-                      {item.body}
-                    </pre>
-                    {item.taskTitle !== undefined && (
-                      <div className="truncate text-xs text-zinc-500">任务：{item.taskTitle}</div>
-                    )}
-                  </li>
-                );
-              })}
-            </ul>
+      {showOwner && others.length > 0 && (
+        <Section
+          title={<CountTitle title="其他请求" count={others.length} />}
+          hint="这些请求不属于下面的任务"
+        >
+          <Group>
+            {others.map((item) => (
+              <BoardRow
+                key={item.id}
+                dot="amber"
+                title={item.taskTitle ?? item.title}
+                time={item.createdAt}
+                details={[projectOf(item.cwd), item.profileId]}
+                items={[item]}
+              />
+            ))}
+          </Group>
+        </Section>
+      )}
+      {showOwner && taskGroup("等你处理", owner)}
+      {showActive && taskGroup("进行中", active)}
+      {showRest && taskGroup("卡住", stuck)}
+      {showRest && ended.length > 0 && (
+        <Section
+          title={
+            <button
+              type="button"
+              aria-expanded={showEnded}
+              onClick={() => setShowEnded(!showEnded)}
+              className="-ml-1 flex items-center gap-1 rounded-sm pr-1 hover:text-ink"
+            >
+              <ChevronRight
+                size={14}
+                className={`text-ink-muted transition-transform duration-150 ${
+                  showEnded ? "rotate-90" : ""
+                }`}
+              />
+              <CountTitle title="已结束" count={ended.length} />
+            </button>
+          }
+        >
+          {showEnded && (
+            <Group>
+              {ended.map((t) => (
+                <TaskRow key={t.id} task={t} items={[]} />
+              ))}
+            </Group>
           )}
-        </Card>
-      </div>
-
-      <div>
-        <SectionTitle hint={tasks.length > 0 ? `${tasks.length} 个` : undefined}>任务</SectionTitle>
-        <Card className="p-0">
-          {tasks.length === 0 ? (
-            <EmptyState
-              icon={<ListTodo size={28} />}
-              text={
-                <>
-                  还没有任务。在飞书里发 <code className="font-mono">/run</code> 开始一个任务。
-                </>
-              }
-            />
-          ) : (
-            <ul className="divide-y divide-zinc-100 dark:divide-zinc-800">
-              {tasks.map((task) => {
-                const stage = STAGE_LABEL[task.stage];
-                return (
-                  <li key={task.id} className="flex items-start gap-3 px-4 py-3">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <span className="truncate font-medium text-sm text-zinc-900 dark:text-zinc-100">
-                          {task.title}
-                        </span>
-                        <Badge tone={stage.tone}>{stage.text}</Badge>
-                      </div>
-                      <div className="mt-0.5 flex items-center gap-2 text-xs text-zinc-500">
-                        <span className="truncate">{task.project}</span>
-                        <span>·</span>
-                        <span className="truncate">{task.agent}</span>
-                      </div>
-                      {task.lastReport !== "" && (
-                        <div className="selectable mt-1 truncate text-sm text-zinc-600 dark:text-zinc-400">
-                          {task.lastReport}
-                        </div>
-                      )}
-                    </div>
-                    <span className="shrink-0 text-xs text-zinc-500" title={task.updatedAt}>
-                      {hhmm(task.updatedAt)}
-                    </span>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </Card>
-      </div>
+        </Section>
+      )}
     </div>
   );
 }

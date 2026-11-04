@@ -132,7 +132,11 @@ async function answer(api: HostApi, line: string): Promise<ResultMessage | undef
   }
   try {
     const fn = api[call.method] as (...args: unknown[]) => unknown;
-    const result = await fn.apply(api, Array.isArray(call.params) ? call.params : []);
+    // JSON turns an omitted (undefined) argument into null; give the method undefined back.
+    const params = Array.isArray(call.params)
+      ? call.params.map((p) => (p === null ? undefined : p))
+      : [];
+    const result = await fn.apply(api, params);
     return reply(true, { result });
   } catch (error) {
     return reply(false, { error: (error as Error).message });

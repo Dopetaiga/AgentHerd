@@ -107,7 +107,7 @@ describe("resolveModel", () => {
 });
 
 describe("serviceKey", () => {
-  it("prefers the keychain, then the provider's variable", () => {
+  it("prefers the secret store, then the provider's variable", () => {
     expect(
       serviceKey(deepseek, secrets({ "model:deepseek": "saved" }), { DEEPSEEK_API_KEY: "env" }),
     ).toBe("saved");

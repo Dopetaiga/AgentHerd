@@ -106,8 +106,26 @@ export function parseModelList(text: string): string[] {
 /** The host explains in English (shared with the CLI); show the known reasons in Chinese. */
 export function herderReasonLabel(reason: string | undefined): string | undefined {
   if (reason === undefined) return undefined;
-  if (reason === "no model chosen for the Herder") return "还没给主管选模型，去「模型」页选一个";
+  if (reason === "no model chosen for the Herder") return "还没给主管选模型";
   const key = /^no key for service "(.+)"$/.exec(reason);
   if (key) return `服务「${key[1]}」没有 Key`;
   return reason;
+}
+
+/** The channel error in Chinese where it is a known one; other errors as the host wrote them. */
+export function channelErrorLabel(error: string): string {
+  if (/^no App Secret for /.test(error))
+    return "找不到飞书机器人的密钥（~/.agentherd/secrets.json），请重新扫码绑定飞书。";
+  if (/ENOTFOUND|ECONNREFUSED|ETIMEDOUT|ECONNRESET/.test(error))
+    return "连不上飞书，检查一下网络后点「重新连接」。";
+  return error;
+}
+
+/** The channel is bound but could not connect, and the host says why: the owner can retry. */
+export function canReconnect(channel: {
+  bound: boolean;
+  connected: boolean;
+  error?: string | undefined;
+}): boolean {
+  return channel.bound && !channel.connected && channel.error !== undefined && channel.error !== "";
 }

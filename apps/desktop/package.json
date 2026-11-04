@@ -5,10 +5,11 @@
   "type": "module",
   "main": "./out/main/index.js",
   "scripts": {
-    "dev": "electron-vite dev",
+    "dev": "node scripts/brand-dev-electron.ts && electron-vite dev",
     "build": "electron-vite build",
-    "start": "electron-vite preview",
-    "typecheck": "tsc --noEmit -p tsconfig.json"
+    "start": "node scripts/brand-dev-electron.ts && electron-vite preview",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "brand": "node scripts/brand-dev-electron.ts"
   },
   "dependencies": {
     "@agentherd/host": "workspace:*"

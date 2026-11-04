@@ -1,5 +1,5 @@
 // `agentherd model ...`: the owner's model list until the desktop app has its settings page
-// (ADR 0021). Keys are read from stdin and kept in the keychain, never in config.json.
+// (ADR 0021). Keys are read from stdin and kept in secrets.json (mode 600), never in config.json.
 
 import { parseArgs } from "node:util";
 import {
