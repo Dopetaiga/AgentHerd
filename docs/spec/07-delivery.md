@@ -5,7 +5,7 @@
 | ID | Name | Result | Exit criteria |
 | --- | --- | --- | --- |
 | M0 | Spec freeze | Specs 00–07 and ADRs 0001–0019 accepted | Done 2026-11-04: baseline 0.2.0 Frozen |
-| M1 | Headless loop | `core`, `rules` (guard list + matcher), `acp-client`, `mock-agent`, `channel-feishu`, run from a CLI | E2E-APPROVE and E2E-OWNER-ONLY pass with `mock-agent` and a fake channel; one manual run with real Feishu |
+| M1 | Headless loop | `core`, `rules` (guard list + matcher), `acp-client`, `mock-agent`, `channel-feishu`, run from a CLI | E2E-APPROVE and E2E-OWNER-ONLY pass with `mock-agent` and a fake channel; one manual run with real Feishu. Done 2026-11-04: plans 001–004, manual run recorded in plan 004 |
 | M2 | DSH + Herder + desktop shell | DSH profile (`dsh acp`), the Herder (light model: start tasks from Feishu, relay, verbatim rule), board and completion reports, `herd_report`, watchdog, desktop app with onboarding (QR, two models), sessions list, read-only inbox, mode switch, keep-awake switch | A DSH task started from a Feishu message asks for approval, is approved from Feishu, and ends with a report; the board shows each stage |
 | M3 | Reviewer + rule export | "Always do this", Reviewer (strongest model, project snapshot), observe metrics, decision memory, Herder compaction and restore; exporters for Claude Code and Codex, with export status per rule | Observe mode reports agreement on a replayed item set; exported Claude Code config passes `plan()` tests for every rule shape |
 | M4 | More agents | Built-in profiles for Claude Code (`claude-agent-acp`), Codex (`codex-acp`), Gemini CLI, OpenCode; exporters for Gemini CLI and OpenCode | Verified on a machine where these agents can run |

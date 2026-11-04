@@ -169,6 +169,12 @@ Unit: card rendering, inbound parsing. Contract: both channels. Manual: Step 6.
   - The CLI runs with plain `node` (type stripping): `tsconfig.base.json` now sets
     `erasableSyntaxOnly`, so parameter properties were replaced by fields. `tsx` still works.
   - Store gained `recentSessions` and `recentDecisions` for `status`.
-  - Steps 1–5 done on 2026-11-04. Step 6 (manual run with real Feishu) waits for the
-    maintainer.
+  - Steps 1–5 done on 2026-11-04.
+- Manual run (Step 6), 2026-11-04 13:38 +08:00: `setup feishu` created app `cli_aa6078d3eef85cf1`
+  with one scan (about 3 minutes from QR to credentials); the secret went to the keychain and
+  `config.json` (mode 600) holds only App ID, brand and owner `open_id`. `run` with
+  `approve.yaml`: card sent 1.2 s after start, the maintainer tapped Allow 7.7 s later, the
+  card was patched without a `channel.error`, the CLI printed `[turn] end_turn`, and `status`
+  shows one decision with `source = human`. The App Secret was not found in `config.json`,
+  `herd.db`, `herd.db-wal`, the CLI output or the repo.
 

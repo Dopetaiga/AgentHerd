@@ -16,4 +16,4 @@ States: `TODO`, `IN PROGRESS`, `DONE`, `BLOCKED: <reason>`, `REJECTED: <reason>`
 | [001](001-workspace-protocol-and-rules.md) | The workspace builds, and protocol types and rules are tested | M1 | M | — | DONE |
 | [002](002-acp-client-drives-mock-agent.md) | The ACP client runs a scripted mock agent and answers its permission requests | M1 | M | 001 | DONE |
 | [003](003-core-approval-loop-with-fake-channel.md) | A mock agent's permission request reaches the owner and the answer goes back | M1 | L | 001, 002 | DONE |
-| [004](004-feishu-channel-and-cli.md) | The owner approves a mock agent's request from a real Feishu card, started from a CLI | M1 | M | 003 | IN PROGRESS |
+| [004](004-feishu-channel-and-cli.md) | The owner approves a mock agent's request from a real Feishu card, started from a CLI | M1 | M | 003 | DONE |
