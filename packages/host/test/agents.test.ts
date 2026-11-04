@@ -76,6 +76,22 @@ function release(
 }
 
 describe("RuntimeStore", () => {
+  it("still finds a Pi downloaded before current.json existed", () => {
+    const root = mkdtempSync(join(tmpdir(), "rt-"));
+    const dir = join(root, "pi", "1.5.0");
+    mkdirSync(join(dir, "pi"), { recursive: true });
+    writeFileSync(join(dir, "pi", "pi"), "");
+    const store = new RuntimeStore(root);
+    expect(store.installed("pi")).toBeUndefined();
+    writeFileSync(join(dir, ".agentherd-ready"), "");
+    expect(store.installed("pi")).toEqual({
+      id: "pi",
+      version: "1.5.0",
+      path: join(dir, "pi", "pi"),
+    });
+    expect(store.installed("opencode")).toBeUndefined();
+  });
+
   it("downloads, checks and unpacks a tar.gz and a zip", async () => {
     const tgz = fakeArchive("tar.gz", "9.9.9");
     const zip = fakeArchive("zip", "tool 9.9.9");

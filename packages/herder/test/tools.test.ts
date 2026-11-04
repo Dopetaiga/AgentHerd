@@ -118,6 +118,45 @@ describe("tools", () => {
     expect(event.rec.started).toHaveLength(0);
   });
 
+  it("session_list shows the models and session_start passes the chosen one", async () => {
+    const dir = tmpdir();
+    const models = [
+      { ref: "deepseek/deepseek-v4-pro", agents: ["mock"] },
+      { ref: "anthropic/claude-x", agents: [] },
+    ];
+    const { call, rec } = tools({ ownerText: "修一下构建" }, { models });
+    const list = await call("session_list", {});
+    expect(list).toContain("- deepseek/deepseek-v4-pro: mock");
+    expect(list).toContain("- anthropic/claude-x: (no agent can run it)");
+    const out = await call("session_start", {
+      project: dir,
+      profile: "mock",
+      ownerText: "修一下构建",
+      model: "deepseek/deepseek-v4-pro",
+    });
+    expect(out).toContain("deepseek/deepseek-v4-pro");
+    expect(rec.started[0]?.model).toBe("deepseek/deepseek-v4-pro");
+    await expect(
+      call("session_start", {
+        project: dir,
+        profile: "mock",
+        ownerText: "修一下构建",
+        model: "anthropic/claude-x",
+      }),
+    ).rejects.toThrow(/cannot run anthropic\/claude-x/);
+    await expect(
+      call("session_start", {
+        project: dir,
+        profile: "mock",
+        ownerText: "修一下构建",
+        model: "x/y",
+      }),
+    ).rejects.toThrow(/unknown model/);
+    await call("session_start", { project: dir, profile: "mock", ownerText: "修一下构建" });
+    expect(rec.started[1]?.model).toBeUndefined();
+    expect(rec.started).toHaveLength(2);
+  });
+
   it("session_prompt labels text that is not the owner's", async () => {
     const opts = { tasks: [task("aaaa1111", "Fix the build")] };
     const { call, rec } = tools({ ownerText: "告诉它先跑测试" }, opts);

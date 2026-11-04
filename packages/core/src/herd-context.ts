@@ -47,6 +47,16 @@ export interface HerdOptions {
   locale?: Locale;
   /** Creates the Herder. Without it, plain messages get the list of commands. */
   herder?: HerderFactory;
+  /** Models a task can run with. Without it, agents use their own settings. */
+  agentModels?: AgentModels;
+}
+
+/** The owner's models and how an agent runs one (ADR 0025). Supplied by the host. */
+export interface AgentModels {
+  /** Models in the owner's list ("service/model"), with the profile ids that can run each. */
+  list(): { ref: string; agents: string[] }[];
+  /** The env that makes the agent use the model. Throws when it cannot. */
+  envFor(profileId: string, ref: string): Record<string, string>;
 }
 
 /** Per-task state that only the Herd and its listeners use. */
@@ -110,6 +120,7 @@ export interface TaskOps {
     cwd: string,
     ownerText: string,
     prompt?: string,
+    model?: string,
   ): Promise<{ taskId: string; turn: Promise<RunResult> }>;
   promptTask(taskId: string, text: string): Promise<RunResult>;
   interruptTask(taskId: string, text: string): Promise<RunResult>;

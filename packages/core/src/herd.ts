@@ -29,7 +29,7 @@ import type { Task } from "./tasks.ts";
 import { type CoreTexts, coreTexts } from "./texts.ts";
 import { Watchdog } from "./watchdog.ts";
 
-export type { HerdOptions, RunResult } from "./herd-context.ts";
+export type { AgentModels, HerdOptions, RunResult } from "./herd-context.ts";
 export { RELAY_IDLE_MINUTES, RELAY_KEY, type RelayState } from "./relay.ts";
 export { SESSION_IDLE_MINUTES } from "./task-runner.ts";
 
@@ -143,8 +143,9 @@ export class Herd {
       recentProjects: () => [...new Set(this.store.recentSessions(50).map((s) => s.cwd))],
       relayTaskId: () => this.relay()?.taskId,
       decisions: (limit) => this.store.recentDecisions(limit),
-      startTask: async (profileId, cwd, title, prompt) => {
-        const { taskId, turn } = await this.startTask(profileId, cwd, title, prompt);
+      models: () => this.opts.agentModels?.list() ?? [],
+      startTask: async (profileId, cwd, title, prompt, model) => {
+        const { taskId, turn } = await this.startTask(profileId, cwd, title, prompt, model);
         turn.catch(() => {});
         return taskId;
       },
@@ -215,8 +216,9 @@ export class Herd {
     cwd: string,
     ownerText: string,
     prompt: string = ownerText,
+    model?: string,
   ): Promise<{ taskId: string; turn: Promise<RunResult> }> {
-    return this.runner.startTask(profileId, cwd, ownerText, prompt);
+    return this.runner.startTask(profileId, cwd, ownerText, prompt, model);
   }
 
   /** Sends a prompt to an open task. Queued while a turn runs; settles when its turn ends. */

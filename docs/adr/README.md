@@ -28,3 +28,4 @@ Format and rules: [ADR 0001](0001-record-architecture-decisions.md).
 | [0022](0022-pi-through-a-bundled-acp-bridge.md) | Pi joins through a bundled ACP bridge with an approval gate | Accepted |
 | [0023](0023-app-downloads-pinned-agent-clis.md) | The app downloads pinned agent CLIs; the owner does not install them | Superseded by 0024 |
 | [0024](0024-follow-latest-releases-six-agents.md) | Agent downloads follow upstream's latest release; six agents and a check button | Accepted |
+| [0025](0025-herder-picks-model-per-task.md) | The Herder picks the model of each task from the owner's list | Accepted |

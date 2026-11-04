@@ -111,6 +111,10 @@ ask-first env of each; `packages/host/src/runtimes.ts` checks the publisher's di
 `--version`), installs into `<home>/runtimes/<id>/<version>/` and records it in `current.json`.
 Lookup: `AGENTHERD_<ID>`, the download, `PATH`, then the DSH app. 移除 deletes the download.
 
+A task can run with a model from the owner's list: the Herder picks it and the agent gets it
+through env (Pi, OpenCode, Claude Code, Gemini CLI; see
+[ADR 0025](../adr/0025-herder-picks-model-per-task.md)).
+
 验证 starts the agent in an empty temporary folder, runs `initialize` and `session/new`, and
 reports its name and version, a needed sign-in, or the error. Local API: `agents()`,
 `installAgent(id)`, `cancelInstall(id)`, `removeAgent(id)`, `verifyAgent(id)`, event topic `agents`.

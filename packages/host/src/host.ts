@@ -19,6 +19,8 @@ import {
 import {
   builtinProviders,
   herderFromSettings,
+  modelChoices,
+  modelEnvFor,
   piModelEnv,
   resolveModel,
   serviceKey,
@@ -175,6 +177,15 @@ export class Host implements HostApi {
       locale,
       profiles: this.profileList,
       ...(herder === undefined ? {} : { herder }),
+      agentModels: {
+        list: () =>
+          modelChoices(
+            this.settings(),
+            this.profileList.map((p) => p.id),
+          ),
+        envFor: (profileId, ref) =>
+          modelEnvFor(this.settings(), this.opts.secrets, profileId, ref, this.opts.env),
+      },
     });
     herd.registry.onChange(() => this.emitTasks());
     try {

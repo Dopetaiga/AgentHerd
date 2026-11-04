@@ -96,6 +96,9 @@ export function nodeEnv(): Record<string, string> {
 }
 
 /** Downloaded agent CLIs under `<root>/<id>/<version>/`. */
+/** Executables of downloads made before current.json existed. */
+const LEGACY_EXECUTABLES: Record<string, string> = { pi: "pi/pi" };
+
 export class RuntimeStore {
   readonly root: string;
 
@@ -110,7 +113,7 @@ export class RuntimeStore {
   /** The checked copy in use, or undefined. */
   installed(id: string): Installed | undefined {
     const file = join(this.root, id, CURRENT);
-    if (!existsSync(file)) return undefined;
+    if (!existsSync(file)) return this.legacy(id);
     try {
       const { version, executable } = JSON.parse(readFileSync(file, "utf8")) as {
         version: string;
@@ -123,6 +126,17 @@ export class RuntimeStore {
     } catch {
       return undefined;
     }
+  }
+
+  /** A copy from before current.json (plan 013 put Pi in <root>/pi/<version>/pi/pi). */
+  private legacy(id: string): Installed | undefined {
+    const executable = LEGACY_EXECUTABLES[id];
+    const base = join(this.root, id);
+    if (executable === undefined || !existsSync(base)) return undefined;
+    const versions = readdirSync(base).filter((v) => existsSync(join(base, v, READY_MARK)));
+    const version = versions.sort().at(-1);
+    if (version === undefined || !existsSync(join(base, version, executable))) return undefined;
+    return { id, version, path: join(base, version, executable) };
   }
 
   /**

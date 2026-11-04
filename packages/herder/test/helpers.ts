@@ -6,7 +6,7 @@ import { CORE_TEXTS } from "@agentherd/core";
 export interface Recorded {
   said: string[];
   asked: { text: string; options: string[] }[];
-  started: { profileId: string; cwd: string; title: string; prompt: string }[];
+  started: { profileId: string; cwd: string; title: string; prompt: string; model?: string }[];
   prompted: { taskId: string; text: string }[];
   cancelled: string[];
   relays: string[];
@@ -28,7 +28,9 @@ export function task(id: string, title: string): Task {
   };
 }
 
-export function fakeHost(opts: { tasks?: Task[]; projects?: string[] } = {}): {
+export function fakeHost(
+  opts: { tasks?: Task[]; projects?: string[]; models?: { ref: string; agents: string[] }[] } = {},
+): {
   host: HerderHost;
   rec: Recorded;
 } {
@@ -53,8 +55,15 @@ export function fakeHost(opts: { tasks?: Task[]; projects?: string[] } = {}): {
     recentProjects: () => opts.projects ?? [],
     relayTaskId: () => undefined,
     decisions: () => [],
-    startTask: async (profileId, cwd, title, prompt) => {
-      rec.started.push({ profileId, cwd, title, prompt });
+    models: () => opts.models ?? [],
+    startTask: async (profileId, cwd, title, prompt, model) => {
+      rec.started.push({
+        profileId,
+        cwd,
+        title,
+        prompt,
+        ...(model === undefined ? {} : { model }),
+      });
       return `task-${rec.started.length}-0000-0000`;
     },
     promptTask: (taskId, text) => void rec.prompted.push({ taskId, text }),

@@ -1,3 +1,11 @@
+export {
+  agentModelEnv,
+  type ModelChoice,
+  modelChoices,
+  modelEnvFor,
+  OPENCODE_KEY_ENV,
+  OPENCODE_PROVIDER,
+} from "./agent-models.ts";
 export { HERDER_STATE_KEY, Herder, type HerderOptions, MAX_SAVED_MESSAGES } from "./herder.ts";
 export {
   type BuiltinProvider,
