@@ -70,6 +70,9 @@ channelContract("feishu (recorded API)", async () => {
         },
       });
       api.callbackResponses.push(response);
+      // Feishu replaces the card with the one in the callback response.
+      const card = response.card as { type: string; data: Record<string, unknown> } | undefined;
+      if (card !== undefined) api.cards.set(ref.id, card.data);
       // The callback answers at once; the core updates the card right after.
       await settle();
     },

@@ -177,4 +177,10 @@ Unit: card rendering, inbound parsing. Contract: both channels. Manual: Step 6.
   card was patched without a `channel.error`, the CLI printed `[turn] end_turn`, and `status`
   shows one decision with `source = human`. The App Secret was not found in `config.json`,
   `herd.db`, `herd.db-wal`, the CLI output or the repo.
+- Found in the manual run: the tapped card kept its buttons. `im.v1.message.patch` returned
+  success, but it ran before the card callback was answered, and Feishu kept the old card.
+  Fix: while a callback for a message is open (at most `CALLBACK_WAIT_MS` = 2000 ms), an
+  `update` of that message goes into the callback response (`card: { type: "raw" }`); later
+  updates use `patch`. Second manual run, 2026-11-04 13:41: the card turned into
+  "Allowed by you" without buttons (confirmed by the maintainer).
 

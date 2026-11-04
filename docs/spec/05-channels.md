@@ -95,7 +95,9 @@ confirmed that `card.action.trigger` arrives over the long connection.
 
 ### Cards
 
-Card JSON 2.0 with `update_multi: true`, so the card can be updated after an action. Card
+Card JSON 2.0 with `update_multi: true`, so the card can be updated after an action. An update of
+the card that was just tapped is returned in the callback response: a `patch` sent before the
+callback is answered is not shown (seen in the M1 manual run). Card
 callback values carry `{ target, action }`. The callback handler checks the owner, applies
 the action once (duplicate callbacks are ignored), and returns a toast plus the updated card.
 

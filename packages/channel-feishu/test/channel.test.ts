@@ -127,3 +127,56 @@ describe("FeishuChannel.start", () => {
     ).rejects.toThrow("no appId");
   });
 });
+
+describe("FeishuChannel card callback", () => {
+  it("returns the updated card in the callback response instead of patching", async () => {
+    let onCardAction: ((p: unknown) => Promise<Record<string, unknown>>) | null = null;
+    const patched: string[] = [];
+    const api: FeishuApi = {
+      connect: async (h) => {
+        onCardAction = h.onCardAction;
+      },
+      close: async () => {},
+      sendCard: async () => "om_1",
+      patchCard: async (id) => {
+        patched.push(id);
+      },
+      pin: async () => {},
+    };
+    const channel = new FeishuChannel({
+      getSecret: async () => "s",
+      saveSecret: async () => {},
+      createApi: () => api,
+    });
+    await channel.start(
+      { channelId: "feishu", ownerId: "ou_owner", data: { appId: "cli_1" } },
+      async (inbound) => {
+        if (inbound.kind === "action") {
+          await channel.update(
+            { channelId: "feishu", id: "om_1" },
+            {
+              kind: "item",
+              itemId: "i1",
+              title: "t",
+              body: "b",
+              risk: "low",
+              options: [],
+              final: "Allowed by you",
+            },
+          );
+        }
+      },
+    );
+    const handler = onCardAction as unknown as (p: unknown) => Promise<Record<string, unknown>>;
+    const response = await handler({
+      operator: { open_id: "ou_owner" },
+      action: { value: { target: "i1", action: "allow" } },
+      context: { open_message_id: "om_1" },
+    });
+    expect(patched).toEqual([]);
+    expect(JSON.stringify(response.card)).toContain("Allowed by you");
+    // After the callback is answered, updates patch again.
+    await channel.update({ channelId: "feishu", id: "om_1" }, { kind: "text", text: "later" });
+    expect(patched).toEqual(["om_1"]);
+  });
+});

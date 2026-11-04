@@ -27,6 +27,28 @@ export const SCOPES = ["im:message", "im:message:send_as_bot", "im:message.p2p_m
 export const EVENTS = ["im.message.receive_v1"];
 export const CALLBACKS = ["card.action.trigger"];
 
+/** How long a card callback waits for the core before it answers without a new card. */
+export const CALLBACK_WAIT_MS = 2000;
+
+interface PendingCallback {
+  answered: boolean;
+  card?: Record<string, unknown>;
+}
+
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms).unref());
+
+function openMessageId(payload: unknown): string | null {
+  const root =
+    typeof payload === "object" && payload !== null ? (payload as Record<string, unknown>) : null;
+  const event =
+    root !== null && typeof root.event === "object" && root.event !== null ? root.event : root;
+  const context = (event as Record<string, unknown> | null)?.context as
+    | Record<string, unknown>
+    | undefined;
+  const id = context?.open_message_id;
+  return typeof id === "string" && id !== "" ? id : null;
+}
+
 export interface FeishuChannelOptions {
   /** Looks up the App Secret for an App ID (keychain, safeStorage, …). */
   getSecret(appId: string): Promise<string>;
@@ -53,6 +75,7 @@ export class FeishuChannel implements Channel {
   ];
   private api: FeishuApi | null = null;
   private ownerId = "";
+  private readonly callbacks = new Map<string, PendingCallback>();
 
   private readonly opts: FeishuChannelOptions;
 
@@ -107,11 +130,7 @@ export class FeishuChannel implements Channel {
     };
     await api.connect({
       onMessage: async (payload) => deliver(parseMessage(payload)),
-      onCardAction: async (payload) => {
-        // Answer the callback at once; the core updates the card with `update`.
-        void deliver(parseCardAction(payload));
-        return { toast: { type: "info", content: "Received" } };
-      },
+      onCardAction: async (payload) => this.onCardAction(payload, deliver),
     });
     this.api = api;
   }
@@ -127,7 +146,38 @@ export class FeishuChannel implements Channel {
   }
 
   async update(ref: MessageRef, view: View): Promise<void> {
+    // During a card callback, Feishu keeps showing the old card if it is patched before the
+    // callback is answered (seen in the M1 manual run). So an update of the tapped card goes
+    // into the callback response instead.
+    const pending = this.callbacks.get(ref.id);
+    if (pending !== undefined && !pending.answered) {
+      pending.card = renderCard(view);
+      return;
+    }
     await this.requireApi().patchCard(ref.id, renderCard(view));
+  }
+
+  private async onCardAction(
+    payload: unknown,
+    deliver: (inbound: ReturnType<typeof parseCardAction>) => Promise<void>,
+  ): Promise<Record<string, unknown>> {
+    const toast = { type: "info", content: "Received" };
+    const messageId = openMessageId(payload);
+    if (messageId === null) {
+      void deliver(parseCardAction(payload));
+      return { toast };
+    }
+    const pending: PendingCallback = { answered: false };
+    this.callbacks.set(messageId, pending);
+    try {
+      // Feishu waits about 3 s for the answer; give the core most of it.
+      await Promise.race([deliver(parseCardAction(payload)), sleep(CALLBACK_WAIT_MS)]);
+    } finally {
+      pending.answered = true;
+      if (this.callbacks.get(messageId) === pending) this.callbacks.delete(messageId);
+    }
+    if (pending.card === undefined) return { toast };
+    return { toast, card: { type: "raw", data: pending.card } };
   }
 
   async pin(ref: MessageRef): Promise<void> {
