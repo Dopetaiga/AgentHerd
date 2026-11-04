@@ -7,7 +7,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-export const SOFT_LINES = 2000;
+export const SOFT_LINES = 3500;
 export const MAX_LINES = 5000;
 
 export const EXTENSIONS = [".ts", ".tsx", ".mts", ".cts", ".js", ".mjs", ".cjs", ".css"];
