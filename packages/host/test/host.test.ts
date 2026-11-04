@@ -105,6 +105,13 @@ describe("Host", () => {
     expect(t.events.some((e) => e.topic === "models")).toBe(true);
   });
 
+  it("reconnects the channel on request", async () => {
+    const t = makeHost(true);
+    await t.host.start();
+    expect((await t.host.reconnect()).channel.connected).toBe(true);
+    expect(t.channels).toHaveLength(2);
+  });
+
   it("changes the mode and keep-awake, refusing auto", async () => {
     const t = makeHost(true);
     await t.host.start();

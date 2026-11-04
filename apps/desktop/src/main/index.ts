@@ -11,6 +11,9 @@ import { connectHost, type HostClient, socketPath } from "@agentherd/host/server
 import { app, BrowserWindow, ipcMain, powerSaveBlocker, shell } from "electron";
 import { ensureHost, stopOwnedHost } from "./host-process.ts";
 
+app.setName("AgentHerd");
+app.setAboutPanelOptions({ applicationName: "AgentHerd", copyright: "MIT License" });
+
 const home = process.env.AGENTHERD_HOME ?? join(homedir(), ".agentherd");
 const sock = socketPath(home);
 
@@ -86,6 +89,15 @@ function createWindow(): void {
     title: "AgentHerd",
     show: process.env.AGENTHERD_CAPTURE === undefined,
     titleBarStyle: "hiddenInset",
+    trafficLightPosition: { x: 18, y: 18 },
+    // The sidebar is translucent on macOS; the renderer keeps the page card opaque.
+    ...(process.platform === "darwin"
+      ? {
+          vibrancy: "sidebar" as const,
+          visualEffectState: "followWindow" as const,
+          backgroundColor: "#00000000",
+        }
+      : {}),
     webPreferences: {
       preload: join(import.meta.dirname, "../preload/index.cjs"),
       contextIsolation: true,
@@ -129,6 +141,8 @@ async function captureAndQuit(prefix: string): Promise<void> {
 }
 
 app.whenReady().then(() => {
+  // In development the bundle is node_modules' Electron.app; show the AgentHerd icon anyway.
+  app.dock?.setIcon(join(import.meta.dirname, "../../resources/icon.png"));
   createWindow();
   void connect();
   app.on("activate", () => {

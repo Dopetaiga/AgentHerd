@@ -117,6 +117,11 @@ export class Host implements HostApi {
     if (herd !== undefined) await herd.stop();
   }
 
+  async reconnect(): Promise<HostStatus> {
+    await this.restartHerd();
+    return this.status();
+  }
+
   private async restartHerd(): Promise<void> {
     await this.stopHerd();
     const config = this.config();

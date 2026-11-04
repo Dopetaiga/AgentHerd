@@ -109,6 +109,8 @@ export interface HostApi {
   cancelSetup(): SetupState;
   setupState(): SetupState;
   updateSettings(patch: SettingsPatch): HostStatus;
+  /** Connects the channel again, e.g. after the owner allowed keychain access. */
+  reconnect(): Promise<HostStatus>;
 }
 
 export type HostMethod = keyof HostApi;
@@ -127,6 +129,7 @@ export const HOST_METHODS: readonly HostMethod[] = [
   "cancelSetup",
   "setupState",
   "updateSettings",
+  "reconnect",
 ];
 
 export type HostEvent =
