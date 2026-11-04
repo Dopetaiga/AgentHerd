@@ -4,7 +4,7 @@ This package is a fork of the agent loop of [Pi](https://github.com/earendil-wor
 (`@earendil-works/pi-agent-core`, MIT, see [LICENSE](LICENSE)). AgentHerd owns it and keeps
 following upstream ([ADR 0020](../../docs/adr/0020-fork-pi-agent-loop-track-upstream.md)).
 
-Base: v1.4.0 (4a080252f06caf63a525d7873c5d94d3c23887e0)
+Base: v1.5.0 (f9a26365568127461c47a07a37dcb42c140a3ac5)
 
 ## Path mapping
 
@@ -13,8 +13,8 @@ Base: v1.4.0 (4a080252f06caf63a525d7873c5d94d3c23887e0)
 | `packages/agent/src/` | `src/` |
 | `packages/agent/test/` | `test/` |
 
-Dependencies follow the versions in upstream `packages/agent/package.json`:
-`@earendil-works/pi-ai` and `typebox`, pinned exactly.
+`dependencies` in `package.json` are exactly the ones in upstream `packages/agent/package.json`
+(the sync script adds, changes and removes entries). The fork has no dependencies of its own.
 
 ## Differences from upstream that are not code
 
