@@ -227,6 +227,12 @@ directory). Rules come from:
   directory by default; the owner can widen it later in the desktop rule editor;
 - the desktop rule editor.
 
+Matching is conservative ([plan 001](../../plans/001-workspace-protocol-and-rules.md)):
+`deny` wins over `allow`; an `allow` rule with a command pattern never matches a compound
+command (`pnpm test && git push`) or a command the parser cannot read (command substitution,
+unbalanced quotes); a path scope checks both the paths the agent reported and the path-like
+words of the command.
+
 ### Reviewer
 
 - One structured-output call to the strongest model the user configured. No resident session.

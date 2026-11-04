@@ -207,6 +207,15 @@ Unit tests only (pure logic): normalize, guard, match, redact. No E2E in this pl
 
 ## Maintenance notes
 
+- Done 2026-11-04. Differences from the steps above, all toward the human: `guardCheck`
+  returns `{ hit: true; id; reason }`; `matchRules(rules, item, home)` takes the home
+  directory for `~`; allow rules never match compound or unparsed commands; the guard list
+  also covers `doas`, `xargs rm -r`, `find -exec rm -r`, `git push +ref`, `curl -d @file`,
+  more interpreters (`perl`, `ruby`, `dash`, `fish`), and `kind: "delete"` tool calls. The
+  shell splitter is `packages/rules/src/shell.ts`; it throws `UnparsedCommandError` on
+  `$(…)`, backticks, `<(…)` and unbalanced quotes.
+- `normalizeCommand` and `redact` were written by a DeepSeek V4 Pro agent and reviewed.
+
 - No build step in M1: packages export `./src/index.ts`; tests run with vitest and the CLI
   runs with `tsx`. A build (`tsdown`) is added when the desktop app needs bundles (M2).
 - The guard list is intentionally coarse. A false hit costs one owner tap; a miss can cost

@@ -1,0 +1,21 @@
+{
+  "name": "agentherd",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.13"
+  },
+  "packageManager": "pnpm@11.18.0",
+  "scripts": {
+    "check": "biome check . && pnpm -r --parallel typecheck",
+    "test": "vitest run",
+    "format": "biome format --write ."
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.6.4",
+    "@types/node": "^22.20.5",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vitest": "^5.1.0"
+  }
+}
