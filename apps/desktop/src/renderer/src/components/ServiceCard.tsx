@@ -5,9 +5,10 @@ import { useState } from "react";
 import { devOpen } from "../dev-bridge";
 import { applyModels, call, errorText, host, type ServiceView, useApp } from "../store";
 import { providerName } from "./labels";
+import { Modal } from "./Modal";
 import { ModelPanes } from "./ModelPanes";
 import { FieldNote, SmallField } from "./ServiceForm";
-import { Badge, Button, Dot, Group, IconTile, inputClass, Modal } from "./ui";
+import { Badge, Button, Dot, Group, IconTile, inputClass } from "./ui";
 
 type TestResult =
   | { state: "running" }

@@ -5,8 +5,9 @@ import { useState } from "react";
 import { useApp } from "../store";
 import { FeishuSetup } from "./FeishuSetup";
 import { canReconnect, channelErrorLabel } from "./labels";
+import { Modal } from "./Modal";
 import { ReconnectButton } from "./ReconnectButton";
-import { Badge, Button, Group, IconTile, Modal, Row, Section } from "./ui";
+import { Badge, Button, Group, IconTile, Row, Section } from "./ui";
 
 export function FeishuSection() {
   const channel = useApp((s) => s.status?.channel);

@@ -1,0 +1,182 @@
+// Inbound from the owner: commands, relay messages, Herder questions and their answers.
+
+import { randomUUID } from "node:crypto";
+import { statSync } from "node:fs";
+import { join, resolve } from "node:path";
+import type { AskView, Inbound, MessageRef } from "@agentherd/protocol";
+import { parseCommand } from "./commands.ts";
+import { type HerdContext, openTasks, say, type TaskOps } from "./herd-context.ts";
+import type { Relay } from "./relay.ts";
+import type { Task } from "./tasks.ts";
+import { taskTitle } from "./tasks.ts";
+
+export class OwnerCommands {
+  /** Open questions from the Herder, by ask id. */
+  private readonly asks = new Map<string, { ref: MessageRef; view: AskView }>();
+
+  private readonly ctx: HerdContext;
+  private readonly relay: Relay;
+  private readonly tasks: TaskOps;
+
+  constructor(ctx: HerdContext, relay: Relay, tasks: TaskOps) {
+    this.ctx = ctx;
+    this.relay = relay;
+    this.tasks = tasks;
+  }
+
+  /** Inbound from the channel. Errors are recorded, never thrown back into the channel. */
+  async handle(inbound: Inbound): Promise<void> {
+    const { ctx } = this;
+    try {
+      if (inbound.from !== ctx.opts.binding.ownerId) {
+        // The inbox drops and audits everything that does not come from the owner.
+        await ctx.inbox.handle(inbound);
+        return;
+      }
+      if (inbound.kind === "action") {
+        if (this.asks.has(inbound.target))
+          return await this.onAskAnswer(inbound.target, inbound.action);
+        if (inbound.action === "relay") return await this.relay.start(inbound.target);
+        if (inbound.action === "end-relay") return await this.relay.end("ended by you");
+        await ctx.inbox.handle(inbound);
+        return;
+      }
+      await this.onOwnerMessage(inbound.text);
+    } catch (error) {
+      ctx.store.audit("inbound.error", { message: (error as Error).message });
+    }
+  }
+
+  /** Sends a question with buttons; the answer goes to the Herder. */
+  async ask(text: string, options: string[]): Promise<void> {
+    const askId = `ask-${randomUUID()}`;
+    const view: AskView = {
+      kind: "ask",
+      askId,
+      text,
+      options: options.map((label, i) => ({ action: String(i), label })),
+    };
+    const ref = await this.ctx.opts.channel.send(view);
+    this.asks.set(askId, { ref, view });
+  }
+
+  private async onOwnerMessage(text: string): Promise<void> {
+    const { ctx } = this;
+    const command = parseCommand(text);
+    const relay = this.relay.current();
+    if (relay !== undefined) this.relay.touch();
+    switch (command.kind) {
+      case "status":
+        await ctx.board.flush(true);
+        return;
+      case "help":
+        await say(ctx, ctx.texts.help);
+        return;
+      case "invalid":
+        await say(ctx, ctx.texts.usage(command.usage));
+        return;
+      case "run":
+        await this.runCommand(command.agent, command.dir, command.text);
+        return;
+      case "relay": {
+        const matches = this.findTasks(command.query);
+        if (matches.length === 1 && matches[0] !== undefined) {
+          await this.relay.start(matches[0].id);
+        } else if (matches.length === 0) {
+          await say(ctx, ctx.texts.noMatch(command.query));
+        } else {
+          const list = matches.map((t) => `- ${t.id.slice(0, 8)} ${t.title}`).join("\n");
+          await say(ctx, ctx.texts.manyMatches(command.query, list));
+        }
+        return;
+      }
+      case "end":
+        if (relay === undefined) await say(ctx, ctx.texts.noRelay);
+        else await this.relay.end("ended by you");
+        return;
+      case "interrupt":
+        if (relay === undefined) {
+          await say(ctx, ctx.texts.noRelay);
+          return;
+        }
+        ctx.store.audit("relay.interrupt", { taskId: relay.taskId });
+        void this.tasks.interruptTask(relay.taskId, command.text).catch(() => {});
+        return;
+      case "herder":
+        await this.toHerder(command.text);
+        return;
+      case "text": {
+        if (relay === undefined) {
+          await this.toHerder(command.text);
+          return;
+        }
+        const f = ctx.following.get(relay.taskId);
+        ctx.store.audit("relay.message", { taskId: relay.taskId });
+        if (f?.busy === true) await say(ctx, ctx.texts.queued);
+        void this.tasks.promptTask(relay.taskId, command.text).catch(() => {});
+        return;
+      }
+    }
+  }
+
+  private async toHerder(text: string): Promise<void> {
+    const herder = this.ctx.herder();
+    if (herder === undefined) await say(this.ctx, this.ctx.texts.noHerder);
+    else herder.ownerMessage(text);
+  }
+
+  private async onAskAnswer(askId: string, action: string): Promise<void> {
+    const { ctx } = this;
+    const ask = this.asks.get(askId);
+    const option = ask?.view.options.find((o) => o.action === action);
+    if (ask === undefined || option === undefined) return;
+    this.asks.delete(askId);
+    ctx.store.audit("herder.answer", { askId, answer: option.label });
+    try {
+      await ctx.opts.channel.update(ask.ref, { ...ask.view, final: option.label });
+    } catch (error) {
+      ctx.store.audit("send.error", { kind: "ask", message: (error as Error).message });
+    }
+    ctx.herder()?.ownerAnswer(ask.view.text, option.label);
+  }
+
+  private async runCommand(agent: string, dir: string, text: string): Promise<void> {
+    const { ctx } = this;
+    const { profiles, userHome } = ctx.opts;
+    if (!profiles.some((p) => p.id === agent)) {
+      const known = profiles.map((p) => p.id).join(", ");
+      await say(ctx, ctx.texts.unknownAgent(agent, known));
+      return;
+    }
+    const cwd = resolve(dir === "~" || dir.startsWith("~/") ? join(userHome, dir.slice(1)) : dir);
+    if (!isDirectory(cwd)) {
+      await say(ctx, ctx.texts.notDirectory(cwd));
+      return;
+    }
+    await say(ctx, ctx.texts.runAccepted(taskTitle(text)));
+    try {
+      const { turn } = await this.tasks.startTask(agent, cwd, text);
+      turn.catch(() => {});
+    } catch {
+      // startTask already sent a report.
+    }
+  }
+
+  /** Open tasks whose id starts with the query, or whose title has every word of it. */
+  private findTasks(query: string): Task[] {
+    const q = query.trim().toLowerCase();
+    const open = openTasks(this.ctx);
+    const byId = open.filter((t) => t.id.startsWith(q));
+    if (byId.length > 0) return byId;
+    const words = q.split(/\s+/).filter((w) => w !== "");
+    return open.filter((t) => words.every((w) => t.title.toLowerCase().includes(w)));
+  }
+}
+
+function isDirectory(path: string): boolean {
+  try {
+    return statSync(path).isDirectory();
+  } catch {
+    return false;
+  }
+}

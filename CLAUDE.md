@@ -2,7 +2,7 @@
 
 Short mirror of [AGENTS.md](AGENTS.md). AGENTS.md wins if they differ.
 
-Policy-Sync: 2026-11-04.2
+Policy-Sync: 2026-11-04.5
 
 Non-negotiable:
 
@@ -12,12 +12,12 @@ Non-negotiable:
 - Agent configs change only through explicit export with backup; own block only; never widen a rule.
 - Do not copy code from PI-Desktop or OpenBot.
 - `packages/protocol` changes update spec, ACP client, exporters, channels and tests together.
-- Commit only, never push. Author `zszz3`. No `reset --hard`, force push, `--no-verify`.
+- Branch → push → open a PR → merge it yourself (no review). Never commit to `main` directly. Author `zszz3`. No `reset --hard`, force push, `--no-verify`.
 
 Defaults:
 
 - Read `docs/spec/00-baseline.md`, the relevant spec pages, their ADRs, the plan, the glossary.
 - Same commit: behavior → spec; boundary → ADR; visible behavior → E2E scenario; README → README.zh-CN.
-- TypeScript strict, ESM, Node 22+, files ≲ 400 lines, core without Electron.
+- TypeScript strict, ESM, Node 22+, files under ~500 lines (`pnpm check` warns > 500, fails > 800), core without Electron.
 - English everywhere in the repo; reply in the maintainer's language.
 - Conventional Commits with a "why" body. Do not claim unrun checks passed.
