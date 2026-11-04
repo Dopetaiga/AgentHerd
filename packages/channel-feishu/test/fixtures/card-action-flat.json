@@ -1,0 +1,8 @@
+{
+  "operator": { "open_id": "ou_owner000" },
+  "action": {
+    "tag": "button",
+    "value": { "target": "item-2", "action": "deny" }
+  },
+  "context": { "open_message_id": "om_msg000", "open_chat_id": "oc_chat000" }
+}

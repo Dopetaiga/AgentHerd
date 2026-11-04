@@ -1,0 +1,17 @@
+{
+  "name": "@agentherd/channel-feishu",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p .",
+    "test": "vitest run --root ../.. packages/channel-feishu"
+  },
+  "dependencies": {
+    "@agentherd/protocol": "workspace:*",
+    "@larksuiteoapi/node-sdk": "^1.76.0"
+  }
+}

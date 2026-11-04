@@ -1,0 +1,237 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`renderCard > renders a final item card 1`] = `
+{
+  "body": {
+    "elements": [
+      {
+        "content": "**Fix the build**",
+        "tag": "markdown",
+      },
+      {
+        "content": "\`\`\`
+Install dependencies in /repo
+\`\`\`",
+        "tag": "markdown",
+      },
+      {
+        "content": "Reason: <font color='grey'>Seen in 3 sessions</font>",
+        "tag": "markdown",
+      },
+      {
+        "content": "**Allowed by you**",
+        "tag": "markdown",
+      },
+    ],
+  },
+  "config": {
+    "update_multi": true,
+  },
+  "header": {
+    "template": "grey",
+    "text_tag_list": [
+      {
+        "color": "orange",
+        "tag": "text_tag",
+        "text": {
+          "content": "Medium risk",
+          "tag": "plain_text",
+        },
+      },
+    ],
+    "title": {
+      "content": "Run \`npm install\`?",
+      "tag": "plain_text",
+    },
+  },
+  "schema": "2.0",
+}
+`;
+
+exports[`renderCard > renders a high-risk item card 1`] = `
+{
+  "body": {
+    "elements": [
+      {
+        "content": "**Fix the build**",
+        "tag": "markdown",
+      },
+      {
+        "content": "\`\`\`
+Install dependencies in /repo
+\`\`\`",
+        "tag": "markdown",
+      },
+      {
+        "content": "Reason: <font color='grey'>Seen in 3 sessions</font>",
+        "tag": "markdown",
+      },
+      {
+        "columns": [
+          {
+            "elements": [
+              {
+                "behaviors": [
+                  {
+                    "type": "callback",
+                    "value": {
+                      "action": "escalate",
+                      "target": "item-2",
+                    },
+                  },
+                ],
+                "tag": "button",
+                "text": {
+                  "content": "Escalate",
+                  "tag": "plain_text",
+                },
+                "type": "default",
+              },
+            ],
+            "tag": "column",
+            "width": "auto",
+          },
+        ],
+        "tag": "column_set",
+      },
+    ],
+  },
+  "config": {
+    "update_multi": true,
+  },
+  "header": {
+    "template": "red",
+    "text_tag_list": [
+      {
+        "color": "red",
+        "tag": "text_tag",
+        "text": {
+          "content": "High risk",
+          "tag": "plain_text",
+        },
+      },
+    ],
+    "title": {
+      "content": "Run \`npm install\`?",
+      "tag": "plain_text",
+    },
+  },
+  "schema": "2.0",
+}
+`;
+
+exports[`renderCard > renders a text view 1`] = `
+{
+  "body": {
+    "elements": [
+      {
+        "content": "**Build**",
+        "tag": "markdown",
+      },
+      {
+        "content": "hello world",
+        "tag": "markdown",
+      },
+    ],
+  },
+  "config": {
+    "update_multi": true,
+  },
+  "schema": "2.0",
+}
+`;
+
+exports[`renderCard > renders an allow/deny item card 1`] = `
+{
+  "body": {
+    "elements": [
+      {
+        "content": "**Fix the build**",
+        "tag": "markdown",
+      },
+      {
+        "content": "\`\`\`
+Install dependencies in /repo
+\`\`\`",
+        "tag": "markdown",
+      },
+      {
+        "content": "Reason: <font color='grey'>Seen in 3 sessions</font>",
+        "tag": "markdown",
+      },
+      {
+        "columns": [
+          {
+            "elements": [
+              {
+                "behaviors": [
+                  {
+                    "type": "callback",
+                    "value": {
+                      "action": "allow",
+                      "target": "item-1",
+                    },
+                  },
+                ],
+                "tag": "button",
+                "text": {
+                  "content": "Allow",
+                  "tag": "plain_text",
+                },
+                "type": "primary_filled",
+              },
+            ],
+            "tag": "column",
+            "width": "auto",
+          },
+          {
+            "elements": [
+              {
+                "behaviors": [
+                  {
+                    "type": "callback",
+                    "value": {
+                      "action": "deny",
+                      "target": "item-1",
+                    },
+                  },
+                ],
+                "tag": "button",
+                "text": {
+                  "content": "Deny",
+                  "tag": "plain_text",
+                },
+                "type": "danger",
+              },
+            ],
+            "tag": "column",
+            "width": "auto",
+          },
+        ],
+        "tag": "column_set",
+      },
+    ],
+  },
+  "config": {
+    "update_multi": true,
+  },
+  "header": {
+    "template": "orange",
+    "text_tag_list": [
+      {
+        "color": "orange",
+        "tag": "text_tag",
+        "text": {
+          "content": "Medium risk",
+          "tag": "plain_text",
+        },
+      },
+    ],
+    "title": {
+      "content": "Run \`npm install\`?",
+      "tag": "plain_text",
+    },
+  },
+  "schema": "2.0",
+}
+`;

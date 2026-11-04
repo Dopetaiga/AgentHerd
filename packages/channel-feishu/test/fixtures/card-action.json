@@ -1,0 +1,15 @@
+{
+  "schema": "2.0",
+  "header": {
+    "title": { "tag": "plain_text", "content": "Run npm install?" },
+    "template": "orange"
+  },
+  "event": {
+    "operator": { "open_id": "ou_owner000" },
+    "action": {
+      "tag": "button",
+      "value": { "target": "item-1", "action": "allow" }
+    },
+    "context": { "open_message_id": "om_msg000", "open_chat_id": "oc_chat000" }
+  }
+}

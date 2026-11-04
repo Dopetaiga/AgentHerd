@@ -1,0 +1,14 @@
+{
+  "event": {
+    "sender": {
+      "sender_id": { "open_id": "ou_owner000" },
+      "sender_type": "user"
+    },
+    "message": {
+      "message_id": "om_msg003",
+      "chat_type": "group",
+      "message_type": "text",
+      "content": "{\"text\":\"hello group\"}"
+    }
+  }
+}
