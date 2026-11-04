@@ -7,7 +7,7 @@
   },
   "packageManager": "pnpm@11.18.0",
   "scripts": {
-    "check": "biome check . && tsc --noEmit -p scripts && pnpm -r --parallel typecheck",
+    "check": "node scripts/check-lines.ts && biome check . && tsc --noEmit -p scripts && pnpm -r --parallel typecheck",
     "test": "vitest run",
     "format": "biome format --write ."
   },

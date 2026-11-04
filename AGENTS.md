@@ -4,7 +4,7 @@ Instructions for coding agents (and humans) who change this repo. This file is t
 `CLAUDE.md` is a short mirror; both carry the same `Policy-Sync` line. Change both in the
 same commit.
 
-Policy-Sync: 2026-11-04.2
+Policy-Sync: 2026-11-04.3
 
 ## 1. Non-negotiable
 
@@ -51,7 +51,9 @@ in your report.
 
 - TypeScript strict, ES modules, Node.js 22+. No `any`, no `@ts-ignore` without a comment
   that explains why.
-- Keep files under about 400 lines. Split by responsibility, not by layer.
+- At most 400 lines per source file (`.ts`, `.tsx`, `.css`, `.js`), tests included. `pnpm check`
+  enforces it with `scripts/check-lines.ts`; only the forked Pi loop (`packages/herder-loop/src`,
+  `test`) is exempt. Split by responsibility, not by layer.
 - `core` has no Electron imports. The renderer has no Node access.
 - Prefer E2E tests with `mock-agent` and `channel-fake`. Add unit tests for pure logic
   (rules, guard list, redaction, normalization, parsing).
