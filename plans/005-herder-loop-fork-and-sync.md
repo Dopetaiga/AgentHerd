@@ -132,11 +132,11 @@ Commit as `chore(herder-loop): sync Pi agent loop to v1.5.0 (f9a2636)`.
 
 ## Done criteria
 
-- [ ] `packages/herder-loop` equals upstream `v1.5.0` loop files; `UPSTREAM.md` base is `v1.5.0`
-- [ ] Sync script and its tests committed
-- [ ] `pnpm check` and `pnpm test` pass
-- [ ] ADR 0020 decision 5 wording matches where `pi-ai` is imported
-- [ ] `plans/README.md` state updated
+- [x] `packages/herder-loop` equals upstream `v1.5.0` loop files; `UPSTREAM.md` base is `v1.5.0`
+- [x] Sync script and its tests committed
+- [x] `pnpm check` and `pnpm test` pass
+- [x] ADR 0020 decision 5 wording matches where `pi-ai` is imported
+- [x] `plans/README.md` state updated
 
 ## STOP conditions
 
@@ -146,4 +146,14 @@ Commit as `chore(herder-loop): sync Pi agent loop to v1.5.0 (f9a2636)`.
 
 ## Maintenance notes
 
-<Filled in when the plan is done.>
+- Done 2026-11-04. Commits: `c586415` (fork at v1.4.0), `5128104` (sync script),
+  `0b6a679` (script fix), `6bf720f` (first sync to v1.5.0).
+- The first sync found a real change: upstream v1.5.0 replaced `typebox` with
+  `@earendil-works/pi-schema`. The script first synced only a fixed list of two packages and
+  missed it (typecheck failed). Fix: the fork's `dependencies` now mirror upstream's exactly.
+- No tsconfig option other than `exactOptionalPropertyTypes` and `noUncheckedIndexedAccess`
+  had to be relaxed. Upstream tests (92 at v1.4.0) run offline with a fake stream function.
+- `pnpm-workspace.yaml` sets `allowBuilds: "@google/genai": false` (a `pi-ai` dependency; its
+  install script is not needed).
+- Root `pnpm check` now also type-checks `scripts/` (`tsc --noEmit -p scripts`), and vitest
+  includes `scripts/test`.

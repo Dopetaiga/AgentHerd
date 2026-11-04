@@ -42,9 +42,11 @@ Facts, checked on 2026-11-04:
    version whose changelog touches the agent loop. Skipping an upstream change is allowed and
    is recorded in `UPSTREAM.md` with the reason.
 5. **Providers come from `@earendil-works/pi-ai`, pinned to an exact version**, and only
-   through AgentHerd's own `ModelClient` interface. Nothing else imports `pi-ai`. AgentHerd
+   through AgentHerd's own `ModelClient` interface. Only `packages/herder-loop` (upstream code)
+   and the `ModelClient` implementation import `pi-ai`. AgentHerd
    does not patch `pi-ai`; behavior changes go into the `ModelClient` implementation.
-   Upgrading `pi-ai` is a deliberate commit. If `pi-ai` stops fitting, another implementation
+   The version is the one upstream's loop pins; the sync script keeps the fork's dependencies
+   equal to upstream's. Upgrading `pi-ai` otherwise is a deliberate commit. If `pi-ai` stops fitting, another implementation
    of `ModelClient` (for example OpenAI-compatible HTTP) replaces it.
 
 ## Alternatives
