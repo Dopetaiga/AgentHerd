@@ -59,6 +59,22 @@ export interface AgentView {
   modelRef?: string;
 }
 
+/** Result of starting an agent once to check it works (the 验证 button). */
+export interface AgentCheck {
+  id: string;
+  ok: boolean;
+  /** It started but wants the owner to sign in first (ACP authMethods, or an auth error). */
+  needsLogin: boolean;
+  /** Name and version the agent reported. */
+  agentName?: string;
+  agentVersion?: string;
+  /** Sign-in methods it offers. */
+  authMethods: string[];
+  /** Why it failed, from the error and the last stderr lines. */
+  error?: string;
+  ms: number;
+}
+
 export interface ItemSummary {
   id: string;
   sessionId: string;
@@ -141,6 +157,8 @@ export interface HostApi {
   cancelInstall(id: string): AgentView[];
   /** Removes a downloaded CLI. */
   removeAgent(id: string): AgentView[];
+  /** Starts the agent in an empty folder, opens a session and closes it. */
+  verifyAgent(id: string): Promise<AgentCheck>;
 }
 
 export type HostMethod = keyof HostApi;
@@ -164,6 +182,7 @@ export const HOST_METHODS: readonly HostMethod[] = [
   "installAgent",
   "cancelInstall",
   "removeAgent",
+  "verifyAgent",
 ];
 
 export type HostEvent =

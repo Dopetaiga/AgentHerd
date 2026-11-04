@@ -29,6 +29,7 @@ import { DEFAULT_LOCALE } from "@agentherd/protocol";
 import QRCode from "qrcode";
 import { Agents } from "./agents.ts";
 import type {
+  AgentCheck,
   AgentView,
   HostApi,
   HostEvent,
@@ -41,9 +42,11 @@ import type {
   SetupState,
   TasksView,
 } from "./api.ts";
+import type { AgentDef, Fetchers } from "./catalog.ts";
 import { type CliConfig, readConfig, writeConfig } from "./config.ts";
 import { availableProfiles } from "./profiles.ts";
-import { type RuntimeLock, RuntimeStore } from "./runtimes.ts";
+import { RuntimeStore } from "./runtimes.ts";
+import { type VerifyOptions, verifyProfile } from "./verify.ts";
 
 export const HOST_VERSION = "0.0.0";
 
@@ -62,11 +65,15 @@ export interface HostOptions {
   log?: (line: string) => void;
   /** Where downloaded agent CLIs go. Default: <home>/runtimes. */
   runtimes?: RuntimeStore;
-  /** Pinned Pi build (tests). */
-  piRuntime?: RuntimeLock;
-  /** Agent lookup overrides (tests). */
-  findDsh?: () => string | undefined;
-  findSystemPi?: () => string | undefined;
+  /** Agent definitions and release lookups (tests). Default: catalog.ts. */
+  catalog?: AgentDef[];
+  fetchers?: Fetchers;
+  target?: string;
+  exists?: (path: string) => boolean;
+  /** Options for verifyAgent (tests). */
+  verify?: VerifyOptions;
+  /** The DeepSeek Harness app's CLI (tests). */
+  dshApp?: string;
 }
 
 export class Host implements HostApi {
@@ -88,10 +95,12 @@ export class Host implements HostApi {
     this.opts = opts;
     this.agentList = new Agents({
       store: opts.runtimes ?? new RuntimeStore(join(opts.home, "runtimes")),
-      ...(opts.piRuntime === undefined ? {} : { piRuntime: opts.piRuntime }),
       ...(opts.env === undefined ? {} : { env: { ...process.env, ...opts.env } }),
-      ...(opts.findDsh === undefined ? {} : { findDsh: opts.findDsh }),
-      ...(opts.findSystemPi === undefined ? {} : { findSystemPi: opts.findSystemPi }),
+      ...(opts.catalog === undefined ? {} : { catalog: opts.catalog }),
+      ...(opts.fetchers === undefined ? {} : { fetchers: opts.fetchers }),
+      ...(opts.target === undefined ? {} : { target: opts.target }),
+      ...(opts.exists === undefined ? {} : { exists: opts.exists }),
+      ...(opts.dshApp === undefined ? {} : { dshApp: opts.dshApp }),
       onChange: () => this.agentsChanged(),
       log: (line) => this.log(line),
     });
@@ -191,8 +200,7 @@ export class Host implements HostApi {
     return availableProfiles({
       script: this.opts.script,
       configured: config.profiles ?? [],
-      findDsh: () => this.agentList.dshPath(),
-      findPi: () => this.agentList.piPath(),
+      find: (id) => this.agentList.find(id)?.path,
       ...("env" in pi ? { piModelEnv: pi.env } : {}),
     });
   }
@@ -223,6 +231,16 @@ export class Host implements HostApi {
   removeAgent(id: string): AgentView[] {
     this.agentList.remove(id);
     return this.agents();
+  }
+
+  async verifyAgent(id: string): Promise<AgentCheck> {
+    const profile = this.profileList.find((p) => p.id === id);
+    if (profile === undefined) {
+      return { id, ok: false, needsLogin: false, authMethods: [], error: "not installed", ms: 0 };
+    }
+    const check = await verifyProfile(profile, this.opts.verify ?? {});
+    this.log(`[agents] check ${id}: ${check.ok ? "ok" : check.error}`);
+    return check;
   }
 
   /** Waits for agent downloads (tests). */

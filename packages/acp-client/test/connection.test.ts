@@ -1,4 +1,4 @@
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -6,6 +6,7 @@ import type { AgentProfile } from "@agentherd/protocol";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   type AgentConnection,
+  CLOSE_GRACE_MS,
   type ExitEvent,
   type PermissionRequest,
   type SessionUpdateEvent,
@@ -169,6 +170,63 @@ turns:
   it("an invalid script fails start with the reason", async () => {
     await expect(startAgent(profile("turns: 3\n"), { cwd: dir })).rejects.toThrow(
       /turns: expected a list/,
+    );
+  });
+});
+
+function alive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+describe("startAgent with an agent that ignores SIGTERM", () => {
+  it("kills it with SIGKILL after a failed initialize", async () => {
+    const pidFile = join(mkdtempSync(join(tmpdir(), "stubborn-")), "pid");
+    // Answers initialize with an error, then ignores SIGTERM.
+    const script = [
+      `require("node:fs").writeFileSync(${JSON.stringify(pidFile)}, String(process.pid));`,
+      'process.on("SIGTERM", () => {});',
+      'process.stdin.once("data", (d) => {',
+      '  const id = JSON.parse(String(d).split("\\n")[0]).id;',
+      '  const error = { code: -32603, message: "boom" };',
+      '  process.stdout.write(JSON.stringify({ jsonrpc: "2.0", id, error }) + "\\n");',
+      "});",
+      "setInterval(() => {}, 1000);",
+    ].join("\n");
+    const profile: AgentProfile = {
+      id: "stubborn",
+      name: "Stubborn",
+      command: [process.execPath, "-e", script],
+      env: {},
+      exporter: null,
+    };
+    await expect(startAgent(profile, { cwd: tmpdir() })).rejects.toThrow(/boom/);
+    const pid = Number(readFileSync(pidFile, "utf8"));
+    expect(alive(pid)).toBe(true);
+    await new Promise((r) => setTimeout(r, CLOSE_GRACE_MS + 500));
+    expect(alive(pid)).toBe(false);
+  }, 10_000);
+
+  it("kills it when the abort signal fires", async () => {
+    const profile: AgentProfile = {
+      id: "silent",
+      name: "Silent",
+      command: [
+        process.execPath,
+        "-e",
+        'process.on("SIGTERM", () => {}); setInterval(() => {}, 1000);',
+      ],
+      env: {},
+      exporter: null,
+    };
+    const abort = new AbortController();
+    setTimeout(() => abort.abort(), 200);
+    await expect(startAgent(profile, { cwd: tmpdir(), signal: abort.signal })).rejects.toThrow(
+      /signal SIGKILL/,
     );
   });
 });

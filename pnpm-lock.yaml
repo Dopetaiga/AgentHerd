@@ -183,6 +183,9 @@ importers:
 
   packages/host:
     dependencies:
+      '@agentherd/acp-client':
+        specifier: workspace:*
+        version: link:../acp-client
       '@agentherd/channel-feishu':
         specifier: workspace:*
         version: link:../channel-feishu

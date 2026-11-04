@@ -1,5 +1,6 @@
 export {
   type AgentConnection,
+  CLOSE_GRACE_MS,
   type ExitEvent,
   type PermissionRequest,
   type SessionUpdateEvent,

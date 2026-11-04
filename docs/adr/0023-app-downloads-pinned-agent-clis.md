@@ -1,6 +1,6 @@
 # ADR 0023: The app downloads pinned agent CLIs; the owner does not install them
 
-- Status: Accepted
+- Status: Superseded by [ADR 0024](0024-follow-latest-releases-six-agents.md) (no more pins)
 - Date: 2026-11-04
 - Related: [ADR 0022](0022-pi-through-a-bundled-acp-bridge.md), [03-agents.md](../spec/03-agents.md#managed-downloads)
 

@@ -19,12 +19,16 @@ import { redact } from "@agentherd/rules";
 import { type PermissionAnswer, ToolCallTracker, toAcpOutcome, toToolCallInfo } from "./mapping.ts";
 
 export const STDERR_LINES = 200;
+/** How long close() waits after SIGTERM before SIGKILL. */
+export const CLOSE_GRACE_MS = 3000;
 /** How long a failed request waits for the process exit to explain it. */
 const EXIT_GRACE_MS = 1000;
 
 export interface StartOptions {
   cwd: string;
   env?: Record<string, string>;
+  /** Kills the agent (SIGKILL) when aborted, e.g. a check that gave up waiting. */
+  signal?: AbortSignal;
 }
 
 export interface SessionUpdateEvent {
@@ -66,6 +70,10 @@ type Listener<T> = (event: T) => void;
 export interface AgentConnection {
   readonly profile: AgentProfile;
   readonly agentName: string;
+  /** `agentInfo.version` from initialize, when the agent sends it. */
+  readonly agentVersion: string | undefined;
+  /** Ways to sign in the agent offers (ACP `authMethods`); empty when it needs none. */
+  readonly authMethods: { id: string; name: string; description?: string }[];
   readonly pid: number | undefined;
   newSession(cwd: string): Promise<string>;
   prompt(sessionId: string, text: string): Promise<{ stopReason: StopReason }>;
@@ -155,6 +163,13 @@ export async function startAgent(
     env: { ...process.env, ...extraEnv },
     stdio: ["pipe", "pipe", "pipe"],
   });
+  options.signal?.addEventListener(
+    "abort",
+    () => {
+      if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
+    },
+    { once: true },
+  );
   const ring = new StderrRing(extraEnv);
   child.stderr?.setEncoding("utf8");
   child.stderr?.on("data", (chunk: string) => ring.push(chunk));
@@ -245,16 +260,32 @@ export async function startAgent(
       clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false },
       clientInfo: { name: "agentherd", version: "0.0.0" },
     });
+  // SIGTERM, then SIGKILL after a grace period for an agent that ignores SIGTERM.
+  const terminate = () => {
+    if (child.exitCode !== null || child.signalCode !== null) return;
+    child.kill("SIGTERM");
+    const force = setTimeout(() => {
+      if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
+    }, CLOSE_GRACE_MS);
+    force.unref();
+    void exited.then(() => clearTimeout(force));
+  };
   try {
     init = await whileAlive(initialize());
   } catch (error) {
-    if (child.exitCode === null && child.signalCode === null) child.kill("SIGTERM");
+    terminate();
     throw error;
   }
 
   return {
     profile,
     agentName: init.agentInfo?.name ?? profile.name,
+    agentVersion: init.agentInfo?.version,
+    authMethods: (init.authMethods ?? []).map((m) => ({
+      id: m.id,
+      name: m.name,
+      ...(m.description ? { description: m.description } : {}),
+    })),
     pid: child.pid,
     async newSession(cwd) {
       const res = await whileAlive(
@@ -281,7 +312,7 @@ export async function startAgent(
     stderr: () => ring.snapshot(),
     async close() {
       connection.close();
-      if (child.exitCode === null && child.signalCode === null) child.kill("SIGTERM");
+      terminate();
       await exited;
     },
   };

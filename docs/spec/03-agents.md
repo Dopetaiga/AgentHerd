@@ -37,9 +37,11 @@ An agent is a profile in configuration, not a package:
 | --- | --- | --- |
 | DeepSeek Harness | `dsh acp` | Tested 2026-11-04: `initialize` returns `deepseek-harness-acp`, session `close`/`list`/`resume`. Asks over `session/request_permission` only when a command needs more than its sandbox mode allows; see [DSH approvals](#dsh-approvals). Built-in profile `dsh` (found via `AGENTHERD_DSH`, `PATH`, or the app bundle); end-to-end run with Feishu passed 2026-11-04 |
 | Pi | `node packages/pi-acp/bin/pi-acp.ts --pi <pi>` (bridge to `pi --mode rpc`) | Tested 2026-11-04 with Pi 1.5.0 and DeepSeek: allow writes the file, deny blocks it. Built-in profile `pi` (found via `AGENTHERD_PI`, the copy the app downloaded, or `PATH`); see [Pi](#pi) and ADR 0022 |
-| Claude Code | `claude-agent-acp` (npm `@agentclientprotocol/claude-agent-acp`, 0.100.0) | Package exists; not run **(verify, Q01)** |
-| Codex | `codex-acp` (npm `@zed-industries/codex-acp`, 0.16.0) | Package exists; not run **(verify, Q01)** |
-| Gemini CLI, OpenCode, Qwen Code, others | Their ACP mode | **(verify, Q02)** |
+| OpenCode | `opencode acp`, env `OPENCODE_PERMISSION` asks for edit/bash/webfetch | Downloaded 1.19.5 2026-11-05 (zip, sha256, `--version` OK); 验证 reached the agent, which failed on this Mac's own opencode database ("Database is not empty and has no session table"). Built-in profile `opencode`; prompt run not tried **(verify, Q02)** |
+| Gemini CLI | `node gemini.js --acp` (release bundle) | Downloaded 0.66.0 2026-11-05; 验证: `initialize` returns `gemini-cli` 0.66.0 with four sign-in methods, `session/new` asks for a sign-in. Built-in profile `gemini`; prompt run not tried **(verify, Q02)** |
+| Claude Code | `node …/claude-agent-acp/dist/index.js` (npm `@agentclientprotocol/claude-agent-acp`) | Installs with npm 2026-11-05 (0.100.0, 108 packages). On this Mac its native `claude` binary is killed by SIGKILL (endpoint security); prompt run not tried **(verify, Q01)** |
+| Codex | `node …/codex-acp/dist/index.js` (npm `@agentclientprotocol/codex-acp`), env `INITIAL_AGENT_MODE=read-only` | Installs with npm 2026-11-05 (2.5.0); 验证 reports "Codex process was killed by SIGKILL" on this Mac (endpoint security); prompt run not tried **(verify, Q01)** |
+| Qwen Code, others | Their ACP mode, as a config.json profile | **(verify, Q02)** |
 
 The desktop app ships built-in profiles for these and lets the user add any ACP command.
 
@@ -101,12 +103,17 @@ ACP session:
 
 ### Managed downloads
 
-The desktop **Agent** page downloads Pi for the owner (ADR 0023). The host pins Pi 1.5.0 per
-platform in `packages/host/src/runtimes.ts` (GitHub release URL, SHA-256, size), installs it in
-`<home>/runtimes/pi/1.5.0/` after checking the hash and `pi --version`, and lists it as
-`source: managed`. 移除 deletes that folder. DSH is not downloadable; the page asks the owner to
-install the DeepSeek Harness app. Local API: `agents()`, `installAgent(id)`,
-`cancelInstall(id)`, `removeAgent(id)`, event topic `agents`.
+The desktop **Agent** page lists six agents and downloads each one's latest release for the
+owner ([ADR 0024](../adr/0024-follow-latest-releases-six-agents.md)): DSH (DeepSeek's update
+feed), Pi, OpenCode and Gemini CLI (GitHub releases), Claude Code and Codex (the ACP adapters on
+npm, installed with a downloaded npm). `packages/host/src/catalog.ts` has the sources and the
+ask-first env of each; `packages/host/src/runtimes.ts` checks the publisher's digest (and
+`--version`), installs into `<home>/runtimes/<id>/<version>/` and records it in `current.json`.
+Lookup: `AGENTHERD_<ID>`, the download, `PATH`, then the DSH app. 移除 deletes the download.
+
+验证 starts the agent in an empty temporary folder, runs `initialize` and `session/new`, and
+reports its name and version, a needed sign-in, or the error. Local API: `agents()`,
+`installAgent(id)`, `cancelInstall(id)`, `removeAgent(id)`, `verifyAgent(id)`, event topic `agents`.
 
 How each agent asks the user a question over ACP (permission request, or a message that ends
 the turn) is open **(verify, Q03)**.

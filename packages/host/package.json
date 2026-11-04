@@ -16,6 +16,7 @@
     "test": "vitest run --root ../.. packages/host"
   },
   "dependencies": {
+    "@agentherd/acp-client": "workspace:*",
     "@agentherd/channel-feishu": "workspace:*",
     "@agentherd/core": "workspace:*",
     "@agentherd/herder": "workspace:*",
