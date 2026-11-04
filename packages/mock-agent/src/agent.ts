@@ -1,0 +1,187 @@
+// A real ACP agent that plays a script (docs/spec/03-agents.md "Mock agent"). It speaks the
+// same protocol as DSH or claude-agent-acp, so the client under test cannot tell the difference.
+
+import {
+  type AgentApp,
+  type AgentContext,
+  agent,
+  methods,
+  type PermissionOptionKind,
+  PROTOCOL_VERSION,
+  type RequestPermissionRequest,
+  type StopReason,
+  type ToolCallUpdate,
+} from "@agentclientprotocol/sdk";
+import type { Expectation, Script, ScriptToolCall, Step } from "./script.ts";
+
+export interface MockAgentOptions {
+  /** Called by a `crash` step. Defaults to `process.exit`. */
+  exit?: (code: number) => void;
+  /** Diagnostics. Defaults to stderr; stdout carries the protocol. */
+  log?: (line: string) => void;
+}
+
+/** What the mock saw for one `request_permission` step; tests read it through `log`. */
+export interface PermissionResult {
+  toolCallId: string;
+  outcome: Expectation;
+  optionId?: string;
+}
+
+interface SessionState {
+  turn: number;
+  abort: AbortController | null;
+}
+
+class Cancelled extends Error {}
+
+function toAcpToolCall(call: ScriptToolCall, status: ToolCallUpdate["status"]): ToolCallUpdate {
+  const update: ToolCallUpdate = {
+    toolCallId: call.id,
+    title: call.title,
+    kind: call.kind,
+    status: status ?? null,
+    locations: (call.paths ?? []).map((path) => ({ path })),
+  };
+  if (call.command !== undefined) update.rawInput = { command: call.command };
+  return update;
+}
+
+function outcomeOf(kind: PermissionOptionKind | undefined): Expectation {
+  if (kind === "allow_once" || kind === "allow_always") return "allow";
+  if (kind === "reject_once" || kind === "reject_always") return "deny";
+  return "cancelled";
+}
+
+function sleep(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal.aborted) return reject(new Cancelled());
+    const timer = setTimeout(resolve, ms);
+    signal.addEventListener(
+      "abort",
+      () => {
+        clearTimeout(timer);
+        reject(new Cancelled());
+      },
+      { once: true },
+    );
+  });
+}
+
+export function createMockAgent(script: Script, options: MockAgentOptions = {}): AgentApp {
+  const exit = options.exit ?? ((code: number) => process.exit(code));
+  const log = options.log ?? ((line: string) => process.stderr.write(`[mock-agent] ${line}\n`));
+  const sessions = new Map<string, SessionState>();
+  let nextSession = 1;
+
+  async function play(
+    client: AgentContext,
+    sessionId: string,
+    steps: Step[],
+    signal: AbortSignal,
+  ): Promise<StopReason> {
+    for (const step of steps) {
+      if (signal.aborted) throw new Cancelled();
+      switch (step.type) {
+        case "message":
+          await client.notify(methods.client.session.update, {
+            sessionId,
+            update: {
+              sessionUpdate: "agent_message_chunk",
+              content: { type: "text", text: step.text },
+            },
+          });
+          break;
+        case "stderr":
+          log(step.text);
+          break;
+        case "tool_call":
+          await client.notify(methods.client.session.update, {
+            sessionId,
+            update: {
+              sessionUpdate: "tool_call",
+              ...toAcpToolCall(step.toolCall, step.status),
+              title: step.toolCall.title,
+              kind: step.toolCall.kind,
+            },
+          });
+          break;
+        case "request_permission": {
+          const params: RequestPermissionRequest = {
+            sessionId,
+            toolCall: toAcpToolCall(step.toolCall, "pending"),
+            options: step.options.map((o) => ({ optionId: o.id, name: o.name, kind: o.kind })),
+          };
+          const response = await client.request(methods.client.session.requestPermission, params);
+          const selected =
+            response.outcome.outcome === "selected" ? response.outcome.optionId : undefined;
+          const kind = step.options.find((o) => o.id === selected)?.kind;
+          const outcome = outcomeOf(kind);
+          const result: PermissionResult = { toolCallId: step.toolCall.id, outcome };
+          if (selected !== undefined) result.optionId = selected;
+          log(`permission ${JSON.stringify(result)}`);
+          if (step.expect !== undefined && step.expect !== outcome) {
+            log(`expect failed: wanted ${step.expect}, got ${outcome}`);
+            exit(3);
+            return "refusal";
+          }
+          if (outcome === "cancelled") throw new Cancelled();
+          if (outcome === "deny" && step.onReject === "end_turn") return "end_turn";
+          break;
+        }
+        case "sleep":
+          await sleep(step.ms, signal);
+          break;
+        case "crash":
+          log(`crash with code ${step.code}`);
+          exit(step.code);
+          return "refusal";
+        case "end_turn":
+          return step.stopReason;
+      }
+    }
+    return "end_turn";
+  }
+
+  return agent({ name: script.name })
+    .onRequest(methods.agent.initialize, () => ({
+      protocolVersion: PROTOCOL_VERSION,
+      agentCapabilities: { loadSession: false },
+      agentInfo: { name: script.name, version: "0.0.0" },
+      authMethods: [],
+    }))
+    .onRequest(methods.agent.session.new, () => {
+      const sessionId = `mock-${nextSession++}`;
+      sessions.set(sessionId, { turn: 0, abort: null });
+      return { sessionId };
+    })
+    .onRequest(methods.agent.session.prompt, async ({ params, client }) => {
+      const state = sessions.get(params.sessionId);
+      if (state === undefined) throw new Error(`unknown session ${params.sessionId}`);
+      if (state.abort !== null) throw new Error("a turn is already running");
+      const steps = script.turns[state.turn];
+      state.turn += 1;
+      const abort = new AbortController();
+      state.abort = abort;
+      try {
+        if (steps === undefined) {
+          await play(
+            client,
+            params.sessionId,
+            [{ type: "message", text: "no more turns" }],
+            abort.signal,
+          );
+          return { stopReason: "end_turn" };
+        }
+        return { stopReason: await play(client, params.sessionId, steps, abort.signal) };
+      } catch (error) {
+        if (error instanceof Cancelled || abort.signal.aborted) return { stopReason: "cancelled" };
+        throw error;
+      } finally {
+        state.abort = null;
+      }
+    })
+    .onNotification(methods.agent.session.cancel, ({ params }) => {
+      sessions.get(params.sessionId)?.abort?.abort();
+    });
+}

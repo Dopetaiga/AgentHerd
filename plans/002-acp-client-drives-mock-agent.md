@@ -199,3 +199,12 @@ Integration tests in Step 5; unit tests for the script parser.
 - `allow_always` is never selected. "Always do this" creates an AgentHerd rule instead.
 - When Q03 is answered, `answer` decisions may need a new mapping; keep the mapping in one
   function (`toAcpOutcome`).
+- Deviations from the steps, found while implementing:
+  - Mock script steps also include `stderr` (writes a line to stderr, used to test redaction)
+    and `sleep` (abortable, used to test cancel).
+  - The mock bin runs with Node's built-in type stripping (`#!/usr/bin/env node`), not tsx.
+  - AgentHerd keeps its own session ids; the agent's session id is only used on the wire.
+  - `AgentConnection` also exposes `pid` and `stderr()`. A request that fails because the
+    agent exited reports the exit code and the redacted stderr tail, not "connection closed".
+  - `cancel(sessionId)` answers the session's open permission requests `cancelled` before it
+    sends `session/cancel`, as ACP requires.
