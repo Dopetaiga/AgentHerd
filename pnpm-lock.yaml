@@ -42,6 +42,25 @@ importers:
         specifier: workspace:*
         version: link:../protocol
 
+  packages/core:
+    dependencies:
+      '@agentherd/acp-client':
+        specifier: workspace:*
+        version: link:../acp-client
+      '@agentherd/protocol':
+        specifier: workspace:*
+        version: link:../protocol
+      '@agentherd/rules':
+        specifier: workspace:*
+        version: link:../rules
+    devDependencies:
+      '@agentherd/channel-fake':
+        specifier: workspace:*
+        version: link:../channel-fake
+      '@agentherd/mock-agent':
+        specifier: workspace:*
+        version: link:../mock-agent
+
   packages/mock-agent:
     dependencies:
       '@agentclientprotocol/sdk':

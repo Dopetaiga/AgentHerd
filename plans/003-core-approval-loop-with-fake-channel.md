@@ -186,3 +186,12 @@ case) and ItemView rendering (redaction, 20-line cap).
 
 - `source: "rule"` is used for guard escalations in M1 because `Decision.source` has no
   `guard` value. If M3 needs to tell them apart, add `guard` through a protocol change.
+- Deviations from the steps, found while implementing:
+  - The protocol `Channel` has `send`/`update`/`pin` with a `View`, not `sendItem`/`updateItem`/
+    `sendText`. The inbox sends an `ItemView`, then updates it with `options: []` and `final`.
+  - Text messages from the owner are only audited (`inbound.ignored`) in M1: there is no Herder.
+  - `FakeChannel.waitFor` resolves after `send` returns, as a real channel would. The inbox
+    accepts a tap only for a card whose `send` has returned.
+  - AgentHerd keeps its own session ids (`randomUUID`); the agent's id is used only on the wire.
+  - When the agent's turn ends, its open items expire (`Expired: the agent's turn ended`).
+

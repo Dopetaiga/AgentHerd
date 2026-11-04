@@ -1,0 +1,22 @@
+{
+  "name": "@agentherd/core",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p .",
+    "test": "vitest run --root ../.. packages/core"
+  },
+  "dependencies": {
+    "@agentherd/protocol": "workspace:*",
+    "@agentherd/rules": "workspace:*",
+    "@agentherd/acp-client": "workspace:*"
+  },
+  "devDependencies": {
+    "@agentherd/mock-agent": "workspace:*",
+    "@agentherd/channel-fake": "workspace:*"
+  }
+}

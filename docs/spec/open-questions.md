@@ -12,7 +12,7 @@ answer and the evidence (link, command output, date) and, if it changes a decisi
 | Q05 | Codex: approval policy, sandbox modes and command rule files (execpolicy) in the current version; what can be expressed per command and per directory? | M3 exporter-codex | Open |
 | Q06 | Gemini CLI and OpenCode permission config formats and where they are read from | M3 exporters | Open |
 | Q07 | Does `dsh acp` send `session/request_permission` for tool calls under its default approval settings, and which profile/settings make it ask? | M2 | Open |
-| Q08 | SQLite driver inside an Electron `utilityProcess`: `node:sqlite` or `better-sqlite3`? | M1 | Open |
+| Q08 | SQLite driver inside an Electron `utilityProcess`: `node:sqlite` or `better-sqlite3`? | M1 | Partly answered 2026-11-04: the CLI and tests use `node:sqlite` (`DatabaseSync`, Node 22.13+, no flag). Check inside Electron `utilityProcess` in M2 |
 | Q09 | Pi packages to depend on (`@earendil-works/pi-agent-core`, the AI provider package) and their stability policy | M3 | Open |
 | Q10 | Idle detection for presence | — | Closed 2026-11-04: presence removed (ADR 0012) |
 | Q11 | Windows support: named pipe for the local API, agent config paths | after v1 | Deferred: macOS only (ADR 0013) |

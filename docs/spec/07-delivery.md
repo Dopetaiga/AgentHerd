@@ -35,23 +35,23 @@ Each milestone is split into plans under [`plans/`](../../plans/README.md).
 
 ## 4. E2E scenarios
 
-| ID | Scenario | Milestone |
-| --- | --- | --- |
-| E2E-APPROVE | Mock agent requests approval; card is sent; owner taps Allow; the agent receives allow; card shows final state | M1 |
-| E2E-REMIND | An open item gets a reminder after `remindMinutes`; nothing is decided by time | M1 |
-| E2E-CHANNEL-DOWN | Channel disconnected; a new item waits in the inbox and is sent after reconnect | M2 |
-| E2E-OWNER-ONLY | A non-owner taps a button; nothing changes; event is logged | M1 |
-| E2E-DUPLICATE-ACTION | Owner taps Allow twice; the decision is applied once | M1 |
-| E2E-EXPORT-NARROW | A rule the target cannot express exactly is exported narrower or skipped, never wider, and shows its export status | M3 |
-| E2E-EXPORT-REMOVE | `remove` restores the agent config byte-for-byte except for content the user added | M3 |
-| E2E-ALWAYS-RULE | Owner taps "Always do this"; the next equal request is allowed by rule in `assist` mode | M3 |
-| E2E-GUARD | A guarded command is never auto-allowed in any mode | M3 |
-| E2E-OBSERVE-AGREEMENT | Observe mode stores suggestions and computes agreement | M3 |
-| E2E-LOOP | Three identical stops raise a watchdog alarm; the board shows `stuck` | M2 |
-| E2E-RUN-FROM-CHAT | A direct message starts a session; the agent receives the owner's text verbatim plus a labeled context block; a completion report is sent | M2 |
-| E2E-RELAY | Owner starts a relay; messages reach the session without the Herder; `/end` and `relayIdleMinutes` end it | M2 |
-| E2E-BOARD | A stage change updates the pinned board in place; no new message is sent | M2 |
-| E2E-REPORT-SHORT | A task ends with a reply ≤ `reportMaxChars`; the report body is the reply verbatim | M2 |
-| E2E-REPORT-LONG | A task ends with a longer reply; one summary prompt is sent to the same session; its answer is the body and the full reply is attached; no second summary prompt | M2 |
-| E2E-FOLD | A relayed agent message over `foldChars` is sent folded and complete | M2 |
-| E2E-HERDER-NO-APPROVE | The Herder has no way to allow an item; a Herder tool call that matches the guard list goes to the owner | M2 |
+| ID | Scenario | Milestone | Test |
+| --- | --- | --- | --- |
+| E2E-APPROVE | Mock agent requests approval; card is sent; owner taps Allow; the agent receives allow; card shows final state | M1 | `packages/core/test/e2e/approval.e2e.test.ts` |
+| E2E-REMIND | An open item gets a reminder after `remindMinutes`; nothing is decided by time | M1 | `packages/core/test/e2e/approval.e2e.test.ts` |
+| E2E-CHANNEL-DOWN | Channel disconnected; a new item waits in the inbox and is sent after reconnect | M2 | |
+| E2E-OWNER-ONLY | A non-owner taps a button; nothing changes; event is logged | M1 | `packages/core/test/e2e/approval.e2e.test.ts` |
+| E2E-DUPLICATE-ACTION | Owner taps Allow twice; the decision is applied once | M1 | `packages/core/test/e2e/approval.e2e.test.ts` |
+| E2E-EXPORT-NARROW | A rule the target cannot express exactly is exported narrower or skipped, never wider, and shows its export status | M3 | |
+| E2E-EXPORT-REMOVE | `remove` restores the agent config byte-for-byte except for content the user added | M3 | |
+| E2E-ALWAYS-RULE | Owner taps "Always do this"; the next equal request is allowed by rule in `assist` mode | M3 | |
+| E2E-GUARD | A guarded command is never auto-allowed in any mode | M3 | |
+| E2E-OBSERVE-AGREEMENT | Observe mode stores suggestions and computes agreement | M3 | |
+| E2E-LOOP | Three identical stops raise a watchdog alarm; the board shows `stuck` | M2 | |
+| E2E-RUN-FROM-CHAT | A direct message starts a session; the agent receives the owner's text verbatim plus a labeled context block; a completion report is sent | M2 | |
+| E2E-RELAY | Owner starts a relay; messages reach the session without the Herder; `/end` and `relayIdleMinutes` end it | M2 | |
+| E2E-BOARD | A stage change updates the pinned board in place; no new message is sent | M2 | |
+| E2E-REPORT-SHORT | A task ends with a reply ≤ `reportMaxChars`; the report body is the reply verbatim | M2 | |
+| E2E-REPORT-LONG | A task ends with a longer reply; one summary prompt is sent to the same session; its answer is the body and the full reply is attached; no second summary prompt | M2 | |
+| E2E-FOLD | A relayed agent message over `foldChars` is sent folded and complete | M2 | |
+| E2E-HERDER-NO-APPROVE | The Herder has no way to allow an item; a Herder tool call that matches the guard list goes to the owner | M2 | |
