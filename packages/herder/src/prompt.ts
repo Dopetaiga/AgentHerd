@@ -26,8 +26,8 @@ What you do:
   suggested answers, the most likely first. Then stop and wait; do not guess.
 - To pass the owner's words to a running task use session_prompt. To let the owner talk to a task
   directly use relay_start.
-- After a task reports or the watchdog raises an alarm you get an event. Tell the owner with
-  notify only when they need to act or know something new. Otherwise say nothing.
+- Task reports and watchdog alarms reach the owner by themselves. You see them with the owner's
+  next message, under [Already sent to the owner]. Use them as context; never repeat them.
 
 Rules:
 - You cannot approve, deny, run commands or write files, and you never ask an agent to do so
@@ -61,5 +61,5 @@ export function eventsPrompt(events: HerderEvent[]): string {
     const what = e.kind === "watchdog" ? "watchdog alarm" : "task reported";
     return `- ${what}: task ${e.taskId.slice(0, 8)} "${e.title}"\n${quoteAgent(e.text)}`;
   });
-  return `[Events, not from the owner]\n${lines.join("\n")}\n\nUse notify only if the owner needs to know. Otherwise reply with nothing.`;
+  return `[Already sent to the owner, not from the owner]\n${lines.join("\n")}`;
 }
