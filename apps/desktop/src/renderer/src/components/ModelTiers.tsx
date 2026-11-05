@@ -126,51 +126,54 @@ export function ModelTiers() {
                   </div>
                   <p className="text-ink-muted text-xs">{hint}</p>
                 </header>
-                {list.map((m, index) => (
-                  <div key={m.model}>
-                    {over?.tier === tier && over.index === index && dragging !== m.model && (
-                      <div className="mb-1.5 h-0.5 rounded bg-accent" />
-                    )}
-                    {/* biome-ignore lint/a11y/noStaticElementInteractions: a drag handle; dragging has no keyboard equivalent here */}
-                    <div
-                      draggable
-                      title={`${m.model}：${m.services.join("、")}`}
-                      onDragStart={(e) => {
-                        e.dataTransfer.setData("text/plain", m.model);
-                        e.dataTransfer.effectAllowed = "move";
-                        setDragging(m.model);
-                      }}
-                      onDragEnd={() => {
-                        setDragging(null);
-                        setOver(null);
-                      }}
-                      onDragOver={(e) => {
-                        const box = e.currentTarget.getBoundingClientRect();
-                        const after = e.clientY > box.top + box.height / 2;
-                        allowDrop(e, { tier, index: after ? index + 1 : index });
-                      }}
-                      className={`flex cursor-grab items-center gap-2 rounded-md bg-surface px-2 py-1.5 ring-1 ring-line active:cursor-grabbing ${
-                        dragging === m.model ? "opacity-40" : ""
-                      }`}
-                    >
-                      <GripVertical size={14} className="shrink-0 text-ink-dim" />
-                      <div className="min-w-0 flex-1">
-                        <div className="truncate font-mono text-ink text-sm">{m.model}</div>
-                        <div className="truncate text-ink-muted text-xs">
-                          {m.services.join(" · ")}
-                        </div>
-                      </div>
-                      {m.auto && (
-                        <span className="shrink-0 text-ink-dim text-xs" title="按名字自动归档">
-                          自动
-                        </span>
+                {/* Each tier scrolls on its own so a long list does not stretch the page. */}
+                <div className="-mr-1.5 flex max-h-80 flex-col gap-1.5 overflow-y-auto pr-1.5">
+                  {list.map((m, index) => (
+                    <div key={m.model}>
+                      {over?.tier === tier && over.index === index && dragging !== m.model && (
+                        <div className="mb-1.5 h-0.5 rounded bg-accent" />
                       )}
+                      {/* biome-ignore lint/a11y/noStaticElementInteractions: a drag handle; dragging has no keyboard equivalent here */}
+                      <div
+                        draggable
+                        title={`${m.model}：${m.services.join("、")}`}
+                        onDragStart={(e) => {
+                          e.dataTransfer.setData("text/plain", m.model);
+                          e.dataTransfer.effectAllowed = "move";
+                          setDragging(m.model);
+                        }}
+                        onDragEnd={() => {
+                          setDragging(null);
+                          setOver(null);
+                        }}
+                        onDragOver={(e) => {
+                          const box = e.currentTarget.getBoundingClientRect();
+                          const after = e.clientY > box.top + box.height / 2;
+                          allowDrop(e, { tier, index: after ? index + 1 : index });
+                        }}
+                        className={`flex cursor-grab items-center gap-2 rounded-md bg-surface px-2 py-1.5 ring-1 ring-line active:cursor-grabbing ${
+                          dragging === m.model ? "opacity-40" : ""
+                        }`}
+                      >
+                        <GripVertical size={14} className="shrink-0 text-ink-dim" />
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate font-mono text-ink text-sm">{m.model}</div>
+                          <div className="truncate text-ink-muted text-xs">
+                            {m.services.join(" · ")}
+                          </div>
+                        </div>
+                        {m.auto && (
+                          <span className="shrink-0 text-ink-dim text-xs" title="按名字自动归档">
+                            自动
+                          </span>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                ))}
-                {over?.tier === tier && over.index === list.length && (
-                  <div className="h-0.5 rounded bg-accent" />
-                )}
+                  ))}
+                  {over?.tier === tier && over.index === list.length && (
+                    <div className="h-0.5 rounded bg-accent" />
+                  )}
+                </div>
               </section>
             );
           })}
