@@ -108,6 +108,43 @@ describe("Host", () => {
     expect(t.events.some((e) => e.topic === "models")).toBe(true);
   });
 
+  it("probes a saved service's models with its saved key unless a new key is typed", async () => {
+    const seen: string[] = [];
+    const host = new Host({
+      home: mkdtempSync(join(tmpdir(), "ah-")),
+      secrets: memorySecrets(),
+      env: {},
+      profiles: () => [],
+      createChannel: () => new FakeChannel(),
+      fetch: (async (_url: string | URL | Request, init?: RequestInit) => {
+        const headers = (init?.headers ?? {}) as Record<string, string>;
+        seen.push(headers.authorization ?? "");
+        return new Response(JSON.stringify({ data: [{ id: "m1" }] }));
+      }) as typeof fetch,
+    });
+    cleanups.push(() => host.stop());
+    await host.putService(
+      {
+        id: "relay",
+        name: "Relay",
+        kind: "openai-compatible",
+        baseUrl: "https://relay.example/v1",
+        models: ["m1"],
+      },
+      "sk-saved",
+    );
+    expect(await host.probeModels({ serviceId: "relay" })).toEqual({
+      ok: true,
+      models: [{ id: "m1", name: "m1" }],
+    });
+    await host.probeModels({ serviceId: "relay", key: "sk-new" });
+    expect(seen).toEqual(["Bearer sk-saved", "Bearer sk-new"]);
+    expect(await host.probeModels({ serviceId: "nope" })).toEqual({
+      ok: false,
+      message: 'no service "nope"',
+    });
+  });
+
   it("reconnects the channel on request", async () => {
     const t = makeHost(true);
     await t.host.start();

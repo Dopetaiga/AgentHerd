@@ -3,6 +3,7 @@
 // These types have no runtime imports, so the renderer can import them too.
 
 import type {
+  CustomApi,
   ModelRef,
   ModelRole,
   ModelService,
@@ -141,6 +142,24 @@ export interface SetupState {
 
 export type ModelTest = { ok: true; reply: string } | { ok: false; message: string };
 
+/** What to ask for a model list: a saved service, or the fields of one not saved yet. */
+export interface ProbeTarget {
+  /** A saved service: its address, API and key are the defaults for the fields below. */
+  serviceId?: string;
+  baseUrl?: string;
+  api?: CustomApi;
+  /** Empty or missing: the saved key of `serviceId`, if any. */
+  key?: string;
+}
+
+/**
+ * The models a service lists. `baseUrl` is set when the list was found under a different
+ * address than the one given (a missing `/v1`), so the form can fix the address.
+ */
+export type ModelProbe =
+  | { ok: true; models: { id: string; name: string }[]; baseUrl?: string }
+  | { ok: false; message: string };
+
 export interface SettingsPatch {
   mode?: Mode;
   keepAwake?: boolean;
@@ -178,6 +197,8 @@ export interface HostApi {
   setKey(serviceId: string, key: string): Promise<ModelsView>;
   chooseModel(role: ModelRole, ref: ModelRef | null): Promise<ModelsView>;
   testModel(ref: ModelRef): Promise<ModelTest>;
+  /** Asks an OpenAI- or Anthropic-compatible service which models it offers (GET /models). */
+  probeModels(target: ProbeTarget): Promise<ModelProbe>;
   /** Starts the one-scan Feishu setup; progress comes as "setup" events. */
   setupFeishu(): SetupState;
   cancelSetup(): SetupState;
@@ -212,6 +233,7 @@ export const HOST_METHODS: readonly HostMethod[] = [
   "setKey",
   "chooseModel",
   "testModel",
+  "probeModels",
   "setupFeishu",
   "cancelSetup",
   "setupState",

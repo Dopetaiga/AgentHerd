@@ -5,6 +5,7 @@ import { Check, Globe, Search } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { providerName } from "./labels";
 import { ModelPanes } from "./ModelPanes";
+import { ProbeButton } from "./ModelProbe";
 import { type ServiceChoice, type ServiceDraft, sameChoice } from "./ServiceDraft";
 import { IconTile, inputClass } from "./ui";
 
@@ -231,10 +232,11 @@ function ServiceFields({ draft, allowAdvanced }: { draft: ServiceDraft; allowAdv
         )}
       </div>
       <FieldNote
-        error={shownError}
+        error={shownError ?? (custom ? draft.probe.error : null)}
         hint={
           custom
-            ? "Base URL 通常以 /v1 结尾，本地 Ollama 是 http://localhost:11434/v1。Key 只保存在本机。"
+            ? (draft.probe.note ??
+              "Base URL 通常以 /v1 结尾，本地 Ollama 是 http://localhost:11434/v1。Key 只保存在本机。")
             : "Key 只保存在本机 secrets.json，保存后不再显示。"
         }
         end={
@@ -269,10 +271,20 @@ export function ServiceForm({
       <ServiceFields key={choice.kind} draft={draft} allowAdvanced={allowAdvanced} />
       <ModelPanes
         key={choice.kind === "builtin" ? choice.provider.provider : "custom"}
-        options={choice.kind === "builtin" ? choice.provider.models : []}
+        options={choice.kind === "builtin" ? choice.provider.models : draft.probe.models}
         selected={draft.picked}
         onChange={draft.setPicked}
         disabled={draft.saving}
+        headerAction={
+          choice.kind === "custom" ? (
+            <ProbeButton
+              running={draft.probe.running}
+              disabled={draft.saving || draft.probeProblem() !== null}
+              title={draft.probeProblem() ?? "从服务的 /models 接口读取模型列表"}
+              onClick={() => void draft.probeModels()}
+            />
+          ) : undefined
+        }
       />
     </>
   );
