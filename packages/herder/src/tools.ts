@@ -101,7 +101,11 @@ const askSchema = obj({
 const notifySchema = obj({ text: str() });
 const emptySchema = obj({});
 
-export function herderTools(host: HerderHost, turn: () => TurnContext): AgentTool[] {
+export function herderTools(
+  host: HerderHost,
+  turn: () => TurnContext,
+  modelGuide?: () => string,
+): AgentTool[] {
   const tools = [
     {
       name: "session_list",
@@ -121,7 +125,7 @@ export function herderTools(host: HerderHost, turn: () => TurnContext): AgentToo
             .map((p) => `${p.id} (${p.name})`)
             .join(", ")}`,
           "Models (service/model: agents that can run it):",
-          ...modelLines(host),
+          ...modelLines(host, modelGuide),
           `Recent projects: ${host.recentProjects().join(", ") || "(none)"}`,
           `Relay: ${host.relayTaskId()?.slice(0, 8) ?? "none"}`,
         ];
@@ -265,8 +269,11 @@ export function herderTools(host: HerderHost, turn: () => TurnContext): AgentToo
   return tools.map((t) => t as unknown as AgentTool);
 }
 
-function modelLines(host: HerderHost): string[] {
+function modelLines(host: HerderHost, modelGuide?: () => string): string[] {
   const models = host.models();
   if (models.length === 0) return ["(none; agents use their own settings)"];
-  return models.map((m) => `- ${m.ref}: ${m.agents.join(", ") || "(no agent can run it)"}`);
+  const lines = models.map((m) => `- ${m.ref}: ${m.agents.join(", ") || "(no agent can run it)"}`);
+  const guide = modelGuide?.().trim();
+  if (guide) lines.push("Model guide (advice from the owner for picking a model):", guide);
+  return lines;
 }

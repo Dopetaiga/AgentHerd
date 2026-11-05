@@ -16,6 +16,8 @@ export interface HerderOptions {
   streamFn: StreamFn;
   getApiKey?: (provider: string) => string | undefined | Promise<string | undefined>;
   maxSavedMessages?: number;
+  /** The model guide for picking a task's model (ADR 0026). Read at each session_list. */
+  modelGuide?: () => string;
 }
 
 type Job =
@@ -47,7 +49,7 @@ export class Herder implements HerderPort {
         systemPrompt: systemPrompt(this.host.locale),
         model: opts.model,
         thinkingLevel: "off",
-        tools: herderTools(this.host, () => this.turn),
+        tools: herderTools(this.host, () => this.turn, opts.modelGuide),
         messages: saved,
       },
     });

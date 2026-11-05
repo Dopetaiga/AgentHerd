@@ -19,6 +19,7 @@ import type {
   AgentView,
   HostEvent,
   HostStatus,
+  ModelGuideView,
   ModelsView,
   RemoteHost,
   SetupState,
@@ -171,6 +172,10 @@ function installFakeBridge(): void {
   const patch = (id: string, change: Partial<AgentView>): AgentView[] =>
     setAgents(agents.map((a) => (a.id === id ? ({ ...a, ...change } as AgentView) : a)));
   const reset = (a: AgentView): AgentView => missing(a.id, a.name);
+
+  const defaultGuide =
+    "模型选择参考（2026-11，按能力从强到弱）：\n\n最强：Claude Opus\n均衡：Claude Sonnet、DeepSeek V4 Pro\n便宜快：DeepSeek Flash";
+  let guide: ModelGuideView = { text: defaultGuide, custom: false, defaultText: defaultGuide };
 
   const fake: RemoteHost = {
     agents: () => delay(agents),
@@ -327,6 +332,12 @@ function installFakeBridge(): void {
       return delay(setup);
     },
     setupState: () => delay(setup),
+    modelGuide: () => delay(structuredClone(guide)),
+    setModelGuide: (text) => {
+      const own = text?.trim() ?? "";
+      guide = { ...guide, custom: own !== "", text: own === "" ? guide.defaultText : own };
+      return delay(structuredClone(guide));
+    },
     updateSettings: (patch) => {
       status = { ...status, ...patch };
       emit({ topic: "status", data: structuredClone(status) });

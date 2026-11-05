@@ -125,6 +125,22 @@ describe("Host", () => {
     expect(readConfig(t.home)).toMatchObject({ mode: "observe", keepAwake: true });
     expect(() => t.host.updateSettings({ mode: "auto" })).toThrow(/observe or assist/);
   });
+
+  it("keeps the owner's model guide and goes back to the default", () => {
+    const t = makeHost(false);
+    const first = t.host.modelGuide();
+    expect(first.custom).toBe(false);
+    expect(first.text).toBe(first.defaultText);
+    expect(first.text).toContain("Opus");
+    expect(t.host.setModelGuide("  只用 DeepSeek  ")).toMatchObject({
+      custom: true,
+      text: "只用 DeepSeek",
+    });
+    expect(readConfig(t.home).modelGuide).toBe("只用 DeepSeek");
+    expect(t.host.setModelGuide(null)).toMatchObject({ custom: false, text: first.defaultText });
+    expect(readConfig(t.home).modelGuide).toBeUndefined();
+    expect(t.host.setModelGuide(first.defaultText).custom).toBe(false);
+  });
 });
 
 describe("local API socket", () => {

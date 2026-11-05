@@ -92,7 +92,7 @@ The Herder may add, never rewrite.
 
 | Group | Tools |
 | --- | --- |
-| Sessions | `session_start(project, profile, ownerText, addedContext, model?)` (model: `service/model` the agent can run, picked by the Herder, [ADR 0025](../adr/0025-herder-picks-model-per-task.md)), `session_prompt(sessionId, text)`, `session_cancel(sessionId)`, `session_list()` (also lists models and the agents that can run each) |
+| Sessions | `session_start(project, profile, ownerText, addedContext, model?)` (model: `service/model` the agent can run, picked by the Herder, [ADR 0025](../adr/0025-herder-picks-model-per-task.md)), `session_prompt(sessionId, text)`, `session_cancel(sessionId)`, `session_list()` (also lists models, the agents that can run each, and the owner's model guide, [ADR 0026](../adr/0026-model-guide-for-the-herder.md)) |
 | Owner | `ask(text, options)`, `notify(text)`, `relay_start(sessionId)`, `relay_end()` |
 | Read | `task_get`, `task_list`, `session_transcript`, `decisions_list`, `read`, `grep`, `list`, `git_log`, `git_diff` (read tools only inside known project directories) |
 

@@ -10,10 +10,14 @@ import {
 } from "../src/tools.ts";
 import { fakeHost, task } from "./helpers.ts";
 
-function tools(turn: Partial<TurnContext>, opts: Parameters<typeof fakeHost>[0] = {}) {
+function tools(
+  turn: Partial<TurnContext>,
+  opts: Parameters<typeof fakeHost>[0] = {},
+  modelGuide?: () => string,
+) {
   const { host, rec } = fakeHost(opts);
   const ctx: TurnContext = { kind: "owner", ownerText: "", asked: false, notified: false, ...turn };
-  const byName = new Map(herderTools(host, () => ctx).map((t) => [t.name, t]));
+  const byName = new Map(herderTools(host, () => ctx, modelGuide).map((t) => [t.name, t]));
   const call = async (name: string, args: unknown) => {
     const tool = byName.get(name);
     if (tool === undefined) throw new Error(`no tool ${name}`);
@@ -155,6 +159,18 @@ describe("tools", () => {
     await call("session_start", { project: dir, profile: "mock", ownerText: "修一下构建" });
     expect(rec.started[1]?.model).toBeUndefined();
     expect(rec.started).toHaveLength(2);
+  });
+
+  it("session_list adds the model guide when there are models", async () => {
+    const models = [{ ref: "a/strong", agents: ["mock"] }];
+    let guide = "Opus 最强";
+    const withModels = tools({}, { models }, () => guide);
+    expect(await withModels.call("session_list", {})).toContain("Model guide");
+    expect(await withModels.call("session_list", {})).toContain("Opus 最强");
+    guide = "改过的参考";
+    expect(await withModels.call("session_list", {})).toContain("改过的参考");
+    const none = tools({}, {}, () => guide);
+    expect(await none.call("session_list", {})).not.toContain("Model guide");
   });
 
   it("session_prompt labels text that is not the owner's", async () => {

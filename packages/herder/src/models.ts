@@ -125,6 +125,7 @@ export function herderFromSettings(
   settings: ModelSettings,
   secrets: SecretStore,
   env?: Record<string, string>,
+  modelGuide?: () => string,
 ): HerderChoice | { reason: string } {
   const choice = modelFor(settings, "herder");
   if (choice === undefined) return { reason: "no model chosen for the Herder" };
@@ -141,7 +142,13 @@ export function herderFromSettings(
   return {
     ref: `${choice.service.id}/${choice.model}`,
     factory: (host) =>
-      new Herder({ host, model, streamFn: streamSimple, getApiKey: () => key ?? "none" }),
+      new Herder({
+        host,
+        model,
+        streamFn: streamSimple,
+        getApiKey: () => key ?? "none",
+        ...(modelGuide === undefined ? {} : { modelGuide }),
+      }),
   };
 }
 

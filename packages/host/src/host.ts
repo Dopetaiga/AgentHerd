@@ -18,6 +18,8 @@ import {
 } from "@agentherd/core";
 import {
   builtinProviders,
+  DEFAULT_MODEL_GUIDE,
+  effectiveModelGuide,
   herderFromSettings,
   modelChoices,
   modelEnvFor,
@@ -37,6 +39,7 @@ import type {
   HostEvent,
   HostStatus,
   ItemSummary,
+  ModelGuideView,
   ModelsView,
   ModelTest,
   ProviderView,
@@ -260,12 +263,16 @@ export class Host implements HostApi {
   }
 
   private herderFactory() {
-    const choice = herderFromSettings(this.settings(), this.opts.secrets, this.opts.env);
+    const choice = herderFromSettings(this.settings(), this.opts.secrets, this.opts.env, () =>
+      effectiveModelGuide(this.config().modelGuide),
+    );
     return "factory" in choice ? choice.factory : undefined;
   }
 
   private refreshHerderChoice(): void {
-    const choice = herderFromSettings(this.settings(), this.opts.secrets, this.opts.env);
+    const choice = herderFromSettings(this.settings(), this.opts.secrets, this.opts.env, () =>
+      effectiveModelGuide(this.config().modelGuide),
+    );
     if ("reason" in choice) {
       this.herderReason = choice.reason;
       this.herderRef = undefined;
@@ -478,6 +485,25 @@ export class Host implements HostApi {
     writeConfig(this.opts.home, next);
     this.emitStatus();
     return this.status();
+  }
+
+  modelGuide(): ModelGuideView {
+    const own = this.config().modelGuide?.trim();
+    return {
+      text: effectiveModelGuide(own),
+      custom: own !== undefined && own !== "",
+      defaultText: DEFAULT_MODEL_GUIDE,
+    };
+  }
+
+  setModelGuide(text: string | null): ModelGuideView {
+    const next: CliConfig = { ...this.config() };
+    const own = text?.trim();
+    if (own === undefined || own === "" || own === DEFAULT_MODEL_GUIDE.trim())
+      delete next.modelGuide;
+    else next.modelGuide = own;
+    writeConfig(this.opts.home, next);
+    return this.modelGuide();
   }
 }
 
