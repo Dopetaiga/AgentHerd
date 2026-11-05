@@ -30,6 +30,30 @@ describe("core texts", () => {
     expect(view.body).toContain("理由：跑测试");
   });
 
+  it("pipeline reasons are shown in the owner's language", () => {
+    const item = {
+      id: "i1",
+      sessionId: "s1",
+      kind: "permission",
+      title: "ls",
+      body: "",
+      risk: "medium",
+      state: "open",
+      createdAt: "2026-11-04T00:00:00.000Z",
+      toolCall: { id: "t1", command: "ls" },
+    } as never;
+    const zh = coreTexts("zh-CN");
+    expect(itemView(item, "no rule matched", undefined, zh).reason).toBe(
+      "没有规则自动处理这个请求",
+    );
+    expect(itemView(item, "guard list: secret file", undefined, zh).reason).toBe(
+      "碰到保护名单：secret file",
+    );
+    expect(itemView(item, "no rule matched", undefined, coreTexts("en")).reason).toBe(
+      "no rule matched",
+    );
+  });
+
   it("Chinese report titles and results", () => {
     const task: Task = {
       id: "t",

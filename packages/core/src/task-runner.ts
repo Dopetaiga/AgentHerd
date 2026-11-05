@@ -141,6 +141,7 @@ export class TaskRunner {
     const f = ctx.following.get(taskId);
     if (f === undefined || f.ended) return;
     f.ended = true;
+    f.endedWhy = why;
     f.idleTimer?.cancel();
     ctx.watchdog.untrack(taskId);
     for (const off of f.offs) off();
@@ -252,7 +253,9 @@ export class TaskRunner {
       }
       return { sessionId, stopReason };
     } catch (error) {
-      const message = (error as Error).message;
+      // Ending a task closes its agent, which fails the running turn; report why it ended, not
+      // the agent's exit.
+      const message = f.endedWhy ?? (error as Error).message;
       ctx.watchdog.turnEnded(sessionId);
       if (ctx.registry.get(sessionId)?.state !== "ended") ctx.registry.set(sessionId, "error");
       await sendReport(ctx, f, ctx.texts.failedBody(message), null);

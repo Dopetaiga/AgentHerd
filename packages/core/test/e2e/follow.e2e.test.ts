@@ -72,6 +72,25 @@ turns:
   });
 });
 
+describe("E2E-STOP-MID-TURN", () => {
+  it("stopping AgentHerd mid-turn reports that it stopped, not that the agent exited", async () => {
+    const { channel, herd } = await setup(`
+turns:
+  - - message: "Looking. "
+    - sleep: 5000
+    - end_turn: end_turn
+`);
+    mkdirSync(join(dir, "stop"), { recursive: true });
+    const { turn } = await herd.startTask("mock", join(dir, "stop"), "Look around");
+    turn.catch(() => {});
+    await new Promise((r) => setTimeout(r, 300));
+    await herd.stop();
+    const [report] = reports(channel);
+    expect(report?.body).toContain("AgentHerd stopped");
+    expect(report?.body).not.toContain("exited");
+  });
+});
+
 describe("E2E-REPORT-LONG", () => {
   it("a long reply is summarized by the agent itself; the full reply is attached", async () => {
     const { channel, herd } = await setup(`
