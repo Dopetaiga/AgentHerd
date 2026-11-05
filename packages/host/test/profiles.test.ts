@@ -1,7 +1,11 @@
+import { delimiter } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   availableProfiles,
+  commandCandidates,
   DSH_APP_BIN,
+  dshAppBins,
+  dshInstallDirs,
   findAgent,
   resolveProfile,
   searchPath,
@@ -15,17 +19,24 @@ describe("findAgent dsh", () => {
 
   it("prefers AGENTHERD_DSH", () => {
     expect(
-      findAgent("dsh", { AGENTHERD_DSH: "/x/dsh", PATH: "/usr/bin" }, has("/usr/bin/dsh")),
+      findAgent(
+        "dsh",
+        { AGENTHERD_DSH: "/x/dsh", PATH: "/usr/bin" },
+        has("/usr/bin/dsh"),
+        "darwin",
+      ),
     ).toBe("/x/dsh");
   });
   it("then searches PATH in order", () => {
-    expect(findAgent("dsh", { PATH: "/a:/b" }, has("/b/dsh", DSH_APP_BIN))).toBe("/b/dsh");
+    expect(findAgent("dsh", { PATH: "/a:/b" }, has("/b/dsh", DSH_APP_BIN), "darwin")).toBe(
+      "/b/dsh",
+    );
   });
   it("then falls back to the app bundle", () => {
-    expect(findAgent("dsh", { PATH: "/a" }, has(DSH_APP_BIN))).toBe(DSH_APP_BIN);
+    expect(findAgent("dsh", { PATH: "/a" }, has(DSH_APP_BIN), "darwin")).toBe(DSH_APP_BIN);
   });
   it("returns undefined when DSH is not installed", () => {
-    expect(findAgent("dsh", { PATH: "" }, has())).toBeUndefined();
+    expect(findAgent("dsh", { PATH: "" }, has(), "darwin")).toBeUndefined();
   });
 });
 
@@ -90,9 +101,11 @@ describe("pi", () => {
       paths.includes(p);
 
   it("finds Pi from AGENTHERD_PI, then PATH", () => {
-    expect(findAgent("pi", { AGENTHERD_PI: "/x/pi", PATH: "/b" }, has("/b/pi"))).toBe("/x/pi");
-    expect(findAgent("pi", { PATH: "/a:/b" }, has("/b/pi"))).toBe("/b/pi");
-    expect(findAgent("pi", { PATH: "/a" }, has())).toBeUndefined();
+    expect(findAgent("pi", { AGENTHERD_PI: "/x/pi", PATH: "/b" }, has("/b/pi"), "darwin")).toBe(
+      "/x/pi",
+    );
+    expect(findAgent("pi", { PATH: "/a:/b" }, has("/b/pi"), "darwin")).toBe("/b/pi");
+    expect(findAgent("pi", { PATH: "/a" }, has(), "darwin")).toBeUndefined();
   });
 
   it("runs Pi behind the bundled bridge, with the chosen model in env", () => {
@@ -102,7 +115,7 @@ describe("pi", () => {
       piModelEnv: { AGENTHERD_PI_MODEL: "{}", AGENTHERD_PI_KEY: "k" },
     });
     expect(p.command.slice(1)).toEqual([
-      expect.stringMatching(/pi-acp\/bin\/pi-acp\.ts$/),
+      expect.stringMatching(/pi-acp[\\/]bin[\\/]pi-acp\.ts$/),
       "--pi",
       "/b/pi",
     ]);
@@ -124,9 +137,95 @@ describe("pi", () => {
   });
 });
 
+describe("findAgent on Windows", () => {
+  const has =
+    (...paths: string[]) =>
+    (p: string) =>
+      paths.includes(p);
+  const PATH = "C:\\a;C:\\nodejs";
+
+  const APP = "D:\\Apps\\DSH\\resources\\runtime\\cli\\bin\\dsh.cmd";
+  const noApp = () => [];
+
+  it("finds npm's .cmd shim, not the shell script beside it", () => {
+    const found = findAgent(
+      "dsh",
+      { PATH },
+      has("C:\\nodejs\\dsh", "C:\\nodejs\\dsh.cmd"),
+      "win32",
+      noApp,
+    );
+    expect(found).toBe("C:\\nodejs\\dsh.cmd");
+  });
+  it("finds an .exe", () => {
+    expect(findAgent("pi", { PATH }, has("C:\\a\\pi.exe"), "win32")).toBe("C:\\a\\pi.exe");
+  });
+  it("prefers the installed DSH app over the npm launcher on PATH", () => {
+    const found = findAgent("dsh", { PATH }, has("C:\\nodejs\\dsh.cmd", APP), "win32", () => [APP]);
+    expect(found).toBe(APP);
+  });
+  it("still prefers AGENTHERD_DSH", () => {
+    expect(
+      findAgent("dsh", { AGENTHERD_DSH: "C:\\x\\dsh.cmd" }, has(APP), "win32", () => [APP]),
+    ).toBe("C:\\x\\dsh.cmd");
+  });
+  it("does not look for the macOS app bundle", () => {
+    expect(findAgent("dsh", { PATH: "" }, () => true, "win32", noApp)).toBeUndefined();
+    expect(dshAppBins("win32", () => "")).toEqual([]);
+  });
+});
+
+describe("DSH app on Windows", () => {
+  // `reg query HKCU\...\Uninstall /s /f "DeepSeek Harness" /d` on a per-user install.
+  const OUTPUT = [
+    "",
+    "HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\1bf39983-50d0-5fe0-9ef4-cece76f67c5e",
+    "    DisplayName    REG_SZ    DeepSeek Harness 0.2.1-rc.2",
+    '    UninstallString    REG_SZ    "G:\\Program File\\DSH\\Uninstall DeepSeek Harness.exe" /currentuser',
+    "    DisplayIcon    REG_SZ    G:\\Program File\\DSH\\DeepSeek Harness.exe,0",
+    "",
+    "HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\other",
+    "    DisplayName    REG_SZ    Notes about DeepSeek Harness",
+    "    DisplayIcon    REG_SZ    C:\\Notes\\notes.exe",
+    "",
+    "Search end: 3 match(es) found.",
+  ].join("\r\n");
+
+  it("reads install folders from the uninstall entries", () => {
+    expect(dshInstallDirs(OUTPUT)).toEqual(["G:\\Program File\\DSH"]);
+  });
+  it("points at the CLI launcher in each folder, per-user first", () => {
+    const asked: string[] = [];
+    const bins = dshAppBins("win32", (args) => {
+      asked.push(args[1] ?? "");
+      if (args[1]?.startsWith("HKLM")) throw new Error("ERROR: no match");
+      return OUTPUT;
+    });
+    expect(asked.map((k) => k.slice(0, 4))).toEqual(["HKCU", "HKLM"]);
+    expect(bins).toEqual(["G:\\Program File\\DSH\\resources\\runtime\\cli\\bin\\dsh.cmd"]);
+  });
+});
+
+describe("commandCandidates", () => {
+  it("tries each PATHEXT extension on Windows", () => {
+    expect(commandCandidates("C:\\b", "pi", "win32", ".EXE;.CMD")).toEqual([
+      "C:\\b\\pi.exe",
+      "C:\\b\\pi.cmd",
+    ]);
+  });
+  it("keeps a name that already has an extension", () => {
+    expect(commandCandidates("C:\\b", "pi.exe", "win32", ".EXE;.CMD")).toEqual(["C:\\b\\pi.exe"]);
+  });
+  it("uses the bare name elsewhere", () => {
+    expect(commandCandidates("/b", "pi", "linux")).toEqual(["/b/pi"]);
+  });
+});
+
 describe("searchPath", () => {
   it("keeps PATH and adds the usual install folders without duplicates", () => {
-    const path = searchPath({ PATH: "/usr/bin:/opt/homebrew/bin" }).split(":");
+    const path = searchPath({
+      PATH: ["/usr/bin", "/opt/homebrew/bin"].join(delimiter),
+    }).split(delimiter);
     expect(path.slice(0, 2)).toEqual(["/usr/bin", "/opt/homebrew/bin"]);
     expect(path).toContain("/usr/local/bin");
     expect(path.filter((d) => d === "/opt/homebrew/bin")).toHaveLength(1);

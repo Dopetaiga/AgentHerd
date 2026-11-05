@@ -1,6 +1,7 @@
 // The local API over a Unix domain socket: `<home>/run/herd.sock`, mode 600 in a 700 directory,
-// newline-delimited JSON (./api.ts). No TCP port.
+// newline-delimited JSON (./api.ts). No TCP port. On Windows: a named pipe named after the home.
 
+import { createHash } from "node:crypto";
 import { chmodSync, existsSync, mkdirSync, unlinkSync } from "node:fs";
 import { createConnection, createServer, type Server, type Socket } from "node:net";
 import { join } from "node:path";
@@ -16,7 +17,14 @@ import {
   type ResultMessage,
 } from "./api.ts";
 
+const isWindows = process.platform === "win32";
+
 export function socketPath(home: string): string {
+  // Windows has no Unix socket files here; use a named pipe derived from the home path.
+  if (isWindows) {
+    const id = createHash("sha256").update(home.toLowerCase()).digest("hex").slice(0, 16);
+    return `\\\\.\\pipe\\agentherd-${id}`;
+  }
   return join(home, "run", "herd.sock");
 }
 
@@ -38,7 +46,8 @@ function lineReader(onLine: (line: string) => void): (chunk: Buffer) => void {
 /** True when a host answers on this socket. */
 export function isHostRunning(path: string, timeoutMs = 1000): Promise<boolean> {
   return new Promise((done) => {
-    if (!existsSync(path)) {
+    // A named pipe cannot be checked with existsSync; connecting tells.
+    if (!isWindows && !existsSync(path)) {
       done(false);
       return;
     }
@@ -70,11 +79,13 @@ export interface EventSource {
 
 /** Serves `api` on the socket. Refuses to start if another host answers there. */
 export async function serveApi(api: HostApi & EventSource, path: string): Promise<ApiServer> {
-  const dir = join(path, "..");
-  mkdirSync(dir, { recursive: true, mode: 0o700 });
-  chmodSync(dir, 0o700);
+  if (!isWindows) {
+    const dir = join(path, "..");
+    mkdirSync(dir, { recursive: true, mode: 0o700 });
+    chmodSync(dir, 0o700);
+  }
   if (await isHostRunning(path)) throw new Error(`another AgentHerd host is running (${path})`);
-  if (existsSync(path)) unlinkSync(path);
+  if (!isWindows && existsSync(path)) unlinkSync(path);
 
   const sockets = new Set<Socket>();
   const off = api.onEvent((event) => {
@@ -96,10 +107,15 @@ export async function serveApi(api: HostApi & EventSource, path: string): Promis
     );
   });
   await new Promise<void>((done, fail) => {
-    server.once("error", fail);
+    server.once("error", (error: NodeJS.ErrnoException) => {
+      // A pipe name in use means another host holds it (Unix sockets were checked above).
+      if (isWindows && error.code === "EADDRINUSE") {
+        fail(new Error(`another AgentHerd host is running (${path})`));
+      } else fail(error);
+    });
     server.listen(path, () => done());
   });
-  chmodSync(path, 0o600);
+  if (!isWindows) chmodSync(path, 0o600);
   return {
     path,
     close: () =>

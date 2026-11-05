@@ -2,11 +2,10 @@
 // (catalog.ts, runtimes.ts). The host keeps one Agents and rebuilds profiles when it changes.
 
 import { existsSync } from "node:fs";
-import { delimiter, join } from "node:path";
 import type { AgentProfile } from "@agentherd/protocol";
 import type { AgentSource, AgentView } from "./api.ts";
 import { AGENTS, type AgentDef, type Fetchers, httpFetchers, npmRuntime } from "./catalog.ts";
-import { DSH_APP_BIN } from "./profiles.ts";
+import { dshAppBins, onPath } from "./profiles.ts";
 import { currentTarget, type InstallProgress, type RuntimeStore } from "./runtimes.ts";
 
 export interface AgentsOptions {
@@ -17,6 +16,8 @@ export interface AgentsOptions {
   fetchers?: Fetchers;
   target?: string;
   exists?: (path: string) => boolean;
+  /** Default: process.platform (decides how PATH is searched). */
+  platform?: NodeJS.Platform;
   /** The DeepSeek Harness desktop app's CLI, when installed. */
   dshApp?: string;
   onChange: () => void;
@@ -55,7 +56,7 @@ export class Agents {
     return (this.opts.exists ?? existsSync)(path);
   }
 
-  /** Where `id` runs from: its env variable, then the app's download, then PATH, then its app. */
+  /** Where `id` runs from: its env variable, then the app's download, then PATH and the DSH app. */
   find(id: string): AgentPath | undefined {
     const def = this.catalog.find((d) => d.id === id);
     if (def === undefined) return undefined;
@@ -65,18 +66,30 @@ export class Agents {
     if (managed !== undefined) {
       return { path: managed.path, source: "managed", version: managed.version };
     }
-    for (const dir of (this.env.PATH ?? "").split(delimiter)) {
-      if (dir === "") continue;
-      for (const name of def.systemNames) {
-        const candidate = join(dir, name);
-        if (this.exists(candidate)) return { path: candidate, source: "system" };
-      }
+    const platform = this.opts.platform ?? process.platform;
+    const app = (): AgentPath | undefined => {
+      if (id !== "dsh") return undefined;
+      const path = this.dshApps(platform).find((p) => this.exists(p));
+      return path === undefined ? undefined : { path, source: "app" };
+    };
+    // On Windows the app comes first: the `dsh` on PATH is usually the npm launcher, which
+    // lacks the `acp` profile unless installed separately (see findAgent).
+    if (platform === "win32") {
+      const fromApp = app();
+      if (fromApp !== undefined) return fromApp;
     }
-    if (id === "dsh") {
-      const app = this.opts.dshApp ?? DSH_APP_BIN;
-      if (this.exists(app)) return { path: app, source: "app" };
-    }
-    return undefined;
+    const onSystem = onPath(def.systemNames, this.env.PATH, (p) => this.exists(p), platform);
+    if (onSystem !== undefined) return { path: onSystem, source: "system" };
+    return platform === "win32" ? undefined : app();
+  }
+
+  private appBins: string[] | undefined;
+
+  /** The DSH app's CLI candidates; the registry is read once per host. */
+  private dshApps(platform: NodeJS.Platform): string[] {
+    if (this.opts.dshApp !== undefined) return [this.opts.dshApp];
+    this.appBins ??= dshAppBins(platform);
+    return this.appBins;
   }
 
   views(configured: AgentProfile[], modelRefs: Record<string, string>): AgentView[] {

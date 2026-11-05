@@ -15,7 +15,7 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { join } from "node:path";
+import { join, win32 } from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { promisify } from "node:util";
@@ -179,6 +179,11 @@ export class RuntimeStore {
   }
 }
 
+/** Windows' own tar.exe (bsdtar). */
+export function windowsTar(env: NodeJS.ProcessEnv = process.env): string {
+  return win32.join(env.SystemRoot ?? env.windir ?? "C:\\Windows", "System32", "tar.exe");
+}
+
 async function unpackArchive(
   release: ArchiveRelease,
   staging: string,
@@ -187,7 +192,11 @@ async function unpackArchive(
   const archive = `${staging}.${release.format}`;
   try {
     await download(release, archive, opts.onProgress ?? (() => {}), opts.signal);
-    if (release.format === "tar.gz") {
+    if (process.platform === "win32") {
+      // Windows 10+ ships bsdtar, which also reads zip; there is no unzip. Name it by path: a
+      // GNU tar from Git for Windows earlier on PATH reads "C:\..." as a remote host.
+      await run(windowsTar(), ["-xf", archive, "-C", staging]);
+    } else if (release.format === "tar.gz") {
       await run("tar", ["-xzf", archive, "-C", staging]);
     } else if (process.platform === "darwin") {
       // ditto keeps symlinks and code signatures inside .app bundles.

@@ -1,4 +1,12 @@
 export {
+  type CommandLine,
+  type CommandOptions,
+  commandLine,
+  type KillOptions,
+  killTree,
+  npmShimTarget,
+} from "./command.ts";
+export {
   type AgentConnection,
   CLOSE_GRACE_MS,
   type ExitEvent,

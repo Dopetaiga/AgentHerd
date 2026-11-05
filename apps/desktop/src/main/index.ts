@@ -8,7 +8,7 @@ import { join } from "node:path";
 import type { HostEvent, HostMethod } from "@agentherd/host/api";
 import { HOST_METHODS } from "@agentherd/host/api";
 import { connectHost, type HostClient, socketPath } from "@agentherd/host/server";
-import { app, BrowserWindow, ipcMain, powerSaveBlocker, shell } from "electron";
+import { app, BrowserWindow, ipcMain, nativeTheme, powerSaveBlocker, shell } from "electron";
 import { ensureHost, stopOwnedHost } from "./host-process.ts";
 
 app.setName("AgentHerd");
@@ -80,6 +80,12 @@ ipcMain.handle("host:call", async (_event, method: HostMethod, params: unknown[]
 });
 ipcMain.handle("host:connected", () => connected);
 
+/** Window controls for Windows and Linux: transparent, as tall as `--ah-titlebar-height`. */
+function titleBarOverlay(): { color: string; symbolColor: string; height: number } {
+  const dark = nativeTheme.shouldUseDarkColors;
+  return { color: "#00000000", symbolColor: dark ? "#dcdcdc" : "#3a3a3c", height: 48 };
+}
+
 function createWindow(): void {
   win = new BrowserWindow({
     width: 1100,
@@ -88,16 +94,18 @@ function createWindow(): void {
     minHeight: 560,
     title: "AgentHerd",
     show: process.env.AGENTHERD_CAPTURE === undefined,
-    titleBarStyle: "hiddenInset",
-    trafficLightPosition: { x: 18, y: 18 },
     // The sidebar is translucent on macOS; the renderer keeps the page card opaque.
     ...(process.platform === "darwin"
       ? {
+          titleBarStyle: "hiddenInset" as const,
+          trafficLightPosition: { x: 18, y: 18 },
           vibrancy: "sidebar" as const,
           visualEffectState: "followWindow" as const,
           backgroundColor: "#00000000",
         }
-      : {}),
+      : // Elsewhere hiddenInset is ignored and leaves the native title bar and menu bar; draw
+        // the window controls over the renderer's title bar strip instead.
+        { titleBarStyle: "hidden" as const, titleBarOverlay: titleBarOverlay() }),
     webPreferences: {
       preload: join(import.meta.dirname, "../preload/index.cjs"),
       contextIsolation: true,
@@ -105,6 +113,14 @@ function createWindow(): void {
       nodeIntegration: false,
     },
   });
+  if (process.platform !== "darwin") {
+    const w = win;
+    const follow = () => {
+      if (!w.isDestroyed()) w.setTitleBarOverlay(titleBarOverlay());
+    };
+    nativeTheme.on("updated", follow);
+    w.on("closed", () => nativeTheme.off("updated", follow));
+  }
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (url.startsWith("https://")) void shell.openExternal(url);
     return { action: "deny" };

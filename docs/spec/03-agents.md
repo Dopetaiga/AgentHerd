@@ -107,8 +107,10 @@ can download each one's latest release: DSH (DeepSeek's update feed), Pi (GitHub
 Codex (the ACP adapter on npm, installed with a downloaded npm). `packages/host/src/catalog.ts` has
 the sources and the env of each; `packages/host/src/runtimes.ts` checks the publisher's digest
 (and `--version`), installs into `<home>/runtimes/<id>/<version>/` and records it in
-`current.json`. Lookup: `AGENTHERD_<ID>`, the download, `PATH`, then the DSH app. 移除 deletes the
-download.
+`current.json`. Lookup: `AGENTHERD_<ID>`, the download, `PATH`, then the DSH app. On Windows the DSH
+app (install folder from its uninstall entry, `resources\runtime\cli\bin\dsh.cmd`) comes
+before `PATH`: the npm `dsh` launcher there serves ACP only with its own `acp` profile bundle.
+移除 deletes the download.
 
 A task runs with a model from the owner's list: the Herder picks it and the agent gets it through
 env (Pi, Codex; see [ADR 0025](../adr/0025-herder-picks-model-per-task.md)). When Codex does not

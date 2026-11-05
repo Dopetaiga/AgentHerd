@@ -100,7 +100,9 @@ Rules:
 
 - Used by the desktop app and the CLI. Agents do not use it.
 - Transport: a Unix domain socket at `~/.agentherd/run/herd.sock`, file mode `600`, in a
-  directory with mode `700`. No TCP port.
+  directory with mode `700`. No TCP port. On Windows, which has no socket files there, it is
+  the named pipe `\\.\pipe\agentherd-<id>`, where `<id>` is the first 16 hex digits of the
+  SHA-256 of the lower-cased home path, so each home has its own host.
 - Framing: newline-delimited JSON. Each message has `v` (protocol version), `id`, `type`.
 - Calls are `{v, id, type:"call", method, params}`, answers `{v, id, type:"result", ok,
   result|error}`, pushes `{v, type:"event", event:{topic, data}}` (`packages/host/src/api.ts`).
@@ -117,7 +119,7 @@ All state is under `~/.agentherd/` (overridable by `AGENTHERD_HOME`):
 | --- | --- |
 | `config.json` | Settings and agent profiles, without secrets |
 | `herd.db` | SQLite: sessions, items, decisions, rules |
-| `run/herd.sock` | Local API socket |
+| `run/herd.sock` | Local API socket (not on Windows, see §4) |
 | `logs/` | Rotated logs. Secrets redacted. |
 | `backups/` | Copies of agent config files before each export |
 
