@@ -102,9 +102,10 @@ written to the audit log.
 
 ### When the Herder runs
 
-The Herder is idle until one of these arrives: a direct message for it, a task ended (`ready`,
-`blocked`, `failed`, `dropped`, or the session exited), a watchdog alarm, a scheduled job
-(daily digest). Events that arrive while it is busy are batched into its next turn.
+The Herder runs only when the owner writes to it or answers its question (ADR 0033). Task
+reports and watchdog alarms reach the owner by themselves; the Herder gets them, quoted as agent
+data under "[Already sent to the owner]", in front of the owner's next message (the last 10), so
+it knows what happened without repeating it.
 
 ### Context and restarts
 

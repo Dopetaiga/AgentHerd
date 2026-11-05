@@ -21,10 +21,10 @@ export interface HerderOptions {
   modelTiers?: () => TierPlacement;
 }
 
-type Job =
-  | { kind: "owner"; text: string }
-  | { kind: "answer"; question: string; answer: string }
-  | { kind: "events" };
+type Job = { kind: "owner"; text: string } | { kind: "answer"; question: string; answer: string };
+
+/** Events kept for the next owner turn; older ones are dropped. */
+export const MAX_HELD_EVENTS = 10;
 
 export class Herder implements HerderPort {
   private readonly host: HerderHost;
@@ -64,9 +64,13 @@ export class Herder implements HerderPort {
     this.enqueue({ kind: "answer", question, answer });
   }
 
+  /**
+   * Reports and alarms already reach the owner by themselves, so an event starts no turn: the
+   * Herder only repeated them. They go with the owner's next message as context.
+   */
   event(event: HerderEvent): void {
     this.events.push(event);
-    if (!this.jobs.some((j) => j.kind === "events")) this.enqueue({ kind: "events" });
+    if (this.events.length > MAX_HELD_EVENTS) this.events.shift();
   }
 
   async stop(): Promise<void> {
@@ -103,18 +107,14 @@ export class Herder implements HerderPort {
       this.lastOwnerText = job.text;
       this.turn = { kind: "owner", ownerText: job.text, asked: false, notified: false };
       prompt = ownerMessagePrompt(job.text);
-    } else if (job.kind === "answer") {
+    } else {
       const text = `${this.lastOwnerText}\n${job.answer}`;
       this.turn = { kind: "answer", ownerText: text, asked: false, notified: false };
       prompt = ownerAnswerPrompt(job.question, job.answer);
-    } else {
-      // Events that arrive together become one turn.
-      await new Promise((done) => setImmediate(done));
-      const events = this.events;
+    }
+    if (this.events.length > 0) {
+      prompt = `${eventsPrompt(this.events)}\n\n${prompt}`;
       this.events = [];
-      if (events.length === 0) return;
-      this.turn = { kind: "event", ownerText: "", asked: false, notified: false };
-      prompt = eventsPrompt(events);
     }
     this.host.audit("herder.turn", { kind: job.kind });
     const before = this.agent.state.messages.length;
@@ -132,7 +132,7 @@ export class Herder implements HerderPort {
       await this.fail(job, last.errorMessage ?? last.stopReason, before);
       return;
     }
-    if (job.kind !== "events" && !this.turn.asked && last?.role === "assistant") {
+    if (!this.turn.asked && last?.role === "assistant") {
       const text = last.content
         .filter((c) => c.type === "text")
         .map((c) => (c as { text: string }).text)
@@ -147,8 +147,7 @@ export class Herder implements HerderPort {
   private async fail(job: Job, message: string, before: number): Promise<void> {
     this.agent.state.messages = this.agent.state.messages.slice(0, before);
     this.host.audit("herder.error", { kind: job.kind, message });
-    if (job.kind !== "events" && !this.stopped)
-      await this.host.say(this.host.texts.herderFailed(message));
+    if (!this.stopped) await this.host.say(this.host.texts.herderFailed(message));
     this.save();
   }
 
