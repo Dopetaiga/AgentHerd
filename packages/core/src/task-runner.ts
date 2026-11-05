@@ -117,6 +117,15 @@ export class TaskRunner {
     this.ctx.watchdog.track(f.task.id);
   }
 
+  /** Gives a task a new name on the board and in later reports. */
+  renameTask(taskId: string, name: string): void {
+    const f = this.ctx.following.get(taskId);
+    if (f === undefined) throw new Error(`unknown task ${taskId}`);
+    f.task.title = taskTitle(name);
+    f.task.updatedAt = this.ctx.clock.now().toISOString();
+    this.ctx.board.changed();
+  }
+
   /** Sends a prompt to an open task. Queued while a turn runs; settles when its turn ends. */
   promptTask(taskId: string, text: string): Promise<RunResult> {
     const f = this.ctx.following.get(taskId);

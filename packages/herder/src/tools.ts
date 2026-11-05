@@ -85,6 +85,10 @@ const sessionStartSchema = obj({
         "Only when the owner names an agent (e.g. dsh). Omit otherwise: AgentHerd picks the agent from the model.",
     }),
   ),
+  name: str({
+    description:
+      'A short name for the task, 4 to 12 words or about 6 to 15 Chinese characters, in the owner\'s language: what the agent does, e.g. "pi-desktop：梳理可做的 issue". Shown on every report.',
+  }),
   ownerText: str({ description: "The owner's request, copied exactly from their message" }),
   addedContext: opt(str({ description: "Anything you add, sent below the owner's words" })),
   model: opt(
@@ -100,6 +104,9 @@ const promptSchema = obj({
   text: str({
     description: "Text for the agent; the owner's words copied exactly if they are theirs",
   }),
+  name: opt(
+    str({ description: "A new short name for the task, only when this changes what it works on" }),
+  ),
 });
 const askSchema = obj({
   question: str(),
@@ -161,6 +168,7 @@ export function herderTools(
         _id: string,
         args: {
           project: string;
+          name: string;
           profile?: string;
           ownerText: string;
           addedContext?: string;
@@ -185,7 +193,7 @@ export function herderTools(
         const cwd = resolveProject(host, args.project);
         if (!isDirectory(cwd)) throw new Error(`${cwd} is not a directory`);
         const prompt = composeTaskPrompt(args.ownerText.trim(), args.addedContext);
-        const title = args.ownerText.trim();
+        const title = args.name.trim() || args.ownerText.trim();
         const taskId = await host.startTask(profile, cwd, title, prompt, model);
         const using = model === undefined ? "its own model settings" : model;
         const switched =
@@ -203,11 +211,13 @@ export function herderTools(
       description:
         "Sends text to a running task. The owner's words go unchanged; other text is labeled as yours.",
       parameters: promptSchema,
-      execute: async (_id: string, args: { task: string; text: string }) => {
+      execute: async (_id: string, args: { task: string; text: string; name?: string }) => {
         const t = turn();
         if (t.kind === "event") throw new Error("only the owner can message tasks; use notify");
         const task = oneTask(host, args.task);
         const verbatim = isVerbatim(args.text, t.ownerText);
+        const name = args.name?.trim();
+        if (name !== undefined && name !== "") host.renameTask(task.id, name);
         host.promptTask(
           task.id,
           verbatim

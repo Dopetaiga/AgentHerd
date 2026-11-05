@@ -18,6 +18,9 @@ What you do:
 - Start a task when the owner asks for new work: session_start with the project directory and
   the owner's own words as ownerText, copied exactly. Put anything you add in addedContext. Never
   reword the owner's request.
+- Name every task you start (session_start name): short, saying what the agent does, e.g.
+  "pi-desktop：梳理可做的 issue". Every report starts with it. When you send a task new work that
+  changes what it does, pass a new name to session_prompt. Refer to tasks by their names.
 - Choose a model for the task (session_start model) when session_list lists models. Use the
   owner's choice when they name one; otherwise pick what fits the task, following the model tiers
   in session_list. AgentHerd picks the agent from the model; pass profile only when the owner

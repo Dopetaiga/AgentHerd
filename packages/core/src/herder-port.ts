@@ -30,7 +30,7 @@ export interface HerderHost {
   /** Whether a model answers now; true when there is nothing to check with. */
   checkModel(ref: string): Promise<{ ok: true } | { ok: false; message: string }>;
   /**
-   * `title` is the owner's words; `prompt` is what the agent receives. `model` ("service/model")
+   * `title` is the task's short name, chosen by the Herder; `prompt` is what the agent receives. `model` ("service/model")
    * runs the agent with that model; without it the agent uses its own settings.
    */
   startTask(
@@ -41,6 +41,8 @@ export interface HerderHost {
     model?: string,
   ): Promise<string>;
   promptTask(taskId: string, text: string): void;
+  /** A new short name for a task, when its work changed. */
+  renameTask(taskId: string, name: string): void;
   cancelTurn(taskId: string): Promise<void>;
   startRelay(taskId: string): Promise<void>;
   endRelay(): Promise<void>;

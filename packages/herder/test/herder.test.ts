@@ -110,7 +110,14 @@ describe("Herder", () => {
     const { herder, rec, faux } = setup();
     faux.setResponses([
       fauxAssistantMessage(
-        [fauxToolCall("session_start", { project: "/tmp", profile: "mock", ownerText: "rm -rf" })],
+        [
+          fauxToolCall("session_start", {
+            name: "修构建",
+            project: "/tmp",
+            profile: "mock",
+            ownerText: "rm -rf",
+          }),
+        ],
         { stopReason: "toolUse" },
       ),
       fauxAssistantMessage(""),
@@ -132,6 +139,7 @@ describe("Herder", () => {
       fauxAssistantMessage(
         [
           fauxToolCall("session_start", {
+            name: "修构建",
             project: "~/.agentherd",
             profile: "mock",
             ownerText: "改一下配置",
