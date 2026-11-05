@@ -102,6 +102,13 @@
   --ah-control-md: 32px;
   --ah-sidebar-width: 216px;
   --ah-titlebar-height: 48px;
+  /* Width of the window controls drawn over the title bar on Windows and Linux (the main
+     process sets titleBarOverlay); 0 on macOS, where the traffic lights sit on the left. */
+  --ah-titlebar-controls-width: calc(
+    100vw -
+    env(titlebar-area-x, 0px) -
+    env(titlebar-area-width, 100vw)
+  );
 }
 
 @media (prefers-color-scheme: light) {

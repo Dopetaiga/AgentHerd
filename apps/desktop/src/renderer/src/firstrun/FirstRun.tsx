@@ -202,7 +202,7 @@ export function FirstRun() {
 
   return (
     <div className="app-no-drag ah-fr fixed inset-0 z-30 flex flex-col bg-canvas text-ink">
-      <div className="app-drag flex h-12 shrink-0 items-center justify-end px-4">
+      <div className="app-drag flex h-12 shrink-0 items-center justify-end pr-[calc(1rem_+_var(--ah-titlebar-controls-width))] pl-4">
         {step !== "done" && (
           <button
             type="button"
