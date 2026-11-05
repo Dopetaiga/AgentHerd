@@ -87,13 +87,14 @@ describe("tools", () => {
     const dir = tmpdir();
     const { call, rec } = tools({ ownerText: `在 ${dir} 里修一下构建` });
     await call("session_start", {
+      name: "修构建",
       project: dir,
       profile: "mock",
       ownerText: "修一下构建",
       addedContext: "上次失败在 lint",
     });
     expect(rec.started).toHaveLength(1);
-    expect(rec.started[0]?.title).toBe("修一下构建");
+    expect(rec.started[0]?.title).toBe("修构建");
     expect(rec.started[0]?.prompt).toBe(
       `${OWNER_LABEL}\n修一下构建\n\n${CONTEXT_LABEL}\n上次失败在 lint`,
     );
@@ -103,13 +104,24 @@ describe("tools", () => {
     const dir = tmpdir();
     const owner = tools({ ownerText: "修一下构建" });
     await expect(
-      owner.call("session_start", { project: dir, profile: "mock", ownerText: "修复构建" }),
+      owner.call("session_start", {
+        name: "修构建",
+        project: dir,
+        profile: "mock",
+        ownerText: "修复构建",
+      }),
     ).rejects.toThrow(/copied exactly/);
     await expect(
-      owner.call("session_start", { project: dir, profile: "x", ownerText: "修一下构建" }),
+      owner.call("session_start", {
+        name: "修构建",
+        project: dir,
+        profile: "x",
+        ownerText: "修一下构建",
+      }),
     ).rejects.toThrow(/unknown profile/);
     await expect(
       owner.call("session_start", {
+        name: "修构建",
         project: "/does/not/exist",
         profile: "mock",
         ownerText: "修一下构建",
@@ -117,7 +129,12 @@ describe("tools", () => {
     ).rejects.toThrow(/not a directory/);
     const event = tools({ kind: "event", ownerText: "修一下构建" });
     await expect(
-      event.call("session_start", { project: dir, profile: "mock", ownerText: "修一下构建" }),
+      event.call("session_start", {
+        name: "修构建",
+        project: dir,
+        profile: "mock",
+        ownerText: "修一下构建",
+      }),
     ).rejects.toThrow(/only when the owner asks/);
     expect(owner.rec.started).toHaveLength(0);
     expect(event.rec.started).toHaveLength(0);
@@ -134,6 +151,7 @@ describe("tools", () => {
     expect(list).toContain("- deepseek-v4-pro: deepseek\n");
     expect(list).toContain("- claude-x: anthropic (no agent can run it)");
     const out = await call("session_start", {
+      name: "修构建",
       project: dir,
       profile: "mock",
       ownerText: "修一下构建",
@@ -143,6 +161,7 @@ describe("tools", () => {
     expect(rec.started[0]?.model).toBe("deepseek/deepseek-v4-pro");
     await expect(
       call("session_start", {
+        name: "修构建",
         project: dir,
         profile: "mock",
         ownerText: "修一下构建",
@@ -151,13 +170,19 @@ describe("tools", () => {
     ).rejects.toThrow(/cannot run anthropic\/claude-x/);
     await expect(
       call("session_start", {
+        name: "修构建",
         project: dir,
         profile: "mock",
         ownerText: "修一下构建",
         model: "x/y",
       }),
     ).rejects.toThrow(/unknown model/);
-    await call("session_start", { project: dir, profile: "mock", ownerText: "修一下构建" });
+    await call("session_start", {
+      name: "修构建",
+      project: dir,
+      profile: "mock",
+      ownerText: "修一下构建",
+    });
     expect(rec.started[1]?.model).toBeUndefined();
     expect(rec.started).toHaveLength(2);
   });
@@ -170,7 +195,13 @@ describe("tools", () => {
     ];
     const { call, rec } = tools({ ownerText: "修一下构建" }, { models, failing: ["site/gpt-x"] });
     expect(await call("session_list", {})).toContain("- gpt-x: site, backup\n");
-    const start = { project: dir, profile: "mock", ownerText: "修一下构建", model: "gpt-x" };
+    const start = {
+      name: "修构建",
+      project: dir,
+      profile: "mock",
+      ownerText: "修一下构建",
+      model: "gpt-x",
+    };
     await call("session_start", start);
     expect(rec.started[0]?.model).toBe("backup/gpt-x");
     const all = tools(
@@ -193,7 +224,7 @@ describe("tools", () => {
       { id: "codex", name: "Codex" },
     ];
     const { call, rec } = tools({ ownerText: "修一下构建" }, { models, profiles });
-    const base = { project: dir, ownerText: "修一下构建" };
+    const base = { name: "修构建", project: dir, ownerText: "修一下构建" };
     expect(await call("session_start", { ...base, model: "gpt-6.1-sol" })).toContain("with codex");
     await call("session_start", { ...base, model: "deepseek-v4-pro" });
     await call("session_start", base);
@@ -211,6 +242,7 @@ describe("tools", () => {
     ];
     const tiers = () => placeModels(["gpt-6.1-sol", "claude-opus-5-5", "deepseek-flash"]);
     const start = {
+      name: "修构建",
       project: dir,
       profile: "mock",
       ownerText: "修一下构建",
@@ -263,6 +295,21 @@ describe("tools", () => {
     await expect(event.call("session_prompt", { task: "aaaa", text: "go" })).rejects.toThrow();
     await expect(event.call("session_cancel", { task: "aaaa" })).rejects.toThrow();
     await expect(event.call("relay_start", { task: "aaaa" })).rejects.toThrow();
+  });
+
+  it("session_prompt with a name renames the task", async () => {
+    const { call, rec } = tools(
+      { ownerText: "再查一下 lint" },
+      { tasks: [task("aaaa1111", "修构建")] },
+    );
+    await call("session_prompt", {
+      task: "aaaa1111",
+      text: "再查一下 lint",
+      name: "修构建和 lint",
+    });
+    expect(rec.renamed).toEqual([{ taskId: "aaaa1111", name: "修构建和 lint" }]);
+    await call("session_prompt", { task: "aaaa1111", text: "再查一下 lint" });
+    expect(rec.renamed).toHaveLength(1);
   });
 
   it("ask and notify reach the owner and mark the turn", async () => {

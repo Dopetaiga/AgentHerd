@@ -93,6 +93,7 @@ describe("E2E-RUN-FROM-CHAT", () => {
       fauxAssistantMessage(
         [
           fauxToolCall("session_start", {
+            name: "修构建",
             project: dir,
             profile: "mock",
             ownerText: "写一份 notes",
@@ -106,7 +107,7 @@ describe("E2E-RUN-FROM-CHAT", () => {
     await channel.say(ask);
     await until(() => reports(channel).length === 1);
     await herder.idle();
-    expect(herd.tasks().map((t) => t.title)).toEqual(["写一份 notes"]);
+    expect(herd.tasks().map((t) => t.title)).toEqual(["修构建"]);
     expect(reports(channel)[0]?.body).toBe("notes written");
     expect(texts(channel)).toEqual(["已经开始写 notes 了。"]);
   });
@@ -122,6 +123,7 @@ describe("E2E-RUN-FROM-CHAT", () => {
       fauxAssistantMessage(
         [
           fauxToolCall("session_start", {
+            name: "修构建",
             project: dir,
             profile: "mock",
             ownerText: "写一份 notes",

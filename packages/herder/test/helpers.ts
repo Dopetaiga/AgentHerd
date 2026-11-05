@@ -8,6 +8,7 @@ export interface Recorded {
   asked: { text: string; options: string[] }[];
   started: { profileId: string; cwd: string; title: string; prompt: string; model?: string }[];
   prompted: { taskId: string; text: string }[];
+  renamed: { taskId: string; name: string }[];
   cancelled: string[];
   relays: string[];
   audits: { type: string; data: Record<string, unknown> }[];
@@ -45,6 +46,7 @@ export function fakeHost(
     asked: [],
     started: [],
     prompted: [],
+    renamed: [],
     cancelled: [],
     relays: [],
     audits: [],
@@ -75,6 +77,7 @@ export function fakeHost(
       return `task-${rec.started.length}-0000-0000`;
     },
     promptTask: (taskId, text) => void rec.prompted.push({ taskId, text }),
+    renameTask: (taskId, name) => void rec.renamed.push({ taskId, name }),
     cancelTurn: async (taskId) => void rec.cancelled.push(taskId),
     startRelay: async (taskId) => void rec.relays.push(taskId),
     endRelay: async () => void rec.relays.push("end"),
