@@ -14,7 +14,7 @@ import {
 import { onPermission } from "./permission.ts";
 import type { Relay } from "./relay.ts";
 import { REPLY_HINT_CHARS, replyHint } from "./report.ts";
-import { askSummary, sendReport, setReport } from "./task-report.ts";
+import { askSummary, flushReply, sendReport, setReport } from "./task-report.ts";
 import { projectName, taskTitle } from "./tasks.ts";
 
 export const SESSION_IDLE_MINUTES = 60;
@@ -185,9 +185,20 @@ export class TaskRunner {
       }),
       connection.on("update", (u) => {
         if (u.sessionId !== agentSessionId) return;
-        if (u.type === "message") f.turn.text += u.text ?? "";
+        if (u.type === "message") {
+          f.turn.text += u.text ?? "";
+          f.pending = (f.pending ?? "") + (u.text ?? "");
+        }
+        if (u.type === "tool_call_update" && u.toolCallId !== undefined && u.status !== undefined) {
+          ctx.store.setToolStatus(sessionId, u.toolCallId, u.status);
+        }
         if (u.type === "tool_call" && u.toolCall !== undefined) {
           f.turn.toolCalls += 1;
+          flushReply(ctx, f);
+          ctx.store.addTranscript(sessionId, "tool", u.toolCall.command ?? u.toolCall.title, {
+            id: u.toolCallId ?? "",
+            ...(u.status === undefined ? {} : { status: u.status }),
+          });
           const key = `${u.toolCall.title}\u0000${JSON.stringify(u.toolCall.rawInput ?? u.toolCall.command ?? "")}`;
           ctx.watchdog.toolCall(sessionId, key, u.toolCall.command ?? u.toolCall.title);
         } else {
@@ -292,6 +303,11 @@ export class TaskRunner {
       to: f.task.agent,
       why: short,
     });
+    ctx.store.addTranscript(
+      f.task.id,
+      "note",
+      ctx.texts.modelSwitched(fromLabel, f.task.agent, short),
+    );
     await say(ctx, ctx.texts.modelSwitched(fromLabel, f.task.agent, short), f.task.title);
     ctx.board.changed();
     return true;
@@ -305,6 +321,8 @@ export class TaskRunner {
       throw new Error(`task ${sessionId} has no session`);
     }
     f.turn = { text: "", toolCalls: 0 };
+    f.pending = "";
+    ctx.store.addTranscript(sessionId, "prompt", text);
     f.finished = false;
     f.alarm = false;
     let prompt = text;
@@ -319,6 +337,7 @@ export class TaskRunner {
       ctx.watchdog.turnEnded(sessionId);
       f.finished = stopReason === "end_turn";
       f.turnsEnded = (f.turnsEnded ?? 0) + 1;
+      flushReply(ctx, f);
       ctx.store.audit("turn.ended", { sessionId, stopReason });
       ctx.registry.set(sessionId, "idle");
       await ctx.inbox.expireSession(sessionId, ctx.texts.turnEnded);
@@ -336,6 +355,8 @@ export class TaskRunner {
       // the agent's exit.
       const message = f.endedWhy ?? (error as Error).message;
       ctx.watchdog.turnEnded(sessionId);
+      flushReply(ctx, f);
+      ctx.store.addTranscript(sessionId, "note", message);
       if (await this.switchModel(f, message)) return this.runTurn(f, text);
       if (ctx.registry.get(sessionId)?.state !== "ended") ctx.registry.set(sessionId, "error");
       await sendReport(ctx, f, ctx.texts.failedBody(message), null);

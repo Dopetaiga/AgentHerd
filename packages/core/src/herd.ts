@@ -22,7 +22,7 @@ import { Inbox } from "./inbox.ts";
 import { OwnerCommands } from "./owner-commands.ts";
 import { Registry } from "./registry.ts";
 import { Relay, type RelayState } from "./relay.ts";
-import { Store } from "./store.ts";
+import { Store, type TranscriptEntry } from "./store.ts";
 import { onAlarm, restage } from "./task-report.ts";
 import { TaskRunner } from "./task-runner.ts";
 import type { Task } from "./tasks.ts";
@@ -165,6 +165,12 @@ export class Herd {
   /** All tasks this Herd follows or followed. */
   tasks(): Task[] {
     return allTasks(this.ctx);
+  }
+
+  /** A task's conversation; `live` is reply text still being written. */
+  transcript(taskId: string): { entries: TranscriptEntry[]; live: string } {
+    const f = this.ctx.following.get(taskId);
+    return { entries: this.store.transcript(taskId), live: f?.ended ? "" : (f?.pending ?? "") };
   }
 
   /** Tasks whose agent is still running. */

@@ -7,7 +7,19 @@ export const STATE_TABLE_SQL = `CREATE TABLE IF NOT EXISTS state(
   updated_at TEXT NOT NULL
 );`;
 
-export const LATEST_SCHEMA_VERSION = 2;
+/** What the owner, the agent and its tools said in each task, for the app's task view. */
+export const TRANSCRIPT_TABLE_SQL = `CREATE TABLE IF NOT EXISTS transcript(
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  task_id TEXT NOT NULL,
+  at TEXT NOT NULL,
+  role TEXT NOT NULL,
+  text TEXT NOT NULL,
+  tool_call_id TEXT,
+  status TEXT
+);
+CREATE INDEX IF NOT EXISTS transcript_task ON transcript(task_id, id);`;
+
+export const LATEST_SCHEMA_VERSION = 3;
 
 export const SCHEMA_SQL = `
 CREATE TABLE sessions(
@@ -60,4 +72,5 @@ CREATE TABLE audit(
   data_json TEXT NOT NULL
 );
 ${STATE_TABLE_SQL}
+${TRANSCRIPT_TABLE_SQL}
 `;

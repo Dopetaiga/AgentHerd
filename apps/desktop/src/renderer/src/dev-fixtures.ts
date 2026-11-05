@@ -1,7 +1,7 @@
 // Sample data for the in-memory dev bridge (dev-bridge.ts): a placeholder QR code,
 // tasks, model services and the provider catalog.
 
-import type { ModelsView, ProviderView, TasksView } from "@agentherd/host/api";
+import type { ModelsView, ProviderView, TasksView, TranscriptView } from "@agentherd/host/api";
 
 export const PLACEHOLDER_QR = `data:image/svg+xml;utf8,${encodeURIComponent(
   `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 21 21" shape-rendering="crispEdges">
@@ -61,6 +61,35 @@ const task = (
 });
 
 /** The sample tasks and approval items; none for the empty states. */
+/** A sample conversation for the task view (`?open=task-<id>`). */
+export function sampleTranscript(taskId: string): TranscriptView {
+  const at = (min: number) => new Date(Date.now() - min * 60_000).toISOString();
+  if (taskId !== "s2") return { entries: [], live: "" };
+  return {
+    entries: [
+      { id: 1, at: at(9), role: "prompt", text: "给订单服务补单元测试，重点覆盖退款和部分发货。" },
+      { id: 2, at: at(9), role: "agent", text: "我先看一下订单服务的结构和现有测试。" },
+      { id: 3, at: at(9), role: "tool", text: "ls src/orders test", status: "completed" },
+      { id: 4, at: at(8), role: "tool", text: "Read src/orders/refund.ts", status: "completed" },
+      {
+        id: 5,
+        at: at(6),
+        role: "agent",
+        text: "退款逻辑有三条分支：全额、部分、超过 30 天。我按这三条各写测试，再补部分发货。",
+      },
+      {
+        id: 6,
+        at: at(5),
+        role: "tool",
+        text: "Write test/orders/refund.test.ts",
+        status: "completed",
+      },
+      { id: 7, at: at(1), role: "tool", text: "npm test", status: "in_progress" },
+    ],
+    live: "已写完 12 个测试，正在跑 npm test",
+  };
+}
+
 export function sampleTasks(empty: boolean): TasksView {
   return empty
     ? { tasks: [], items: [] }

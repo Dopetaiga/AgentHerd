@@ -2,7 +2,14 @@
 // CLI use it; agents do not. Items are read-only here: the owner decides in the channel.
 // These types have no runtime imports, so the renderer can import them too.
 
-import type { ModelRef, ModelRole, ModelService, ModelSettings, Task } from "@agentherd/core";
+import type {
+  ModelRef,
+  ModelRole,
+  ModelService,
+  ModelSettings,
+  Task,
+  TranscriptEntry,
+} from "@agentherd/core";
 import type { Locale, Mode, Risk } from "@agentherd/protocol";
 
 export const API_VERSION = 1;
@@ -93,6 +100,13 @@ export interface TasksView {
   items: ItemSummary[];
 }
 
+/** What was said in one task; the app polls it while the task is open. */
+export interface TranscriptView {
+  entries: TranscriptEntry[];
+  /** Reply text the agent is still writing. */
+  live: string;
+}
+
 export interface ServiceView extends ModelService {
   hasKey: boolean;
 }
@@ -154,6 +168,8 @@ export interface ModelTiersView {
 export interface HostApi {
   status(): HostStatus;
   tasks(): TasksView;
+  /** The conversation of one task: prompts, replies and tool calls. */
+  transcript(taskId: string): TranscriptView;
   providers(): ProviderView[];
   models(): ModelsView;
   /** Adds or replaces a service. `key`: undefined keeps the saved key, "" removes it. */
@@ -188,6 +204,7 @@ export type HostMethod = keyof HostApi;
 export const HOST_METHODS: readonly HostMethod[] = [
   "status",
   "tasks",
+  "transcript",
   "providers",
   "models",
   "putService",
