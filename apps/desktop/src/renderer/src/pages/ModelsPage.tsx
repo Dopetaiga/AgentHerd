@@ -50,7 +50,7 @@ export function ServiceList() {
           <EmptyState
             icon={<Boxes size={18} strokeWidth={1.75} />}
             title="还没有模型服务"
-            text="添加一个服务商（比如 DeepSeek），或一个 OpenAI 兼容地址。"
+            text="添加一个服务商（比如 DeepSeek），或一个自定义服务（OpenAI 或 Anthropic 格式）。"
             action={add}
           />
         </Group>

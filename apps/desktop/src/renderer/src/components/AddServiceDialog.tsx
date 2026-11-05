@@ -55,7 +55,7 @@ export function AddServiceDialog({
   return (
     <Modal
       size="large"
-      title={draft.choice.kind === "builtin" ? `添加 ${draft.choiceName}` : "添加 OpenAI 兼容服务"}
+      title={draft.choice.kind === "builtin" ? `添加 ${draft.choiceName}` : "添加自定义服务"}
       description={
         <button
           type="button"

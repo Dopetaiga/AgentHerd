@@ -9,7 +9,10 @@ import { ProbeButton } from "./ModelProbe";
 import { type ServiceChoice, type ServiceDraft, sameChoice } from "./ServiceDraft";
 import { IconTile, inputClass } from "./ui";
 
-/** Every service the owner can add, as tiles. A click chooses it and moves on to the form. */
+/**
+ * Every service the owner can add, as tiles: a custom service (any OpenAI- or Anthropic-format
+ * address) first, then the built-in providers. A click chooses it and moves on to the form.
+ */
 export function ServiceChooser({
   draft,
   onPicked,
@@ -45,6 +48,13 @@ export function ServiceChooser({
       </div>
       <div className="-mx-1 min-h-0 flex-1 overflow-y-auto px-1 pb-1">
         <div className="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] content-start gap-2">
+          <Tile
+            current={sameChoice(draft.choice, { kind: "custom" })}
+            icon={<Globe size={15} strokeWidth={1.75} />}
+            title="自定义服务"
+            detail="OpenAI / Anthropic 格式"
+            onClick={() => choose({ kind: "custom" })}
+          />
           {draft.shown.map((p) => {
             const c: ServiceChoice = { kind: "builtin", provider: p };
             const name = providerName(p.provider);
@@ -59,17 +69,10 @@ export function ServiceChooser({
               />
             );
           })}
-          <Tile
-            current={sameChoice(draft.choice, { kind: "custom" })}
-            icon={<Globe size={15} strokeWidth={1.75} />}
-            title="OpenAI 兼容地址"
-            detail="第三方、中转或本地 Ollama"
-            onClick={() => choose({ kind: "custom" })}
-          />
         </div>
         {draft.shown.length === 0 && (
           <p className="px-1 pt-3 text-ink-muted text-sm">
-            没有匹配的服务商。不在列表里的服务，可以用 OpenAI 兼容地址添加。
+            没有匹配的服务商。不在列表里的服务，可以用自定义服务添加。
           </p>
         )}
       </div>
@@ -143,19 +146,23 @@ export function FieldNote({
   );
 }
 
-/** The key fields of the chosen service, in one row; ID and name of a built-in are behind 高级. */
+/**
+ * The key fields of the chosen service, in one row; ID and name of a built-in are behind 高级.
+ * A custom service starts with its 接口格式, which decides the Base URL it expects.
+ */
 function ServiceFields({ draft, allowAdvanced }: { draft: ServiceDraft; allowAdvanced: boolean }) {
   const [advanced, setAdvanced] = useState(false);
   const custom = draft.choice?.kind === "custom";
   const more = allowAdvanced && advanced;
   const columns = custom
     ? more
-      ? "grid-cols-[minmax(0,0.9fr)_minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,0.8fr)_minmax(0,0.9fr)]"
-      : "grid-cols-[minmax(0,0.9fr)_minmax(0,1.4fr)_minmax(0,1fr)]"
+      ? "grid-cols-[minmax(0,0.9fr)_minmax(0,0.9fr)_minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,0.8fr)]"
+      : "grid-cols-[minmax(0,0.9fr)_minmax(0,0.9fr)_minmax(0,1.4fr)_minmax(0,1fr)]"
     : more
       ? "grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_minmax(0,1fr)]"
       : "grid-cols-1";
   // Problems show live once the owner typed in a field or tried to save.
+  const anthropic = draft.api === "anthropic-messages";
   const shownError = draft.touched || draft.error !== null ? draft.detailsProblem() : null;
 
   const keyField = (
@@ -198,11 +205,21 @@ function ServiceFields({ draft, allowAdvanced }: { draft: ServiceDraft; allowAdv
       <div className={`grid shrink-0 items-start gap-3 max-[720px]:grid-cols-2 ${columns}`}>
         {custom ? (
           <>
+            <SmallField label="接口格式">
+              <select
+                className={inputClass}
+                value={draft.api}
+                onChange={(e) => draft.setApi(e.target.value as typeof draft.api)}
+              >
+                <option value="openai-completions">OpenAI 兼容</option>
+                <option value="anthropic-messages">Anthropic 兼容</option>
+              </select>
+            </SmallField>
             {nameField}
             <SmallField label="Base URL">
               <input
                 className={`${inputClass} font-mono`}
-                placeholder="https://host/v1"
+                placeholder={anthropic ? "https://host" : "https://host/v1"}
                 spellCheck={false}
                 value={draft.baseUrl}
                 onChange={(e) => draft.setBaseUrl(e.target.value)}
@@ -210,18 +227,6 @@ function ServiceFields({ draft, allowAdvanced }: { draft: ServiceDraft; allowAdv
             </SmallField>
             {keyField}
             {more && idField}
-            {more && (
-              <SmallField label="接口格式">
-                <select
-                  className={inputClass}
-                  value={draft.api}
-                  onChange={(e) => draft.setApi(e.target.value as typeof draft.api)}
-                >
-                  <option value="openai-completions">OpenAI 兼容</option>
-                  <option value="anthropic-messages">Anthropic 兼容</option>
-                </select>
-              </SmallField>
-            )}
           </>
         ) : (
           <>
@@ -236,7 +241,9 @@ function ServiceFields({ draft, allowAdvanced }: { draft: ServiceDraft; allowAdv
         hint={
           custom
             ? (draft.probe.note ??
-              "Base URL 通常以 /v1 结尾，本地 Ollama 是 http://localhost:11434/v1。Key 只保存在本机。")
+              (anthropic
+                ? "Base URL 不带 /v1，例如 https://api.anthropic.com。Key 只保存在本机。"
+                : "Base URL 通常以 /v1 结尾，本地 Ollama 是 http://localhost:11434/v1。Key 只保存在本机。"))
             : "Key 只保存在本机 secrets.json，保存后不再显示。"
         }
         end={
