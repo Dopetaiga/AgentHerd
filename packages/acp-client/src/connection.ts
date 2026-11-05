@@ -16,6 +16,7 @@ import {
 } from "@agentclientprotocol/sdk";
 import type { AgentProfile, ToolCallInfo } from "@agentherd/protocol";
 import { redact } from "@agentherd/rules";
+import { commandLine } from "./command.ts";
 import { type PermissionAnswer, ToolCallTracker, toAcpOutcome, toToolCallInfo } from "./mapping.ts";
 
 export const STDERR_LINES = 200;
@@ -158,9 +159,10 @@ export async function startAgent(
   const [command, ...args] = profile.command;
   if (command === undefined) throw new Error(`profile ${profile.id} has an empty command`);
   const extraEnv = { ...profile.env, ...options.env };
-  const child: ChildProcess = spawn(command, args, {
+  const line = commandLine(command, args);
+  const child: ChildProcess = spawn(line.command, line.args, {
     cwd: options.cwd,
-    env: { ...process.env, ...extraEnv },
+    env: { ...process.env, ...line.env, ...extraEnv },
     stdio: ["pipe", "pipe", "pipe"],
   });
   options.signal?.addEventListener(

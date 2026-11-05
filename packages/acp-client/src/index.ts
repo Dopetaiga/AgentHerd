@@ -1,3 +1,4 @@
+export { type CommandLine, type CommandOptions, commandLine, npmShimTarget } from "./command.ts";
 export {
   type AgentConnection,
   CLOSE_GRACE_MS,

@@ -3,6 +3,7 @@
 // which are valid inside JSON strings.
 
 import { type ChildProcess, spawn } from "node:child_process";
+import { commandLine } from "@agentherd/acp-client";
 
 export type PiRecord = { type: string } & Record<string, unknown>;
 
@@ -61,9 +62,10 @@ export class PiRpc {
   constructor(opts: PiRpcOptions) {
     const [command, ...rest] = opts.command;
     if (command === undefined) throw new Error("empty Pi command");
-    this.child = spawn(command, [...rest, ...opts.args], {
+    const line = commandLine(command, [...rest, ...opts.args]);
+    this.child = spawn(line.command, line.args, {
       cwd: opts.cwd,
-      env: opts.env,
+      env: { ...opts.env, ...line.env },
       stdio: ["pipe", "pipe", "pipe"],
     });
     const splitter = new LineSplitter();

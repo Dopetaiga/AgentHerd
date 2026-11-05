@@ -2,11 +2,10 @@
 // (catalog.ts, runtimes.ts). The host keeps one Agents and rebuilds profiles when it changes.
 
 import { existsSync } from "node:fs";
-import { delimiter, join } from "node:path";
 import type { AgentProfile } from "@agentherd/protocol";
 import type { AgentSource, AgentView } from "./api.ts";
 import { AGENTS, type AgentDef, type Fetchers, httpFetchers, npmRuntime } from "./catalog.ts";
-import { DSH_APP_BIN } from "./profiles.ts";
+import { DSH_APP_BIN, onPath } from "./profiles.ts";
 import { currentTarget, type InstallProgress, type RuntimeStore } from "./runtimes.ts";
 
 export interface AgentsOptions {
@@ -17,6 +16,8 @@ export interface AgentsOptions {
   fetchers?: Fetchers;
   target?: string;
   exists?: (path: string) => boolean;
+  /** Default: process.platform (decides how PATH is searched). */
+  platform?: NodeJS.Platform;
   /** The DeepSeek Harness desktop app's CLI, when installed. */
   dshApp?: string;
   onChange: () => void;
@@ -65,16 +66,13 @@ export class Agents {
     if (managed !== undefined) {
       return { path: managed.path, source: "managed", version: managed.version };
     }
-    for (const dir of (this.env.PATH ?? "").split(delimiter)) {
-      if (dir === "") continue;
-      for (const name of def.systemNames) {
-        const candidate = join(dir, name);
-        if (this.exists(candidate)) return { path: candidate, source: "system" };
-      }
-    }
+    const platform = this.opts.platform ?? process.platform;
+    const onSystem = onPath(def.systemNames, this.env.PATH, (p) => this.exists(p), platform);
+    if (onSystem !== undefined) return { path: onSystem, source: "system" };
     if (id === "dsh") {
-      const app = this.opts.dshApp ?? DSH_APP_BIN;
-      if (this.exists(app)) return { path: app, source: "app" };
+      // The default is the macOS app bundle; other systems only use an explicit one.
+      const app = this.opts.dshApp ?? (platform === "win32" ? undefined : DSH_APP_BIN);
+      if (app !== undefined && this.exists(app)) return { path: app, source: "app" };
     }
     return undefined;
   }

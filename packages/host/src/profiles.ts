@@ -3,7 +3,7 @@
 import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
-import { delimiter, join } from "node:path";
+import { delimiter, join, posix, win32 } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { AgentProfile } from "@agentherd/protocol";
 import { AGENTS, agentDef, agentProfile, DSH_APP_LAUNCHER } from "./catalog.ts";
@@ -45,11 +45,38 @@ export function searchPath(env: NodeJS.ProcessEnv = process.env): string {
   return [...new Set(dirs.filter((d) => d !== ""))].join(delimiter);
 }
 
-function onPath(name: string, path: string | undefined, exists: (p: string) => boolean) {
-  for (const dir of (path ?? "").split(delimiter)) {
+/**
+ * Paths a command `name` may have in `dir`. On Windows only names with a PATHEXT extension run;
+ * npm puts an extensionless shell script beside its `.cmd` shim, which must not be picked.
+ */
+export function commandCandidates(
+  dir: string,
+  name: string,
+  platform: NodeJS.Platform = process.platform,
+  pathext: string | undefined = process.env.PATHEXT,
+): string[] {
+  if (platform !== "win32") return [posix.join(dir, name)];
+  const exts = (pathext ?? ".COM;.EXE;.BAT;.CMD").split(";").filter((e) => e !== "");
+  if (exts.some((e) => name.toLowerCase().endsWith(e.toLowerCase()))) {
+    return [win32.join(dir, name)];
+  }
+  return exts.map((e) => win32.join(dir, `${name}${e.toLowerCase()}`));
+}
+
+/** The first of `names` found on `path` (a PATH value), searching folder by folder. */
+export function onPath(
+  names: readonly string[],
+  path: string | undefined,
+  exists: (p: string) => boolean,
+  platform: NodeJS.Platform = process.platform,
+): string | undefined {
+  const sep = platform === "win32" ? win32.delimiter : posix.delimiter;
+  for (const dir of (path ?? "").split(sep)) {
     if (dir === "") continue;
-    const candidate = join(dir, name);
-    if (exists(candidate)) return candidate;
+    for (const name of names) {
+      const found = commandCandidates(dir, name, platform).find((c) => exists(c));
+      if (found !== undefined) return found;
+    }
   }
   return undefined;
 }
@@ -77,16 +104,15 @@ export function findAgent(
   id: string,
   env: NodeJS.ProcessEnv = process.env,
   exists: (path: string) => boolean = existsSync,
+  platform: NodeJS.Platform = process.platform,
 ): string | undefined {
   const def = agentDef(id);
   if (def === undefined) return undefined;
   const explicit = env[def.envVar];
   if (explicit !== undefined && explicit !== "") return explicit;
-  for (const name of def.systemNames) {
-    const found = onPath(name, env.PATH, exists);
-    if (found !== undefined) return found;
-  }
-  return id === "dsh" && exists(DSH_APP_BIN) ? DSH_APP_BIN : undefined;
+  const found = onPath(def.systemNames, env.PATH, exists, platform);
+  if (found !== undefined) return found;
+  return id === "dsh" && platform !== "win32" && exists(DSH_APP_BIN) ? DSH_APP_BIN : undefined;
 }
 
 /**

@@ -14,10 +14,10 @@
     "test": "vitest run --root ../.. packages/pi-acp"
   },
   "dependencies": {
-    "@agentclientprotocol/sdk": "2.4.0"
+    "@agentclientprotocol/sdk": "2.4.0",
+    "@agentherd/acp-client": "workspace:*"
   },
   "devDependencies": {
-    "@agentherd/acp-client": "workspace:*",
     "@agentherd/protocol": "workspace:*"
   }
 }
