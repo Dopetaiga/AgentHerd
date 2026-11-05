@@ -30,6 +30,7 @@ export function useServiceDraft() {
   const [id, setIdValue] = useState("");
   const [idEdited, setIdEdited] = useState(false);
   const [baseUrl, setBaseUrlValue] = useState("");
+  const [api, setApi] = useState<NonNullable<ModelService["api"]>>("openai-completions");
   const [picked, setPicked] = useState<string[]>([]);
   // Set once the owner typed a name, an ID or an address: problems show from then on.
   const [touched, setTouched] = useState(false);
@@ -115,7 +116,14 @@ export function useServiceDraft() {
     const service: ModelService =
       choice.kind === "builtin"
         ? { id, name: name.trim(), kind: "builtin", provider: choice.provider.provider, models }
-        : { id, name: name.trim(), kind: "openai-compatible", baseUrl: baseUrl.trim(), models };
+        : {
+            id,
+            name: name.trim(),
+            kind: "openai-compatible",
+            baseUrl: baseUrl.trim(),
+            models,
+            ...(api === "anthropic-messages" ? { api } : {}),
+          };
     setSaving(true);
     setError(null);
     const result = await call((h) => h.putService(service, key === "" ? undefined : key));
@@ -154,6 +162,8 @@ export function useServiceDraft() {
     setId,
     baseUrl,
     setBaseUrl,
+    api,
+    setApi,
     picked,
     setPicked,
     models,

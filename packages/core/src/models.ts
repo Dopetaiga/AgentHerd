@@ -17,9 +17,16 @@ export interface ModelService {
   provider?: string;
   /** Base URL, for "openai-compatible". */
   baseUrl?: string;
+  /**
+   * Wire format of an "openai-compatible" (custom) service: OpenAI chat completions (default) or
+   * Anthropic messages, for gateways that speak Anthropic's API.
+   */
+  api?: CustomApi;
   /** Model ids turned on for this service. */
   models: string[];
 }
+
+export type CustomApi = "openai-completions" | "anthropic-messages";
 
 export interface ModelRef {
   serviceId: string;
