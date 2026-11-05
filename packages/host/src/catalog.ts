@@ -94,7 +94,14 @@ function split(target: string): { os: string; arch: string } {
 
 async function piLatest(target: string, fetch: Fetchers) {
   const { os, arch } = split(target);
-  if (!["darwin", "linux"].includes(os) || !["arm64", "x64"].includes(arch)) return undefined;
+  if (!["darwin", "linux", "win32"].includes(os) || !["arm64", "x64"].includes(arch)) {
+    return undefined;
+  }
+  if (os === "win32") {
+    // The Windows build is a zip with pi.exe at its top level.
+    const asset = await githubAsset(fetch, "earendil-works/pi", `pi-windows-${arch}.zip`);
+    return asset === undefined ? undefined : archive("pi", asset, "zip", "pi.exe", "exec");
+  }
   const asset = await githubAsset(fetch, "earendil-works/pi", `pi-${os}-${arch}.tar.gz`);
   if (asset === undefined) return undefined;
   return archive("pi", asset, "tar.gz", "pi/pi", "exec");
