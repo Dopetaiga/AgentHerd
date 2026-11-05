@@ -63,6 +63,29 @@ describe("FeishuChannel.setup", () => {
     });
   });
 
+  it("keeps waiting for the scan while Feishu answers authorization_pending", async () => {
+    const channel = new FeishuChannel({
+      getSecret: async () => "",
+      saveSecret: async () => {},
+      verify: async () => {},
+      register: (async (
+        opts: Record<string, unknown> & {
+          onQRCodeReady: (i: unknown) => void;
+          onStatusChange?: (i: unknown) => void;
+        },
+      ) => {
+        opts.onQRCodeReady({ url: "https://open.feishu.cn/qr", expireIn: 600 });
+        // The SDK reports "polling" for every authorization_pending answer, scanned or not.
+        opts.onStatusChange?.({ status: "polling" });
+        opts.onStatusChange?.({ status: "slow_down", interval: 10 });
+        return { client_id: "cli_1", client_secret: "x", user_info: { open_id: "ou" } };
+      }) as never,
+    });
+    const { setupUi, states } = ui();
+    await channel.setup(setupUi);
+    expect(states).toEqual(["waiting-scan", "verifying", "connected"]);
+  });
+
   it("does not store the secret when verification fails", async () => {
     const saved: string[] = [];
     const channel = new FeishuChannel({

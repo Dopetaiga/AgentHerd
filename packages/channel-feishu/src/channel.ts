@@ -102,10 +102,9 @@ export class FeishuChannel implements Channel {
         events: { items: { tenant: EVENTS } },
         callbacks: { items: CALLBACKS },
       },
+      // No onStatusChange: its "polling" means authorization_pending, which Feishu answers
+      // before and after the scan alike, so it cannot tell that the owner has scanned.
       onQRCodeReady: (info) => ui.showQrCode(info.url, info.expireIn),
-      onStatusChange: (info) => {
-        if (info.status === "polling") ui.showStatus("waiting-confirm");
-      },
     } as Parameters<typeof lark.registerApp>[0]);
     const ownerId = result.user_info?.open_id;
     if (ownerId === undefined || ownerId === "") {
