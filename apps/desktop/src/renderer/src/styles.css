@@ -145,6 +145,8 @@ textarea,
   background: transparent;
 }
 
+/* Electron reads drag regions from the whole DOM, ignoring what covers them: an overlay (dialog,
+   first run) must be no-drag, or clicks on it over the title bar move the window instead. */
 .app-drag {
   -webkit-app-region: drag;
 }
