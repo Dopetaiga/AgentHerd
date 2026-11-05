@@ -54,8 +54,8 @@ node packages/cli/bin/agentherd.ts run --profile dsh /tmp/demo "Create out.txt c
 
 [Pi](https://github.com/earendil-works/pi) works the same way. In the desktop app, open
 **Agent** and press 下载: the app downloads the latest release and checks the publisher's hash.
-The same page offers DSH, OpenCode, Gemini CLI, Claude Code and Codex, and a 验证 button that
-starts an agent once to show whether it works or needs a sign-in. AgentHerd runs it behind a small ACP bridge that asks you
+You do not choose an agent: GPT models run in Codex, the rest in Pi, and DSH when you name it.
+The Agent page shows them, with a 验证 button that starts an agent once to show whether it works. AgentHerd runs it behind a small ACP bridge that asks you
 before every tool call except reads inside the folder. Pi uses its own login, or the model you
 choose with `model use pi <service>/<model>`:
 

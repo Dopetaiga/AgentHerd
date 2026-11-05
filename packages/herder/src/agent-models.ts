@@ -8,16 +8,35 @@ import type { Api, Model } from "@earendil-works/pi-ai";
 import { PI_KEY_ENV, PI_MODEL_ENV, resolveModel, serviceKey } from "./models.ts";
 
 /** Env names for agents that read the key from a variable named in their config. */
-export const OPENCODE_KEY_ENV = "AGENTHERD_OPENCODE_KEY";
-export const OPENCODE_PROVIDER = "agentherd";
+export const CODEX_KEY_ENV = "AGENTHERD_CODEX_KEY";
+export const CODEX_PROVIDER = "agentherd";
+
+/** GPT-family models (gpt-*, o1/o3/o4…, codex-*), optionally behind a vendor prefix. */
+export function isGptModel(id: string): boolean {
+  return /(^|\/)(gpt-|chatgpt|codex|o[1-9](-|$))/i.test(id);
+}
+
+/**
+ * The agent for a model when the owner does not name one (ADR 0031): Codex for GPT models,
+ * Pi for everything else. Falls back to Pi when Codex is not installed, and to the first agent
+ * when Pi is not either.
+ */
+export function agentForModel(ref: string | undefined, agentIds: readonly string[]): string {
+  const id = ref === undefined ? "" : ref.slice(ref.indexOf("/") + 1);
+  if (ref !== undefined && isGptModel(id) && agentIds.includes("codex")) return "codex";
+  if (agentIds.includes("pi")) return "pi";
+  const first = agentIds.find((a) => a !== "dsh") ?? agentIds[0];
+  if (first === undefined) throw new Error("no agent installed");
+  return first;
+}
 
 /**
  * The env that makes an agent use a model, or `undefined` when the agent cannot use it.
  * - pi: any pi-ai model, through the bridge's model extension (verified with Pi 1.5.0).
- * - opencode: OpenAI-compatible endpoints, as a custom provider in `OPENCODE_CONFIG_CONTENT`.
- * - claude: Anthropic-format endpoints, through `ANTHROPIC_BASE_URL` and `ANTHROPIC_MODEL`.
- * - gemini: Google's Gemini API, through `GEMINI_API_KEY` and `GEMINI_MODEL`.
- * DSH and Codex keep their own settings.
+ * - codex: GPT models on OpenAI-style endpoints, as a custom provider in `CODEX_CONFIG` (read by
+ *   codex-acp). Codex speaks only the Responses API; an endpoint without it fails the first turn
+ *   and the task moves to Pi (ADR 0031).
+ * DSH keeps its own settings.
  */
 export function agentModelEnv(
   agentId: string,
@@ -27,33 +46,25 @@ export function agentModelEnv(
   switch (agentId) {
     case "pi":
       return { [PI_MODEL_ENV]: JSON.stringify(model), [PI_KEY_ENV]: key ?? "none" };
-    case "opencode":
-      if (model.api !== "openai-completions") return undefined;
+    case "codex":
+      if (!isGptModel(model.id)) return undefined;
+      if (model.api !== "openai-completions" && model.api !== "openai-responses") return undefined;
       return {
-        OPENCODE_CONFIG_CONTENT: JSON.stringify({
-          provider: {
-            [OPENCODE_PROVIDER]: {
-              npm: "@ai-sdk/openai-compatible",
+        CODEX_CONFIG: JSON.stringify({
+          model: model.id,
+          model_provider: CODEX_PROVIDER,
+          model_providers: {
+            [CODEX_PROVIDER]: {
               name: "AgentHerd",
-              options: { baseURL: model.baseUrl, apiKey: `{env:${OPENCODE_KEY_ENV}}` },
-              models: { [model.id]: { name: model.name } },
+              base_url: model.baseUrl,
+              env_key: CODEX_KEY_ENV,
+              wire_api: "responses",
             },
           },
-          model: `${OPENCODE_PROVIDER}/${model.id}`,
         }),
-        [OPENCODE_KEY_ENV]: key ?? "none",
+        MODEL_PROVIDER: CODEX_PROVIDER,
+        [CODEX_KEY_ENV]: key ?? "none",
       };
-    case "claude":
-      if (model.api !== "anthropic-messages" || key === undefined) return undefined;
-      return {
-        ANTHROPIC_BASE_URL: model.baseUrl,
-        ANTHROPIC_API_KEY: key,
-        ANTHROPIC_MODEL: model.id,
-        ANTHROPIC_SMALL_FAST_MODEL: model.id,
-      };
-    case "gemini":
-      if (model.api !== "google-generative-ai" || key === undefined) return undefined;
-      return { GEMINI_API_KEY: key, GEMINI_MODEL: model.id };
     default:
       return undefined;
   }

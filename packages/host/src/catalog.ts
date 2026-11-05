@@ -1,4 +1,5 @@
-// The agents AgentHerd knows how to download and start, and where each one's latest release is
+// The agents AgentHerd knows how to download and start (ADR 0031: Pi, Codex for GPT models, and
+// DSH when the owner names it), and where each one's latest release is
 // published (ADR 0024). Like OpenBot, downloads follow upstream's latest release; the digest comes
 // from the publisher (GitHub asset digest, npm integrity, the DSH update feed's sha512).
 
@@ -97,24 +98,6 @@ async function piLatest(target: string, fetch: Fetchers) {
   const asset = await githubAsset(fetch, "earendil-works/pi", `pi-${os}-${arch}.tar.gz`);
   if (asset === undefined) return undefined;
   return archive("pi", asset, "tar.gz", "pi/pi", "exec");
-}
-
-async function opencodeLatest(target: string, fetch: Fetchers) {
-  const { os, arch } = split(target);
-  if (!["darwin", "linux"].includes(os) || !["arm64", "x64"].includes(arch)) return undefined;
-  const format = os === "darwin" ? "zip" : "tar.gz";
-  const name = `opencode-${os}-${arch}.${format}`;
-  const asset = await githubAsset(fetch, "anomalyco/opencode", name);
-  if (asset === undefined) return undefined;
-  return archive("opencode", asset, format, "opencode", "exec");
-}
-
-async function geminiLatest(_target: string, fetch: Fetchers) {
-  // The bundle is plain JavaScript run with AgentHerd's own Node; the standalone binaries are
-  // unsigned on macOS.
-  const asset = await githubAsset(fetch, "google-gemini/gemini-cli", "gemini-cli-bundle.zip");
-  if (asset === undefined) return undefined;
-  return archive("gemini", asset, "zip", "gemini.js", "node");
 }
 
 function npmAgent(id: string, pkg: string, bin: string) {
@@ -239,41 +222,14 @@ export const AGENTS: AgentDef[] = [
     latest: piLatest,
   },
   {
-    id: "opencode",
-    name: "OpenCode",
-    envVar: "AGENTHERD_OPENCODE",
-    systemNames: ["opencode"],
-    acpArgs: ["acp"],
-    env: { OPENCODE_PERMISSION: JSON.stringify({ edit: "ask", bash: "ask", webfetch: "ask" }) },
-    latest: opencodeLatest,
-  },
-  {
-    id: "gemini",
-    name: "Gemini CLI",
-    envVar: "AGENTHERD_GEMINI",
-    systemNames: ["gemini"],
-    acpArgs: ["--acp"],
-    env: {},
-    latest: geminiLatest,
-  },
-  {
-    id: "claude",
-    name: "Claude Code",
-    envVar: "AGENTHERD_CLAUDE",
-    systemNames: ["claude-agent-acp"],
-    acpArgs: [],
-    env: {},
-    latest: npmAgent("claude", "@agentclientprotocol/claude-agent-acp", "dist/index.js"),
-    npm: true,
-  },
-  {
     id: "codex",
     name: "Codex",
     envVar: "AGENTHERD_CODEX",
     systemNames: ["codex-acp"],
     acpArgs: [],
-    // read-only: Codex asks before editing files or using the network.
-    env: { INITIAL_AGENT_MODE: "read-only" },
+    // read-only: Codex asks before editing files or using the network. No ChatGPT browser login:
+    // AgentHerd hands Codex the owner's GPT model and key (ADR 0031).
+    env: { INITIAL_AGENT_MODE: "read-only", NO_BROWSER: "1" },
     latest: npmAgent("codex", "@agentclientprotocol/codex-acp", "dist/index.js"),
     npm: true,
   },

@@ -133,13 +133,22 @@ await import(${JSON.stringify(BIN)});
       binding: { channelId: "fake", ownerId: "owner", data: {} },
       mode: "assist",
       locale: "en",
-      profiles: [switching()],
+      profiles: [
+        switching(),
+        {
+          id: "dead",
+          name: "Dead",
+          command: [join(dir, "no-such-agent")],
+          env: {},
+          exporter: null,
+        },
+      ],
       store,
       boardDebounceMs: 10,
       agentModels: {
         list: () => [
           { ref: "svc/broken", agents: ["mock"] },
-          { ref: "svc/good", agents: ["mock"] },
+          { ref: "svc/good", agents: ["mock", "dead"] },
         ],
         envFor: (_p, ref) => ({ TEST_MODEL: ref }),
         ...(next === undefined ? {} : { next }),
@@ -154,7 +163,7 @@ await import(${JSON.stringify(BIN)});
     const asked: string[][] = [];
     const { channel, store, herd } = await start(async (_p, failed, tried) => {
       asked.push([failed, ...tried]);
-      return "svc/good";
+      return { profileId: "mock", model: "svc/good" };
     });
     const { taskId, turn } = await herd.startTask("mock", dir, "fix it", "fix it", "svc/broken");
     expect((await turn).stopReason).toBe("end_turn");
@@ -163,9 +172,23 @@ await import(${JSON.stringify(BIN)});
     expect(task?.model).toBe("svc/good");
     expect(store.auditRows("task.model-switched")).toHaveLength(1);
     const notes = channel.ofKind("text").map((m) => JSON.stringify(m.view));
-    expect(notes.some((n) => n.includes("running again with svc/good"))).toBe(true);
+    expect(notes.some((n) => n.includes("running again with Mock · svc/good"))).toBe(true);
     const report = channel.ofKind("report").map((m) => m.view as ReportView)[0];
     expect(report?.title).toContain("Mock · svc/good");
+  });
+
+  it("moves the same model to another agent when the first agent does not start (ADR 0031)", async () => {
+    const { channel, herd } = await start(async (profileId, failed) =>
+      profileId === "dead" ? { profileId: "mock", model: failed } : undefined,
+    );
+    const { taskId, turn } = await herd.startTask("dead", dir, "fix it", "fix it", "svc/good");
+    expect((await turn).stopReason).toBe("end_turn");
+    const task = herd.tasks().find((t) => t.id === taskId);
+    expect(task?.agent).toBe("Mock · svc/good");
+    const notes = channel.ofKind("text").map((m) => JSON.stringify(m.view));
+    expect(notes.some((n) => n.includes("Dead · svc/good") && n.includes("Mock · svc/good"))).toBe(
+      true,
+    );
   });
 
   it("fails as before when no other model answers", async () => {

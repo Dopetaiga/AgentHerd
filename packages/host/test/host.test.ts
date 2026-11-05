@@ -126,6 +126,19 @@ describe("Host", () => {
     expect(() => t.host.updateSettings({ mode: "auto" })).toThrow(/observe or assist/);
   });
 
+  it("needs Codex only when a GPT model is in the list (ADR 0031)", async () => {
+    const t = makeHost(false);
+    expect(t.host.neededAgents()).toEqual(["pi"]);
+    await t.host.putService({
+      id: "gw",
+      name: "Gateway",
+      kind: "openai-compatible",
+      baseUrl: "https://gw.example/v1",
+      models: ["deepseek-flash", "gpt-6.1-sol"],
+    });
+    expect(t.host.neededAgents()).toEqual(["pi", "codex"]);
+  });
+
   it("places models in tiers by name, keeps where the owner drags them, and resets", async () => {
     const t = makeHost(false);
     await t.host.putService({

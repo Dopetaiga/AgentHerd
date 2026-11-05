@@ -1,4 +1,4 @@
-// Agent: the coding agents the owner can start with /run, like OpenBot's provider list. The app
+// Agent: the coding agents AgentHerd picks from (ADR 0031: Codex for GPT models, Pi for the rest). The app
 // downloads each one's latest release (digest checked); 验证 starts it once to prove it works.
 
 import type { AgentCheck, AgentView } from "@agentherd/host/api";
@@ -19,21 +19,13 @@ import { Badge, Button, Group, IconTile, Section } from "../components/ui";
 import { call, useApp } from "../store";
 
 const DESCRIPTIONS: Record<string, string> = {
-  dsh: "DeepSeek 的编程 Agent。每次写文件、联网都会先在飞书里问你。",
-  pi: "轻量的开源编程 Agent。除了读任务目录里的文件，每次用工具都会先在飞书里问你。",
-  opencode: "开源编程 Agent。改文件、跑命令、联网前都会先在飞书里问你。",
-  gemini: "Google 的编程 Agent。改文件和跑命令前会先在飞书里问你。",
-  claude: "Anthropic 的 Claude Code（通过 ACP 适配器）。改文件和跑命令前会先在飞书里问你。",
-  codex: "OpenAI 的 Codex（通过 ACP 适配器），只读模式启动，改文件和联网前会先在飞书里问你。",
+  dsh: "DeepSeek 的编程 Agent，用它自己的模型设置。只有你点名要它时才用。",
+  pi: "轻量的开源编程 Agent。GPT 以外的模型都用它跑。",
+  codex: "OpenAI 的 Codex。模型列表里有 GPT 模型时自动下载，GPT 模型用它跑；跑不起来就换 Pi。",
 };
 
 /** How to sign in, for agents that use their own account. */
-const LOGIN: Record<string, string> = {
-  opencode: "用自己的账号：在终端运行 opencode auth login。",
-  gemini: "用自己的账号：在终端运行 gemini 登录，或设置 GEMINI_API_KEY。",
-  claude: "用自己的账号：在终端运行 claude 登录，或设置 ANTHROPIC_API_KEY。",
-  codex: "用自己的账号：在终端运行 codex login，或设置 OPENAI_API_KEY。",
-};
+const LOGIN: Record<string, string> = {};
 
 const SOURCES: Record<NonNullable<AgentView["source"]>, string> = {
   managed: "AgentHerd 下载的",
@@ -255,7 +247,11 @@ export function AgentsPage() {
     <div className="flex flex-col gap-7">
       <Section
         title="编程 Agent"
-        hint={ready === 0 ? "还没有可用的 Agent。下载一个就能开始。" : `${ready} 个可以用`}
+        hint={
+          ready === 0
+            ? "不用选 Agent：AgentHerd 按任务的模型自动挑，GPT 模型用 Codex，其余用 Pi。"
+            : `${ready} 个可以用。不用选：GPT 模型用 Codex，其余用 Pi。`
+        }
       >
         <Group>
           {agents.map((a) => (

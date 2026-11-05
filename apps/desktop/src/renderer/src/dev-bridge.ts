@@ -145,20 +145,6 @@ function installFakeBridge(): void {
       "Pi",
       sim === "pi-failed" ? { error: "download failed: HTTP 503 for https://github.com/…" } : {},
     ),
-    sim === "no-agent"
-      ? missing("opencode", "OpenCode")
-      : {
-          id: "opencode",
-          name: "OpenCode",
-          state: "ready",
-          source: "managed",
-          version: "1.19.5",
-          path: "~/.agentherd/runtimes/opencode/1.19.5/opencode",
-          canInstall: true,
-          canRemove: true,
-        },
-    missing("gemini", "Gemini CLI"),
-    missing("claude", "Claude Code"),
     missing("codex", "Codex"),
   ];
   let installTimer: ReturnType<typeof setInterval> | undefined;
@@ -206,7 +192,7 @@ function installFakeBridge(): void {
   const fake: RemoteHost = {
     agents: () => delay(agents),
     installAgent: (id) => {
-      const npm = id === "claude" || id === "codex";
+      const npm = id === "codex";
       const total = npm ? 0 : 48_027_930;
       let received = 0;
       const current = agents.find((a) => a.id === id) as AgentView;
@@ -242,7 +228,7 @@ function installFakeBridge(): void {
     },
     removeAgent: (id) => delay(setAgents(agents.map((a) => (a.id === id ? reset(a) : a)))),
     verifyAgent: (id) => {
-      const loginNeeded = id === "claude" || id === "codex" || id === "gemini";
+      const loginNeeded = false;
       const agent = agents.find((a) => a.id === id);
       return delay(
         loginNeeded

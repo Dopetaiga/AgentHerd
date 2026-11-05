@@ -37,10 +37,7 @@ An agent is a profile in configuration, not a package:
 | --- | --- | --- |
 | DeepSeek Harness | `dsh acp` | Tested 2026-11-04: `initialize` returns `deepseek-harness-acp`, session `close`/`list`/`resume`. Asks over `session/request_permission` only when a command needs more than its sandbox mode allows; see [DSH approvals](#dsh-approvals). Built-in profile `dsh` (found via `AGENTHERD_DSH`, `PATH`, or the app bundle); end-to-end run with Feishu passed 2026-11-04 |
 | Pi | `node packages/pi-acp/bin/pi-acp.ts --pi <pi>` (bridge to `pi --mode rpc`) | Tested 2026-11-04 with Pi 1.5.0 and DeepSeek: allow writes the file, deny blocks it. Built-in profile `pi` (found via `AGENTHERD_PI`, the copy the app downloaded, or `PATH`); see [Pi](#pi) and ADR 0022 |
-| OpenCode | `opencode acp`, env `OPENCODE_PERMISSION` asks for edit/bash/webfetch | Downloaded 1.19.5 2026-11-05 (zip, sha256, `--version` OK); 验证 reached the agent, which failed on this Mac's own opencode database ("Database is not empty and has no session table"). Built-in profile `opencode`; prompt run not tried **(verify, Q02)** |
-| Gemini CLI | `node gemini.js --acp` (release bundle) | Downloaded 0.66.0 2026-11-05; 验证: `initialize` returns `gemini-cli` 0.66.0 with four sign-in methods, `session/new` asks for a sign-in. Built-in profile `gemini`; prompt run not tried **(verify, Q02)** |
-| Claude Code | `node …/claude-agent-acp/dist/index.js` (npm `@agentclientprotocol/claude-agent-acp`) | Installs with npm 2026-11-05 (0.100.0, 108 packages). On this Mac its native `claude` binary is killed by SIGKILL (endpoint security); prompt run not tried **(verify, Q01)** |
-| Codex | `node …/codex-acp/dist/index.js` (npm `@agentclientprotocol/codex-acp`), env `INITIAL_AGENT_MODE=read-only` | Installs with npm 2026-11-05 (2.5.0); 验证 reports "Codex process was killed by SIGKILL" on this Mac (endpoint security); prompt run not tried **(verify, Q01)** |
+| Codex | `node …/codex-acp/dist/index.js` (npm `@agentclientprotocol/codex-acp`), env `INITIAL_AGENT_MODE=read-only`, `NO_BROWSER=1`, the model in `CODEX_CONFIG` (ADR 0031) | Installs with npm 2026-11-05 (2.5.0); 验证 reports "Codex process was killed by SIGKILL" on this Mac (endpoint security); prompt run not tried **(verify, Q01)** |
 | Qwen Code, others | Their ACP mode, as a config.json profile | **(verify, Q02)** |
 
 The desktop app ships built-in profiles for these and lets the user add any ACP command.
@@ -103,17 +100,19 @@ ACP session:
 
 ### Managed downloads
 
-The desktop **Agent** page lists six agents and downloads each one's latest release for the
-owner ([ADR 0024](../adr/0024-follow-latest-releases-six-agents.md)): DSH (DeepSeek's update
-feed), Pi, OpenCode and Gemini CLI (GitHub releases), Claude Code and Codex (the ACP adapters on
-npm, installed with a downloaded npm). `packages/host/src/catalog.ts` has the sources and the
-ask-first env of each; `packages/host/src/runtimes.ts` checks the publisher's digest (and
-`--version`), installs into `<home>/runtimes/<id>/<version>/` and records it in `current.json`.
-Lookup: `AGENTHERD_<ID>`, the download, `PATH`, then the DSH app. 移除 deletes the download.
+The owner does not choose an agent ([ADR 0031](../adr/0031-pick-the-agent-from-the-model.md)):
+GPT models run in Codex, every other model in Pi, and DSH only when the owner names it. The host
+downloads Pi, and Codex when a GPT model is listed; the desktop **Agent** page shows the three and
+can download each one's latest release: DSH (DeepSeek's update feed), Pi (GitHub releases) and
+Codex (the ACP adapter on npm, installed with a downloaded npm). `packages/host/src/catalog.ts` has
+the sources and the env of each; `packages/host/src/runtimes.ts` checks the publisher's digest
+(and `--version`), installs into `<home>/runtimes/<id>/<version>/` and records it in
+`current.json`. Lookup: `AGENTHERD_<ID>`, the download, `PATH`, then the DSH app. 移除 deletes the
+download.
 
-A task can run with a model from the owner's list: the Herder picks it and the agent gets it
-through env (Pi, OpenCode, Claude Code, Gemini CLI; see
-[ADR 0025](../adr/0025-herder-picks-model-per-task.md)).
+A task runs with a model from the owner's list: the Herder picks it and the agent gets it through
+env (Pi, Codex; see [ADR 0025](../adr/0025-herder-picks-model-per-task.md)). When Codex does not
+start or its first turn breaks before acting, the task moves to Pi with the same model.
 
 验证 starts the agent in an empty temporary folder, runs `initialize` and `session/new`, and
 reports its name and version, a needed sign-in, or the error. Local API: `agents()`,
@@ -164,8 +163,6 @@ running.
 | --- | --- | --- |
 | Claude Code | `permissions.allow` / `deny` / `ask` in `~/.claude/settings.json` or project `.claude/settings.json`, entries like `Bash(pnpm test:*)` | **(verify format, Q04)** |
 | Codex | Approval policy, sandbox mode, command rules (execpolicy) | Coarser than AgentHerd rules; expect `narrowed` **(verify, Q05)** |
-| Gemini CLI | Allowed / excluded tools, policy files | **(verify, Q06)** |
-| OpenCode | `permission` in `opencode.json`, glob patterns | **(verify, Q06)** |
 
 ### Exporter interface
 

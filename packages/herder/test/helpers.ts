@@ -34,6 +34,7 @@ export function fakeHost(
     projects?: string[];
     models?: { ref: string; agents: string[] }[];
     failing?: string[];
+    profiles?: { id: string; name: string }[];
   } = {},
 ): {
   host: HerderHost;
@@ -54,7 +55,7 @@ export function fakeHost(
     locale: "zh-CN",
     texts: CORE_TEXTS["zh-CN"],
     userHome: "/Users/me",
-    profiles: () => [{ id: "mock", name: "Mock" }],
+    profiles: () => opts.profiles ?? [{ id: "mock", name: "Mock" }],
     tasks: () => tasks,
     openTasks: () => tasks,
     recentProjects: () => opts.projects ?? [],
