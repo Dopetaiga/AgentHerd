@@ -1,5 +1,6 @@
 import { tmpdir } from "node:os";
 import { describe, expect, it } from "vitest";
+import { placeModels, type TierPlacement } from "../src/model-guide.ts";
 import { CONTEXT_LABEL, composeTaskPrompt, OWNER_LABEL, quoteAgent } from "../src/prompt.ts";
 import {
   findTasks,
@@ -13,11 +14,11 @@ import { fakeHost, task } from "./helpers.ts";
 function tools(
   turn: Partial<TurnContext>,
   opts: Parameters<typeof fakeHost>[0] = {},
-  modelGuide?: () => string,
+  modelTiers?: () => TierPlacement,
 ) {
   const { host, rec } = fakeHost(opts);
   const ctx: TurnContext = { kind: "owner", ownerText: "", asked: false, notified: false, ...turn };
-  const byName = new Map(herderTools(host, () => ctx, modelGuide).map((t) => [t.name, t]));
+  const byName = new Map(herderTools(host, () => ctx, modelTiers).map((t) => [t.name, t]));
   const call = async (name: string, args: unknown) => {
     const tool = byName.get(name);
     if (tool === undefined) throw new Error(`no tool ${name}`);
@@ -176,19 +177,52 @@ describe("tools", () => {
       { ownerText: "修一下构建" },
       { models, failing: ["site/gpt-x", "backup/gpt-x"] },
     );
-    await expect(all.call("session_start", start)).rejects.toThrow(/no service answers for gpt-x/);
+    await expect(all.call("session_start", start)).rejects.toThrow(/no model answers/);
     expect(all.rec.started).toHaveLength(0);
   });
 
+  it("swaps a model that does not answer for the next in its tier, then other tiers", async () => {
+    const dir = tmpdir();
+    const models = [
+      { ref: "site/gpt-6.1-sol", agents: ["mock"] },
+      { ref: "anthropic/claude-opus-5-5", agents: ["mock"] },
+      { ref: "deepseek/deepseek-flash", agents: ["mock"] },
+    ];
+    const tiers = () => placeModels(["gpt-6.1-sol", "claude-opus-5-5", "deepseek-flash"]);
+    const start = {
+      project: dir,
+      profile: "mock",
+      ownerText: "修一下构建",
+      model: "site/gpt-6.1-sol",
+    };
+    const one = tools(
+      { ownerText: "修一下构建" },
+      { models, failing: ["site/gpt-6.1-sol"] },
+      tiers,
+    );
+    const out = await one.call("session_start", start);
+    expect(one.rec.started[0]?.model).toBe("anthropic/claude-opus-5-5");
+    expect(out).toMatch(
+      /site\/gpt-6.1-sol failed \(down\).*switched to anthropic\/claude-opus-5-5/,
+    );
+    const strongDown = tools(
+      { ownerText: "修一下构建" },
+      { models, failing: ["site/gpt-6.1-sol", "anthropic/claude-opus-5-5"] },
+      tiers,
+    );
+    await strongDown.call("session_start", start);
+    expect(strongDown.rec.started[0]?.model).toBe("deepseek/deepseek-flash");
+  });
+
   it("session_list adds the model tiers when there are models", async () => {
-    const models = [{ ref: "a/strong", agents: ["mock"] }];
-    let guide = "Model tiers: Strong: a/opus";
-    const withModels = tools({}, { models }, () => guide);
+    const models = [{ ref: "a/claude-opus-5", agents: ["mock"] }];
+    let names = ["claude-opus-5"];
+    const withModels = tools({}, { models }, () => placeModels(names));
     expect(await withModels.call("session_list", {})).toContain("Model tiers");
-    expect(await withModels.call("session_list", {})).toContain("a/opus");
-    guide = "Model tiers: Fast: a/flash";
-    expect(await withModels.call("session_list", {})).toContain("a/flash");
-    const none = tools({}, {}, () => guide);
+    expect(await withModels.call("session_list", {})).toMatch(/Strong.*claude-opus-5/);
+    names = ["deepseek-flash"];
+    expect(await withModels.call("session_list", {})).toMatch(/Fast.*deepseek-flash/);
+    const none = tools({}, {}, () => placeModels(names));
     expect(await none.call("session_list", {})).not.toContain("Model tiers");
   });
 

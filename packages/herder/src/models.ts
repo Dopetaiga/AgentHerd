@@ -12,6 +12,7 @@ import {
   streamSimple,
 } from "@earendil-works/pi-ai/compat";
 import { Herder } from "./herder.ts";
+import type { TierPlacement } from "./model-guide.ts";
 
 /** pi-ai providers that need more than one key (cloud credentials, OAuth or an account id). */
 const NOT_KEY_ONLY = new Set([
@@ -135,7 +136,7 @@ export function herderFromSettings(
   settings: ModelSettings,
   secrets: SecretStore,
   env?: Record<string, string>,
-  modelGuide?: () => string,
+  modelTiers?: () => TierPlacement,
 ): HerderChoice | { reason: string } {
   const choice = modelFor(settings, "herder");
   if (choice === undefined) return { reason: "no model chosen for the Herder" };
@@ -157,7 +158,7 @@ export function herderFromSettings(
         model,
         streamFn: streamSimple,
         getApiKey: () => key ?? "none",
-        ...(modelGuide === undefined ? {} : { modelGuide }),
+        ...(modelTiers === undefined ? {} : { modelTiers }),
       }),
   };
 }

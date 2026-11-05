@@ -22,11 +22,15 @@ Asked, they chose tiers with drag-and-drop ordering, unknown models defaulting t
 - The Herder reads the tiers in `session_list`, each tier with the kind of task it suits, and picks
   the tier from the task; a model the owner names wins.
 - A model name offered by several services is one card listing those services (amended
-  2026-11-05, user asked about same-name models). When the Herder picks it, `session_start` tries
-  the services the agent can use in list order, each checked with a test call (a pass is trusted
-  for 10 minutes, a failure for 2), and uses the first that answers; the start fails only when
-  none does. The Herder may still name `service/model` to force one service. Placements saved as
-  `service/model` before this change are read as the model name.
+  2026-11-05, user asked about same-name models).
+- `session_start` never starts on a model that does not answer (amended 2026-11-05: a task failed
+  on 403 INSUFFICIENT_BALANCE and the Herder asked the owner what to do; the owner said it should
+  just switch). It tries, each checked with a test call (a pass is trusted for 10 minutes, a
+  failure for 2): what was asked (`service/model`, or every service offering the name), other
+  services offering that name, the other models of its tier in order, then the other tiers —
+  only models the chosen agent can run. The first that answers is used; the tool result names the
+  switch and the Herder tells the owner in one line. Placements saved as `service/model` before
+  this change are read as the model name.
 - The free-text guide and its API (`modelGuide`, `setModelGuide`) are removed; an old
   `modelGuide` value in `config.json` is ignored.
 

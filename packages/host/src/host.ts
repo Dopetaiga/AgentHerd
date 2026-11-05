@@ -29,7 +29,6 @@ import {
   TIERS,
   type TierPlacement,
   testModel,
-  tiersText,
 } from "@agentherd/herder";
 import type { AgentProfile, Channel, Locale, Mode, SetupUI } from "@agentherd/protocol";
 import { DEFAULT_LOCALE } from "@agentherd/protocol";
@@ -277,14 +276,14 @@ export class Host implements HostApi {
 
   private herderFactory() {
     const choice = herderFromSettings(this.settings(), this.opts.secrets, this.opts.env, () =>
-      tiersText(this.placement()),
+      this.placement(),
     );
     return "factory" in choice ? choice.factory : undefined;
   }
 
   private refreshHerderChoice(): void {
     const choice = herderFromSettings(this.settings(), this.opts.secrets, this.opts.env, () =>
-      tiersText(this.placement()),
+      this.placement(),
     );
     if ("reason" in choice) {
       this.herderReason = choice.reason;

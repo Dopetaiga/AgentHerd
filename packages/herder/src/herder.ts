@@ -4,6 +4,7 @@ import type { HerderEvent, HerderHost, HerderPort } from "@agentherd/core";
 import { Agent, type AgentMessage, type StreamFn } from "@agentherd/herder-loop";
 import { guardCheck } from "@agentherd/rules";
 import type { Api, Model } from "@earendil-works/pi-ai";
+import type { TierPlacement } from "./model-guide.ts";
 import { eventsPrompt, ownerAnswerPrompt, ownerMessagePrompt, systemPrompt } from "./prompt.ts";
 import { herderTools, resolveProject, type TurnContext } from "./tools.ts";
 
@@ -16,8 +17,8 @@ export interface HerderOptions {
   streamFn: StreamFn;
   getApiKey?: (provider: string) => string | undefined | Promise<string | undefined>;
   maxSavedMessages?: number;
-  /** The model tiers as text, for picking a task's model (ADR 0028). Read at each session_list. */
-  modelGuide?: () => string;
+  /** The model tiers, for picking and swapping a task's model (ADR 0028). Read on each use. */
+  modelTiers?: () => TierPlacement;
 }
 
 type Job =
@@ -49,7 +50,7 @@ export class Herder implements HerderPort {
         systemPrompt: systemPrompt(this.host.locale),
         model: opts.model,
         thinkingLevel: "off",
-        tools: herderTools(this.host, () => this.turn, opts.modelGuide),
+        tools: herderTools(this.host, () => this.turn, opts.modelTiers),
         messages: saved,
       },
     });
