@@ -87,6 +87,7 @@ export function itemBody(
 function reasonText(reason: string, texts: CoreTexts): string {
   if (reason === "no rule matched") return texts.noRuleMatched;
   if (reason.startsWith("guard list: ")) return texts.guardHit(reason.slice(12));
+  if (reason.startsWith("mass delete: ")) return texts.massDelete;
   return reason;
 }
 

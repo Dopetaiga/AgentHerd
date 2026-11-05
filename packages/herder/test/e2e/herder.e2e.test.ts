@@ -166,9 +166,9 @@ describe("E2E-RUN-FROM-CHAT", () => {
 
 const APPROVE = `
 turns:
-  - - tool_call: { id: t1, title: "Run pnpm test", kind: execute, command: "pnpm test", status: pending }
+  - - tool_call: { id: t1, title: "Empty dist", kind: execute, command: "rm -rf ./*", status: pending }
     - request_permission:
-        toolCall: { id: t1, title: "Run pnpm test", kind: execute, command: "pnpm test" }
+        toolCall: { id: t1, title: "Empty dist", kind: execute, command: "rm -rf ./*" }
     - message: "tests passed"
     - end_turn: end_turn
 `;

@@ -32,3 +32,4 @@ Format and rules: [ADR 0001](0001-record-architecture-decisions.md).
 | [0026](0026-model-guide-for-the-herder.md) | A model guide tells the Herder which models are strong; the owner can edit it | Superseded by 0028 |
 | [0027](0027-import-model-services-from-pi-desktop.md) | Import model services and keys from PI-Desktop | Accepted |
 | [0028](0028-model-tiers-by-drag.md) | Model tiers the owner arranges by dragging, filled in by name | Accepted |
+| [0029](0029-only-mass-deletes-ask-the-owner.md) | Only a mass delete asks the owner; AgentHerd approves everything else | Accepted |

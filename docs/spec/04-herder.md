@@ -196,12 +196,12 @@ The Herder never writes or shortens the body.
 
 ```mermaid
 flowchart TD
-  E["Permission request or agent question"] --> G{"Guard list match?"}
+  E["Permission request or agent question"] --> G{"Mass delete or extraGuards match?"}
   G -- yes --> O["Owner, risk = high"]
   G -- no --> R{"Owner rule match?"}
   R -- yes --> D["Decision (source = rule)"]
   R -- no --> RV{"Reviewer configured?"}
-  RV -- no --> O2["Owner"]
+  RV -- no --> O2["Approved (auto-approved; observe mode: owner)"]
   RV -- yes --> M["Reviewer: strongest model,<br/>one call with a project snapshot"]
   M -- "confident, risk low or medium" --> D2["Decision (source = reviewer)"]
   M -- "unsure or high risk" --> O3["Owner, with the suggestion"]
@@ -209,10 +209,15 @@ flowchart TD
 
 Items from different sessions are processed in parallel. The Herder is not on this path.
 
+Since [ADR 0029](../adr/0029-only-mass-deletes-ask-the-owner.md) only a mass delete
+(`packages/rules/src/mass-delete.ts`) and the owner's `extraGuards` entries reach the owner from
+an agent; everything else is approved. The built-in guard list below applies to the Herder's own
+tool calls.
+
 ### Guard list (always to the owner)
 
-Built in, can be extended, cannot be overridden by rules or models. It applies to agent
-requests **and to the Herder's own tool calls**. Examples: recursive delete outside the
+Built in, can be extended, cannot be overridden by rules or models. It applies to the Herder's
+own tool calls (and, before ADR 0029, to agent requests). Examples: recursive delete outside the
 session's working directory, `git push --force` to a default branch, piping a download into
 a shell, reading `~/.ssh`, keychains or `.env` files, changing AgentHerd's own files or the
 agents' permission configs.
