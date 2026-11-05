@@ -57,6 +57,8 @@ export interface AgentModels {
   list(): { ref: string; agents: string[] }[];
   /** The env that makes the agent use the model. Throws when it cannot. */
   envFor(profileId: string, ref: string): Record<string, string>;
+  /** Whether the model answers now (a short test call, may be cached). */
+  check?(ref: string): Promise<{ ok: true } | { ok: false; message: string }>;
 }
 
 /** Per-task state that only the Herd and its listeners use. */

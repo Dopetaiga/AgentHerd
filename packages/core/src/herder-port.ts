@@ -27,6 +27,8 @@ export interface HerderHost {
   decisions(limit: number): DecisionRow[];
   /** Models in the owner's list ("service/model") and the profile ids that can run each. */
   models(): { ref: string; agents: string[] }[];
+  /** Whether a model answers now; true when there is nothing to check with. */
+  checkModel(ref: string): Promise<{ ok: true } | { ok: false; message: string }>;
   /**
    * `title` is the owner's words; `prompt` is what the agent receives. `model` ("service/model")
    * runs the agent with that model; without it the agent uses its own settings.

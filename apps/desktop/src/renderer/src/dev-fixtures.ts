@@ -130,7 +130,7 @@ export function sampleServices(): ModelsView["services"] {
       name: "公司网关",
       kind: "openai-compatible",
       baseUrl: "https://llm.example.com/v1",
-      models: ["qwen3-coder-plus", "glm-4.6"],
+      models: ["qwen3-coder-plus", "glm-4.6", "deepseek-chat"],
       hasKey: false,
     },
   ];

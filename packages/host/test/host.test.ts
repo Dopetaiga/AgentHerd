@@ -135,20 +135,27 @@ describe("Host", () => {
       baseUrl: "https://gw.example/v1",
       models: ["claude-opus-5-5", "deepseek-flash", "my-model"],
     });
+    await t.host.putService({
+      id: "gw2",
+      name: "Backup",
+      kind: "openai-compatible",
+      baseUrl: "https://gw2.example/v1",
+      models: ["claude-opus-5-5"],
+    });
     const refs = (tier: "strong" | "balanced" | "fast") =>
-      t.host.modelTiers().tiers[tier].map((m) => m.ref);
-    expect(refs("strong")).toEqual(["gw/claude-opus-5-5"]);
-    expect(refs("balanced")).toEqual(["gw/my-model"]);
-    expect(refs("fast")).toEqual(["gw/deepseek-flash"]);
+      t.host.modelTiers().tiers[tier].map((m) => m.model);
+    expect(refs("strong")).toEqual(["claude-opus-5-5"]);
+    expect(refs("balanced")).toEqual(["my-model"]);
+    expect(refs("fast")).toEqual(["deepseek-flash"]);
     expect(t.host.modelTiers()).toMatchObject({ custom: false });
     expect(t.host.modelTiers().tiers.strong[0]).toMatchObject({
       model: "claude-opus-5-5",
-      serviceName: "Gateway",
+      services: ["Gateway", "Backup"],
       auto: true,
     });
 
-    t.host.setModelTiers({ strong: ["gw/my-model", "gw/claude-opus-5-5"], balanced: [], fast: [] });
-    expect(refs("strong")).toEqual(["gw/my-model", "gw/claude-opus-5-5"]);
+    t.host.setModelTiers({ strong: ["my-model", "claude-opus-5-5"], balanced: [], fast: [] });
+    expect(refs("strong")).toEqual(["my-model", "claude-opus-5-5"]);
     expect(refs("balanced")).toEqual([]);
     expect(t.host.modelTiers().custom).toBe(true);
     // A model added later is placed by name, after the owner's.
@@ -159,11 +166,14 @@ describe("Host", () => {
       baseUrl: "https://gw.example/v1",
       models: ["claude-opus-5-5", "deepseek-flash", "my-model", "gpt-6.1-sol"],
     });
-    expect(refs("strong")).toEqual(["gw/my-model", "gw/claude-opus-5-5", "gw/gpt-6.1-sol"]);
+    expect(refs("strong")).toEqual(["my-model", "claude-opus-5-5", "gpt-6.1-sol"]);
+    // Plan 018 saved service/model refs; they still count.
+    t.host.setModelTiers({ strong: [], balanced: [], fast: ["gw/my-model"] });
+    expect(refs("fast")).toEqual(["my-model", "deepseek-flash"]);
 
     t.host.setModelTiers(null);
     expect(readConfig(t.home).modelTiers).toBeUndefined();
-    expect(refs("balanced")).toEqual(["gw/my-model"]);
+    expect(refs("balanced")).toEqual(["my-model"]);
   });
 });
 

@@ -29,7 +29,12 @@ export function task(id: string, title: string): Task {
 }
 
 export function fakeHost(
-  opts: { tasks?: Task[]; projects?: string[]; models?: { ref: string; agents: string[] }[] } = {},
+  opts: {
+    tasks?: Task[];
+    projects?: string[];
+    models?: { ref: string; agents: string[] }[];
+    failing?: string[];
+  } = {},
 ): {
   host: HerderHost;
   rec: Recorded;
@@ -56,6 +61,8 @@ export function fakeHost(
     relayTaskId: () => undefined,
     decisions: () => [],
     models: () => opts.models ?? [],
+    checkModel: async (ref) =>
+      opts.failing?.includes(ref) ? { ok: false, message: "down" } : { ok: true },
     startTask: async (profileId, cwd, title, prompt, model) => {
       rec.started.push({
         profileId,

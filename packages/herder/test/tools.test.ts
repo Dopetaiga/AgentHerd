@@ -130,8 +130,8 @@ describe("tools", () => {
     ];
     const { call, rec } = tools({ ownerText: "修一下构建" }, { models });
     const list = await call("session_list", {});
-    expect(list).toContain("- deepseek/deepseek-v4-pro: mock");
-    expect(list).toContain("- anthropic/claude-x: (no agent can run it)");
+    expect(list).toContain("- deepseek-v4-pro: deepseek; mock");
+    expect(list).toContain("- claude-x: anthropic; (no agent can run it)");
     const out = await call("session_start", {
       project: dir,
       profile: "mock",
@@ -159,6 +159,25 @@ describe("tools", () => {
     await call("session_start", { project: dir, profile: "mock", ownerText: "修一下构建" });
     expect(rec.started[1]?.model).toBeUndefined();
     expect(rec.started).toHaveLength(2);
+  });
+
+  it("merges a model offered by several services and moves on when one fails", async () => {
+    const dir = tmpdir();
+    const models = [
+      { ref: "site/gpt-x", agents: ["mock"] },
+      { ref: "backup/gpt-x", agents: ["mock"] },
+    ];
+    const { call, rec } = tools({ ownerText: "修一下构建" }, { models, failing: ["site/gpt-x"] });
+    expect(await call("session_list", {})).toContain("- gpt-x: site, backup; mock");
+    const start = { project: dir, profile: "mock", ownerText: "修一下构建", model: "gpt-x" };
+    await call("session_start", start);
+    expect(rec.started[0]?.model).toBe("backup/gpt-x");
+    const all = tools(
+      { ownerText: "修一下构建" },
+      { models, failing: ["site/gpt-x", "backup/gpt-x"] },
+    );
+    await expect(all.call("session_start", start)).rejects.toThrow(/no service answers for gpt-x/);
+    expect(all.rec.started).toHaveLength(0);
   });
 
   it("session_list adds the model tiers when there are models", async () => {
