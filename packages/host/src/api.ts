@@ -162,8 +162,6 @@ export interface HostApi {
   setKey(serviceId: string, key: string): Promise<ModelsView>;
   chooseModel(role: ModelRole, ref: ModelRef | null): Promise<ModelsView>;
   testModel(ref: ModelRef): Promise<ModelTest>;
-  /** Copies PI-Desktop's model services and keys into the list (ADR 0027). */
-  importPiDesktop(): Promise<PiDesktopImport>;
   /** Starts the one-scan Feishu setup; progress comes as "setup" events. */
   setupFeishu(): SetupState;
   cancelSetup(): SetupState;
@@ -197,7 +195,6 @@ export const HOST_METHODS: readonly HostMethod[] = [
   "setKey",
   "chooseModel",
   "testModel",
-  "importPiDesktop",
   "setupFeishu",
   "cancelSetup",
   "setupState",
@@ -211,15 +208,6 @@ export const HOST_METHODS: readonly HostMethod[] = [
   "removeAgent",
   "verifyAgent",
 ];
-
-export interface PiDesktopImport {
-  /** Services added, by name. */
-  added: string[];
-  /** Services already in the list that gained models, by name. */
-  merged: string[];
-  skipped: { name: string; reason: string }[];
-  models: ModelsView;
-}
 
 export type HostEvent =
   | { topic: "status"; data: HostStatus }

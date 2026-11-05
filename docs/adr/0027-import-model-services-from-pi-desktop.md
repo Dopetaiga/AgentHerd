@@ -1,6 +1,6 @@
 # ADR 0027: Import model services and keys from PI-Desktop
 
-- Status: Accepted
+- Status: Withdrawn (2026-11-05)
 - Date: 2026-11-05
 - Related: [ADR 0021](0021-model-list-then-choose-per-role.md)
 
@@ -33,3 +33,11 @@ encrypted with AES-256-GCM under the raw 32-byte `secrets/.machine-key`
   same protection AgentHerd gives keys typed by hand (ADR 0021).
 - If PI-Desktop changes its secret format, import of keys fails and services come without keys;
   the owner then adds keys by hand.
+
+## Withdrawn (2026-11-05)
+
+The owner removed the button the same day: "不要这个从pi-desktop导入的功能，也太诡异了".
+Reading another app's encrypted key store is odd for a product other people install, and the
+one-time copy was already done. The import code, its test and the 「从 PI-Desktop 导入」 button
+are gone. Services added by the import stay as normal services; `ModelService.api` (Anthropic
+compatible custom services) stays because the add dialog uses it too.

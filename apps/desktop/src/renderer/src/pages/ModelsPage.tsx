@@ -1,14 +1,14 @@
 // 模型: the model used for reviews, and the list of model services (ADR 0021).
 // The Herder's model is chosen on the 主管 page.
 
-import { Boxes, Download, Plus } from "lucide-react";
+import { Boxes, Plus } from "lucide-react";
 import { useState } from "react";
 import { AddServiceDialog } from "../components/AddServiceDialog";
 import { RolePicker } from "../components/RolePicker";
 import { ServiceCard } from "../components/ServiceCard";
 import { Button, EmptyState, Group, Section } from "../components/ui";
 import { devOpen } from "../dev-bridge";
-import { applyModels, call, useApp } from "../store";
+import { useApp } from "../store";
 
 /** The dialog a dev preview asks for (`?open=` with the fake bridge); none in the app. */
 function previewAdd(): { provider?: string; models?: string[] } | null {
@@ -33,34 +33,11 @@ export function ServiceList() {
   const services = useApp((s) => s.models?.services);
   const [preview] = useState(previewAdd);
   const [adding, setAdding] = useState(preview !== null);
-  const [importing, setImporting] = useState(false);
   const list = [...(services ?? [])].sort((a, b) => a.name.localeCompare(b.name));
-  const importPi = async () => {
-    setImporting(true);
-    const r = await call((h) => h.importPiDesktop());
-    setImporting(false);
-    if (r === undefined) return;
-    applyModels(r.models);
-    const parts = [
-      r.added.length > 0 ? `新增 ${r.added.join("、")}` : "",
-      r.merged.length > 0 ? `补充了 ${r.merged.join("、")} 的模型` : "",
-      r.skipped.length > 0
-        ? `跳过 ${r.skipped.map((s) => s.name).join("、")}（用账号登录，没有 Key）`
-        : "",
-    ].filter((p) => p !== "");
-    useApp
-      .getState()
-      .toast(parts.length > 0 ? parts.join("；") : "PI-Desktop 里没有可导入的服务", "info");
-  };
   const add = (
-    <div className="flex gap-2">
-      <Button variant="secondary" disabled={importing} onClick={() => void importPi()}>
-        <Download size={14} /> {importing ? "导入中…" : "从 PI-Desktop 导入"}
-      </Button>
-      <Button variant={list.length === 0 ? "primary" : "secondary"} onClick={() => setAdding(true)}>
-        <Plus size={14} /> 添加服务
-      </Button>
-    </div>
+    <Button variant={list.length === 0 ? "primary" : "secondary"} onClick={() => setAdding(true)}>
+      <Plus size={14} /> 添加服务
+    </Button>
   );
   return (
     <Section
