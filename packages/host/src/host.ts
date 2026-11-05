@@ -47,7 +47,6 @@ import type {
   ModelsView,
   ModelTest,
   ModelTiersView,
-  PiDesktopImport,
   ProviderView,
   SettingsPatch,
   SetupState,
@@ -56,7 +55,6 @@ import type {
 } from "./api.ts";
 import type { AgentDef, Fetchers } from "./catalog.ts";
 import { type CliConfig, readConfig, writeConfig } from "./config.ts";
-import { piDesktopDir, readPiDesktop } from "./import-pi-desktop.ts";
 import { availableProfiles } from "./profiles.ts";
 import { RuntimeStore } from "./runtimes.ts";
 import { type VerifyOptions, verifyProfile } from "./verify.ts";
@@ -71,8 +69,6 @@ export interface HostOptions {
    */
   autoInstallAgents?: boolean;
   userHome?: string;
-  /** PI-Desktop data folder to import from; default ~/.pi-desktop. */
-  piDesktopDir?: string;
   /** Model keys (and anything else under account names). */
   secrets: SecretStore;
   /** Builds the chat channel. The desktop app and the CLI pass the Feishu channel. */
@@ -415,24 +411,6 @@ export class Host implements HostApi {
     this.saveSettings(next);
     await this.applyModels();
     return this.models();
-  }
-
-  async importPiDesktop(): Promise<PiDesktopImport> {
-    const found = readPiDesktop(this.opts.piDesktopDir ?? piDesktopDir(this.opts.userHome), {
-      builtin: builtinBaseUrls(),
-      existing: this.settings().services,
-    });
-    let settings = this.settings();
-    const added: string[] = [];
-    const merged: string[] = [];
-    for (const { service, key, merged: was } of found.services) {
-      settings = putService(settings, cleanService(service));
-      if (key !== undefined) this.writeKey(service.id, key);
-      (was ? merged : added).push(service.name);
-    }
-    this.saveSettings(settings);
-    await this.applyModels();
-    return { added, merged, skipped: found.skipped, models: this.models() };
   }
 
   async removeService(serviceId: string): Promise<ModelsView> {

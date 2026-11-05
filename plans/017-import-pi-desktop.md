@@ -1,6 +1,6 @@
 # Plan 017: Import model services from PI-Desktop (ADR 0027)
 
-Executor: Claude (lead). Status: DONE (manual run pending).
+Executor: Claude (lead). Status: WITHDRAWN 2026-11-05 — the owner removed the feature (see ADR 0027).
 
 ## Scope
 
