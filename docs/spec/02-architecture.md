@@ -108,8 +108,9 @@ Rules:
   result|error}`, pushes `{v, type:"event", event:{topic, data}}` (`packages/host/src/api.ts`).
 - Methods now (plan 011): `status`, `tasks` (tasks and open items, read-only; owners decide in
   the channel), `providers`, `models`, `putService`, `removeService`, `setKey`, `chooseModel`,
-  `testModel`, `setupFeishu`, `cancelSetup`, `setupState`, `updateSettings`. Later: `rule.*`,
-  `export.*`.
+  `testModel`, `probeModels` (GET `/models` of an OpenAI- or Anthropic-compatible service, so
+  the owner ticks models instead of typing ids), `setupFeishu`, `cancelSetup`, `setupState`,
+  `updateSettings`. Later: `rule.*`, `export.*`.
 
 ## 5. Storage
 

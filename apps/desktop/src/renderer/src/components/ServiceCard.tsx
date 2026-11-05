@@ -7,6 +7,7 @@ import { applyModels, call, errorText, host, type ServiceView, useApp } from "..
 import { providerName } from "./labels";
 import { Modal } from "./Modal";
 import { ModelPanes } from "./ModelPanes";
+import { ProbeButton, useModelProbe } from "./ModelProbe";
 import { FieldNote, SmallField } from "./ServiceForm";
 import { Badge, Button, Dot, Group, IconTile, inputClass } from "./ui";
 
@@ -146,6 +147,10 @@ function EditModelsDialog({ service, onClose }: { service: ServiceView; onClose:
   const [picked, setPicked] = useState<string[]>(service.models);
   const [key, setKey] = useState("");
   const [saving, setSaving] = useState(false);
+  const probe = useModelProbe();
+  const custom = service.kind === "openai-compatible";
+  // 探测模型 may find the list under <address>/v1; saving then fixes the address too.
+  const [baseUrl, setBaseUrl] = useState(service.baseUrl);
   const problem = picked.length === 0 ? "至少选一个模型" : null;
 
   const save = async () => {
@@ -153,7 +158,10 @@ function EditModelsDialog({ service, onClose }: { service: ServiceView; onClose:
     const { hasKey: _hasKey, ...plain } = service;
     // An empty key keeps the saved key.
     const result = await call((h) =>
-      h.putService({ ...plain, models: picked }, key === "" ? undefined : key),
+      h.putService(
+        { ...plain, models: picked, ...(custom && baseUrl !== undefined ? { baseUrl } : {}) },
+        key === "" ? undefined : key,
+      ),
     );
     setSaving(false);
     if (result !== undefined) {
@@ -168,7 +176,7 @@ function EditModelsDialog({ service, onClose }: { service: ServiceView; onClose:
       title={`编辑 ${service.name}`}
       description={
         <span className="font-mono">
-          {service.kind === "builtin" ? providerName(service.provider ?? "") : service.baseUrl}
+          {service.kind === "builtin" ? providerName(service.provider ?? "") : baseUrl}
         </span>
       }
       onClose={onClose}
@@ -201,15 +209,31 @@ function EditModelsDialog({ service, onClose }: { service: ServiceView; onClose:
         </SmallField>
       </div>
       <FieldNote
-        error={null}
-        hint="「测试」用已保存的 Key。去掉的模型如果正被使用，对应用途会被清空。"
+        error={probe.error}
+        hint={probe.note ?? "「测试」用已保存的 Key。去掉的模型如果正被使用，对应用途会被清空。"}
       />
       <ModelPanes
-        options={catalog}
+        options={custom ? probe.models : catalog}
         selected={picked}
         onChange={setPicked}
         disabled={saving}
         rowExtra={(id) => <TestModel serviceId={service.id} model={id} />}
+        headerAction={
+          custom ? (
+            <ProbeButton
+              running={probe.running}
+              disabled={saving}
+              title="从服务的 /models 接口读取模型列表；Key 留空时用已保存的"
+              onClick={async () => {
+                const r = await probe.probe({
+                  serviceId: service.id,
+                  ...(key.trim() === "" ? {} : { key: key.trim() }),
+                });
+                if (r?.ok === true && r.baseUrl !== undefined) setBaseUrl(r.baseUrl);
+              }}
+            />
+          ) : undefined
+        }
       />
     </Modal>
   );

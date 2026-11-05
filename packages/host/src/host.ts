@@ -44,9 +44,11 @@ import type {
   HostEvent,
   HostStatus,
   ItemSummary,
+  ModelProbe,
   ModelsView,
   ModelTest,
   ModelTiersView,
+  ProbeTarget,
   ProviderView,
   SettingsPatch,
   SetupState,
@@ -56,6 +58,7 @@ import type {
 } from "./api.ts";
 import type { AgentDef, Fetchers } from "./catalog.ts";
 import { type CliConfig, readConfig, writeConfig } from "./config.ts";
+import { probeModels } from "./probe.ts";
 import { availableProfiles } from "./profiles.ts";
 import { RuntimeStore } from "./runtimes.ts";
 import { type VerifyOptions, verifyProfile } from "./verify.ts";
@@ -85,6 +88,8 @@ export interface HostOptions {
   /** Agent definitions and release lookups (tests). Default: catalog.ts. */
   catalog?: AgentDef[];
   fetchers?: Fetchers;
+  /** HTTP for probeModels (tests). Default: global fetch. */
+  fetch?: typeof fetch;
   target?: string;
   exists?: (path: string) => boolean;
   /** Options for verifyAgent (tests). */
@@ -453,6 +458,33 @@ export class Host implements HostApi {
     } catch (error) {
       return { ok: false, message: (error as Error).message };
     }
+  }
+
+  async probeModels(target: ProbeTarget): Promise<ModelProbe> {
+    let saved: ModelService | undefined;
+    if (target.serviceId !== undefined) {
+      saved = this.settings().services.find((s) => s.id === target.serviceId);
+      if (saved === undefined) return { ok: false, message: `no service "${target.serviceId}"` };
+      if (saved.kind !== "openai-compatible") {
+        return { ok: false, message: `service "${saved.id}" has a built-in model list` };
+      }
+    }
+    const baseUrl = target.baseUrl ?? saved?.baseUrl;
+    if (baseUrl === undefined || baseUrl.trim() === "") return { ok: false, message: "no address" };
+    const typed = target.key?.trim();
+    const key =
+      typed !== undefined && typed !== ""
+        ? typed
+        : saved === undefined
+          ? undefined
+          : serviceKey(saved, this.opts.secrets, this.opts.env);
+    const api = target.api ?? saved?.api;
+    return probeModels({
+      baseUrl,
+      ...(api === undefined ? {} : { api }),
+      ...(key === undefined ? {} : { key }),
+      ...(this.opts.fetch === undefined ? {} : { fetch: this.opts.fetch }),
+    });
   }
 
   private writeKey(serviceId: string, key: string): void {

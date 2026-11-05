@@ -322,6 +322,22 @@ function installFakeBridge(): void {
       }
       return delay({ ok: true, reply: `你好，我是 ${ref.model}。` }, 900);
     },
+    probeModels: (target) => {
+      const saved = models.services.find((x) => x.id === target.serviceId);
+      const base = (target.baseUrl ?? saved?.baseUrl ?? "").replace(/\/+$/, "");
+      if (base.includes("down")) {
+        return delay({ ok: false, message: `GET ${base}/models: connect ECONNREFUSED` }, 600);
+      }
+      const ids = ["deepseek-v4-flash", "glm-5", "gpt-5.5", "kimi-k2.6", "qwen3-coder-plus"];
+      return delay(
+        {
+          ok: true,
+          models: ids.map((id) => ({ id, name: id })),
+          ...(/\/v1$/.test(base) ? {} : { baseUrl: `${base}/v1` }),
+        },
+        700,
+      );
+    },
     setupFeishu: () => {
       for (const t of setupTimers) clearTimeout(t);
       setupTimers = [];

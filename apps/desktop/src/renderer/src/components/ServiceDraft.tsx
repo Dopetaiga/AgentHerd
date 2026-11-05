@@ -6,6 +6,7 @@ import type { ProviderView } from "@agentherd/host/api";
 import { useState } from "react";
 import { applyModels, call, type ModelService, useApp } from "../store";
 import { providerName, slugify, uniqueId } from "./labels";
+import { useModelProbe } from "./ModelProbe";
 
 export type ServiceChoice = { kind: "builtin"; provider: ProviderView } | { kind: "custom" };
 
@@ -36,6 +37,7 @@ export function useServiceDraft() {
   const [touched, setTouched] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const probe = useModelProbe();
 
   /** Chooses the service. Choosing the one already chosen keeps what was typed. */
   const pick = (next: ServiceChoice) => {
@@ -54,6 +56,29 @@ export function useServiceDraft() {
     setIdEdited(false);
     setTouched(false);
     setPicked([]);
+    probe.reset();
+  };
+
+  /** Why 探测模型 cannot run yet, or null. */
+  const probeProblem = (): string | null => {
+    try {
+      const url = new URL(baseUrl.trim());
+      return url.protocol === "https:" || url.protocol === "http:"
+        ? null
+        : "地址必须以 http 或 https 开头";
+    } catch {
+      return "先填写 Base URL";
+    }
+  };
+
+  /** Reads the custom service's model list; fixes the address when the list was under /v1. */
+  const probeModels = async () => {
+    const r = await probe.probe({
+      baseUrl: baseUrl.trim(),
+      api,
+      ...(key.trim() === "" ? {} : { key: key.trim() }),
+    });
+    if (r?.ok === true && r.baseUrl !== undefined) setBaseUrlValue(r.baseUrl);
   };
 
   const onName = (value: string) => {
@@ -175,6 +200,9 @@ export function useServiceDraft() {
     problem,
     saving,
     save,
+    probe,
+    probeProblem,
+    probeModels,
   };
 }
 

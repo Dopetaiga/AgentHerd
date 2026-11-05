@@ -17,14 +17,17 @@ export function ModelPanes({
   onChange,
   disabled = false,
   rowExtra,
+  headerAction,
 }: {
-  /** The service's catalog; empty for an OpenAI-compatible service. */
+  /** The service's catalog; for an OpenAI-compatible service, what 探测模型 found (or empty). */
   options: ModelOption[];
   selected: string[];
   onChange: (models: string[]) => void;
   disabled?: boolean;
   /** Extra controls on each chosen model's row, e.g. a test button. */
   rowExtra?: (id: string) => ReactNode;
+  /** A control at the end of the left pane's header, e.g. 探测模型. */
+  headerAction?: ReactNode;
 }) {
   const [query, setQuery] = useState("");
   const [typed, setTyped] = useState("");
@@ -144,6 +147,7 @@ export function ModelPanes({
             {hasCatalog ? "服务提供的模型" : "手动添加模型"}
           </h4>
           {hasCatalog && <span className="text-ink-muted text-sm">共 {options.length} 个</span>}
+          {headerAction}
         </div>
         {hasCatalog ? (
           <>
@@ -182,7 +186,9 @@ export function ModelPanes({
           <>
             {addField}
             <div className="flex min-h-0 flex-1 items-center justify-center overflow-hidden rounded-lg border border-line-strong border-dashed px-6 text-center text-ink-muted text-sm leading-5">
-              这个服务没有现成的模型列表。
+              {headerAction === undefined
+                ? "这个服务没有现成的模型列表。"
+                : "点「探测模型」读取服务提供的模型，或手动填写。"}
               <br />
               可以一次粘贴多个 ID，用逗号或换行分开。
             </div>
