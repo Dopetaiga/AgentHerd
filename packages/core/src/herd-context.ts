@@ -71,6 +71,8 @@ export interface Following {
   /** The session was in `error` at some point; the task stays failed. */
   failed: boolean;
   ended: boolean;
+  /** Why the task ended, once it has. */
+  endedWhy?: string;
   /** Text and tool calls of the current turn. */
   turn: { text: string; toolCalls: number };
   connection?: AgentConnection;

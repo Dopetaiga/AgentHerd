@@ -83,6 +83,13 @@ export function itemBody(
   return redact(shown.join("\n"), secrets);
 }
 
+/** The pipeline's reasons are English keys; show them in the owner's language. */
+function reasonText(reason: string, texts: CoreTexts): string {
+  if (reason === "no rule matched") return texts.noRuleMatched;
+  if (reason.startsWith("guard list: ")) return texts.guardHit(reason.slice(12));
+  return reason;
+}
+
 export function itemView(
   item: Item,
   reason: string,
@@ -96,7 +103,7 @@ export function itemView(
     body: itemBody(item, secrets, texts),
     risk: item.risk,
     options: options(texts),
-    reason: redact(reason, secrets),
+    reason: redact(reasonText(reason, texts), secrets),
   };
 }
 

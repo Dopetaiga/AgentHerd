@@ -48,6 +48,8 @@ export interface CoreTexts {
   turnEnded: string;
   agentStoppedWaiting: string;
   agentherdStopped: string;
+  noRuleMatched: string;
+  guardHit: (reason: string) => string;
   runFinished: string;
   agentCouldNotStart: string;
   agentExited: string;
@@ -113,6 +115,8 @@ const zh: CoreTexts = {
   turnEnded: "Agent 这一轮已结束",
   agentStoppedWaiting: "Agent 不再等待",
   agentherdStopped: "AgentHerd 已停止",
+  noRuleMatched: "没有规则自动处理这个请求",
+  guardHit: (reason) => `碰到保护名单：${reason}`,
   runFinished: "任务已运行结束",
   agentCouldNotStart: "Agent 启动失败",
   agentExited: "Agent 已退出",
@@ -168,6 +172,8 @@ const en: CoreTexts = {
   turnEnded: "the agent's turn ended",
   agentStoppedWaiting: "the agent stopped waiting",
   agentherdStopped: "AgentHerd stopped",
+  noRuleMatched: "no rule matched",
+  guardHit: (reason) => `guard list: ${reason}`,
   runFinished: "the run finished",
   agentCouldNotStart: "the agent could not start",
   agentExited: "the agent exited",
