@@ -149,7 +149,7 @@ function ServiceFields({ draft, allowAdvanced }: { draft: ServiceDraft; allowAdv
   const more = allowAdvanced && advanced;
   const columns = custom
     ? more
-      ? "grid-cols-[minmax(0,0.9fr)_minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,0.8fr)]"
+      ? "grid-cols-[minmax(0,0.9fr)_minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,0.8fr)_minmax(0,0.9fr)]"
       : "grid-cols-[minmax(0,0.9fr)_minmax(0,1.4fr)_minmax(0,1fr)]"
     : more
       ? "grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_minmax(0,1fr)]"
@@ -209,6 +209,18 @@ function ServiceFields({ draft, allowAdvanced }: { draft: ServiceDraft; allowAdv
             </SmallField>
             {keyField}
             {more && idField}
+            {more && (
+              <SmallField label="接口格式">
+                <select
+                  className={inputClass}
+                  value={draft.api}
+                  onChange={(e) => draft.setApi(e.target.value as typeof draft.api)}
+                >
+                  <option value="openai-completions">OpenAI 兼容</option>
+                  <option value="anthropic-messages">Anthropic 兼容</option>
+                </select>
+              </SmallField>
+            )}
           </>
         ) : (
           <>

@@ -42,6 +42,16 @@ export function builtinProviders(): BuiltinProvider[] {
     .filter((p) => p.models.length > 0);
 }
 
+/** Base URL of each key-only pi-ai provider, to recognise a service imported from elsewhere. */
+export function builtinBaseUrls(): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const p of builtinProviders()) {
+    const first = (getModels as (p: string) => Model<Api>[])(p.provider)[0];
+    if (first !== undefined) out[p.provider] = first.baseUrl.replace(/\/+$/, "");
+  }
+  return out;
+}
+
 /** Values for a model id pi-ai does not know (pi-desktop uses the same, ADR 0114). */
 export const CUSTOM_CONTEXT_WINDOW = 128_000;
 export const CUSTOM_MAX_TOKENS = 8_192;
@@ -60,7 +70,7 @@ export function resolveModel(service: ModelService, modelId: string): Model<Api>
   return {
     id: modelId,
     name: modelId,
-    api: "openai-completions",
+    api: service.api ?? "openai-completions",
     provider: service.id,
     baseUrl: (service.baseUrl ?? "").replace(/\/+$/, ""),
     reasoning: false,

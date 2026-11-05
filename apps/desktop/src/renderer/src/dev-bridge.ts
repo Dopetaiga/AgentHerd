@@ -294,6 +294,33 @@ function installFakeBridge(): void {
       models = { ...models, roles };
       return delay(modelsChanged());
     },
+    importPiDesktop: () => {
+      const site = {
+        id: "site",
+        name: "site",
+        kind: "openai-compatible" as const,
+        baseUrl: "https://ai.example",
+        models: ["gpt-6.1-sol"],
+      };
+      if (!models.services.some((s) => s.id === "site")) {
+        models = { ...models, services: [...models.services, { ...site, hasKey: true }] };
+        keys.set("site", "sk-site");
+      }
+      return delay(
+        {
+          added: ["site"],
+          merged: [],
+          skipped: [
+            {
+              name: "OpenAI (ChatGPT Plus/Pro)",
+              reason: "signs in with an account (OAuth), not a key",
+            },
+          ],
+          models,
+        },
+        600,
+      );
+    },
     testModel: (ref) => {
       const s = models.services.find((x) => x.id === ref.serviceId);
       if (s === undefined) return delay({ ok: false, message: `no service "${ref.serviceId}"` });

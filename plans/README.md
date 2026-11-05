@@ -29,3 +29,4 @@ States: `TODO`, `IN PROGRESS`, `DONE`, `BLOCKED: <reason>`, `REJECTED: <reason>`
 | [014](014-six-agents-latest-and-check.md) | Six agents downloaded at their latest release, and a 验证 button (ADR 0024) | M2 | L | 013 | DONE (manual run pending) |
 | [015](015-herder-picks-model.md) | The Herder picks the model of each task (ADR 0025) | M2 | M | 014 | DONE (manual run pending) |
 | [016](016-model-guide.md) | A model guide for the Herder, editable on the 主管 page (ADR 0026) | M2 | S | 015 | DONE (manual run pending) |
+| [017](017-import-pi-desktop.md) | Import model services from PI-Desktop (ADR 0027) | M2 | S | 010 | DONE (manual run pending) |

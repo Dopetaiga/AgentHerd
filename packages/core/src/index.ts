@@ -10,6 +10,7 @@ export type { HerderEvent, HerderFactory, HerderHost, HerderPort } from "./herde
 export type { Answerable, InboxOptions, OwnerAnswer } from "./inbox.ts";
 export { BODY_MAX_LINES, DEFAULT_REMIND_MINUTES, Inbox, itemBody, itemView } from "./inbox.ts";
 export {
+  type CustomApi,
   chooseModel,
   emptyModelSettings,
   formatModelRef,

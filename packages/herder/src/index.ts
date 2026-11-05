@@ -10,6 +10,7 @@ export { HERDER_STATE_KEY, Herder, type HerderOptions, MAX_SAVED_MESSAGES } from
 export { DEFAULT_MODEL_GUIDE, effectiveModelGuide } from "./model-guide.ts";
 export {
   type BuiltinProvider,
+  builtinBaseUrls,
   builtinProviders,
   CUSTOM_CONTEXT_WINDOW,
   CUSTOM_MAX_TOKENS,

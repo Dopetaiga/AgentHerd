@@ -17,6 +17,7 @@ import {
   type SecretStore,
 } from "@agentherd/core";
 import {
+  builtinBaseUrls,
   builtinProviders,
   DEFAULT_MODEL_GUIDE,
   effectiveModelGuide,
@@ -42,6 +43,7 @@ import type {
   ModelGuideView,
   ModelsView,
   ModelTest,
+  PiDesktopImport,
   ProviderView,
   SettingsPatch,
   SetupState,
@@ -49,6 +51,7 @@ import type {
 } from "./api.ts";
 import type { AgentDef, Fetchers } from "./catalog.ts";
 import { type CliConfig, readConfig, writeConfig } from "./config.ts";
+import { piDesktopDir, readPiDesktop } from "./import-pi-desktop.ts";
 import { availableProfiles } from "./profiles.ts";
 import { RuntimeStore } from "./runtimes.ts";
 import { type VerifyOptions, verifyProfile } from "./verify.ts";
@@ -58,6 +61,8 @@ export const HOST_VERSION = "0.0.0";
 export interface HostOptions {
   home: string;
   userHome?: string;
+  /** PI-Desktop data folder to import from; default ~/.pi-desktop. */
+  piDesktopDir?: string;
   /** Model keys (and anything else under account names). */
   secrets: SecretStore;
   /** Builds the chat channel. The desktop app and the CLI pass the Feishu channel. */
@@ -373,6 +378,24 @@ export class Host implements HostApi {
     return this.models();
   }
 
+  async importPiDesktop(): Promise<PiDesktopImport> {
+    const found = readPiDesktop(this.opts.piDesktopDir ?? piDesktopDir(this.opts.userHome), {
+      builtin: builtinBaseUrls(),
+      existing: this.settings().services,
+    });
+    let settings = this.settings();
+    const added: string[] = [];
+    const merged: string[] = [];
+    for (const { service, key, merged: was } of found.services) {
+      settings = putService(settings, cleanService(service));
+      if (key !== undefined) this.writeKey(service.id, key);
+      (was ? merged : added).push(service.name);
+    }
+    this.saveSettings(settings);
+    await this.applyModels();
+    return { added, merged, skipped: found.skipped, models: this.models() };
+  }
+
   async removeService(serviceId: string): Promise<ModelsView> {
     this.saveSettings(removeService(this.settings(), serviceId));
     this.opts.secrets.delete(modelKeyAccount(serviceId));
@@ -516,5 +539,6 @@ function cleanService(s: ModelService): ModelService {
   };
   if (s.kind === "builtin" && s.provider !== undefined) base.provider = s.provider;
   if (s.kind === "openai-compatible" && s.baseUrl !== undefined) base.baseUrl = s.baseUrl.trim();
+  if (s.kind === "openai-compatible" && s.api === "anthropic-messages") base.api = s.api;
   return base;
 }

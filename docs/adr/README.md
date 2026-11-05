@@ -30,3 +30,4 @@ Format and rules: [ADR 0001](0001-record-architecture-decisions.md).
 | [0024](0024-follow-latest-releases-six-agents.md) | Agent downloads follow upstream's latest release; six agents and a check button | Accepted |
 | [0025](0025-herder-picks-model-per-task.md) | The Herder picks the model of each task from the owner's list | Accepted |
 | [0026](0026-model-guide-for-the-herder.md) | A model guide tells the Herder which models are strong; the owner can edit it | Accepted |
+| [0027](0027-import-model-services-from-pi-desktop.md) | Import model services and keys from PI-Desktop | Accepted |
