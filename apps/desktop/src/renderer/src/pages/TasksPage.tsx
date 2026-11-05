@@ -4,7 +4,9 @@
 import { AlertTriangle, ChevronRight, ListTodo } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { hhmm, RISK_LABEL, STAGE_LABEL, STAGE_ORDER } from "../components/labels";
+import { TaskTranscript } from "../components/TaskTranscript";
 import { Badge, Dot, EmptyState, Group, Section, Segmented, type Tone } from "../components/ui";
+import { devOpen } from "../dev-bridge";
 import { type ItemSummary, type Task, useApp } from "../store";
 
 type Filter = "all" | "owner" | "active";
@@ -34,6 +36,7 @@ function BoardRow({
   time,
   details,
   items,
+  onOpen,
 }: {
   dot: Tone;
   pulse?: boolean;
@@ -42,10 +45,12 @@ function BoardRow({
   time: string;
   details: readonly string[];
   items: readonly ItemSummary[];
+  /** Opens the task's conversation; rows without one are not clickable. */
+  onOpen?: () => void;
 }) {
   const line = details.filter((d) => d !== "");
-  return (
-    <div className="flex items-start gap-3 px-4 py-2.5">
+  const body = (
+    <>
       <span className="flex h-[18px] items-center">
         <Dot tone={dot} pulse={pulse} />
       </span>
@@ -70,7 +75,18 @@ function BoardRow({
           </div>
         )}
       </div>
-    </div>
+    </>
+  );
+  if (onOpen === undefined) return <div className="flex items-start gap-3 px-4 py-2.5">{body}</div>;
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      title="查看对话"
+      className="flex w-full items-start gap-3 px-4 py-2.5 text-left hover:bg-hover"
+    >
+      {body}
+    </button>
   );
 }
 
@@ -90,7 +106,15 @@ function RequestLine({ item }: { item: ItemSummary }) {
   );
 }
 
-function TaskRow({ task, items }: { task: Task; items: readonly ItemSummary[] }) {
+function TaskRow({
+  task,
+  items,
+  onOpen,
+}: {
+  task: Task;
+  items: readonly ItemSummary[];
+  onOpen: (task: Task) => void;
+}) {
   const stage = STAGE_LABEL[task.stage];
   // The group already says the stage; a badge only tells apart stages that share a group.
   const badge =
@@ -106,6 +130,7 @@ function TaskRow({ task, items }: { task: Task; items: readonly ItemSummary[] })
       time={task.updatedAt}
       details={[task.project, task.agent, task.lastReport]}
       items={items}
+      onOpen={() => onOpen(task)}
     />
   );
 }
@@ -124,6 +149,7 @@ export function TasksPage() {
   const noAgent = useApp((s) => s.status?.profiles.length === 0);
   const [filter, setFilter] = useState<Filter>("all");
   const [showEnded, setShowEnded] = useState(false);
+  const [openId, setOpenId] = useState<string | undefined>(() => devOpen()?.replace(/^task-/, ""));
 
   const tasks = view?.tasks ?? [];
   const items = view?.items ?? [];
@@ -176,12 +202,13 @@ export function TasksPage() {
       <Section title={<CountTitle title={title} count={list.length} />}>
         <Group>
           {list.map((t) => (
-            <TaskRow key={t.id} task={t} items={itemsOf(t)} />
+            <TaskRow key={t.id} task={t} items={itemsOf(t)} onOpen={(x) => setOpenId(x.id)} />
           ))}
         </Group>
       </Section>
     );
 
+  const opened = tasks.find((t) => t.id === openId);
   const showOwner = filter !== "active";
   const showActive = filter !== "owner";
   const showRest = filter === "all";
@@ -191,6 +218,9 @@ export function TasksPage() {
 
   return (
     <div className="flex flex-col gap-6">
+      {opened !== undefined && (
+        <TaskTranscript task={opened} onClose={() => setOpenId(undefined)} />
+      )}
       {warning}
       <Segmented label="筛选任务" options={FILTERS} value={filter} onChange={setFilter} />
       {nothing && <p className="px-0.5 text-ink-muted text-md">{FILTER_EMPTY[filter]}</p>}
@@ -239,7 +269,7 @@ export function TasksPage() {
           {showEnded && (
             <Group>
               {ended.map((t) => (
-                <TaskRow key={t.id} task={t} items={[]} />
+                <TaskRow key={t.id} task={t} items={[]} onOpen={(x) => setOpenId(x.id)} />
               ))}
             </Group>
           )}

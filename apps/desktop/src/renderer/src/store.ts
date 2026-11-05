@@ -11,9 +11,12 @@ import type {
   RemoteHost,
   SetupState,
   TasksView,
+  TranscriptView,
 } from "@agentherd/host/api";
 import { create } from "zustand";
 import type { Bridge } from "../../shared/bridge";
+
+export type { TranscriptView };
 
 // Core types, derived from the host API so the renderer depends on one package only.
 export type Task = TasksView["tasks"][number];

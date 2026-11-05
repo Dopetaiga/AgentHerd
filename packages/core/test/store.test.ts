@@ -272,10 +272,10 @@ describe("Store (file-backed)", () => {
     first.close();
 
     const raw = new DatabaseSync(dbPath);
-    raw.exec("UPDATE schema_version SET version = 3");
+    raw.exec("UPDATE schema_version SET version = 4");
     raw.close();
 
-    expect(() => Store.open(dbPath)).toThrow("unsupported herd.db schema version 3");
+    expect(() => Store.open(dbPath)).toThrow("unsupported herd.db schema version 4");
   });
 });
 
@@ -340,6 +340,37 @@ describe("Store (state)", () => {
     const migrated = Store.open(dbPath);
     migrated.setState("relay", { taskId: "task-1" });
     expect(migrated.getState<{ taskId: string }>("relay")).toEqual({ taskId: "task-1" });
+    migrated.close();
+  });
+});
+
+describe("Store (transcript)", () => {
+  it("keeps a task's lines in order, with tool statuses and secrets redacted", () => {
+    const store = Store.open(":memory:", { secrets: { key: "sk-secret-123456" } });
+    store.addTranscript("t1", "prompt", "Fix the test");
+    store.addTranscript("t1", "tool", "npm test", { id: "c1", status: "pending" });
+    store.addTranscript("t2", "agent", "other task");
+    store.addTranscript("t1", "agent", "Used sk-secret-123456 to log in");
+    store.setToolStatus("t1", "c1", "completed");
+    const lines = store.transcript("t1");
+    expect(lines.map((l) => [l.role, l.text, l.status])).toEqual([
+      ["prompt", "Fix the test", undefined],
+      ["tool", "npm test", "completed"],
+      ["agent", expect.not.stringContaining("sk-secret-123456"), undefined],
+    ]);
+  });
+
+  it("adds the transcript table to a version-2 database", () => {
+    const dir = mkdtempSync(join(tmpdir(), "agentherd-core-"));
+    const dbPath = join(dir, "herd.db");
+    Store.open(dbPath).close();
+    const raw = new DatabaseSync(dbPath);
+    raw.exec("DROP TABLE transcript");
+    raw.exec("UPDATE schema_version SET version = 2");
+    raw.close();
+    const migrated = Store.open(dbPath);
+    migrated.addTranscript("t1", "note", "hello");
+    expect(migrated.transcript("t1")).toHaveLength(1);
     migrated.close();
   });
 });

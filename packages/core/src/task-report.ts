@@ -43,8 +43,15 @@ export async function askSummary(
   f: Following,
 ): Promise<SummaryAnswer> {
   f.turn = { text: "", toolCalls: 0 };
+  f.pending = "";
   const max = ctx.opts.reportMaxChars ?? REPORT_MAX_CHARS;
-  await connection.prompt(agentSessionId, summaryPrompt(max, ctx.texts));
+  const prompt = summaryPrompt(max, ctx.texts);
+  ctx.store.addTranscript(f.task.id, "prompt", prompt);
+  try {
+    await connection.prompt(agentSessionId, prompt);
+  } finally {
+    flushReply(ctx, f);
+  }
   return { text: f.turn.text, toolCalls: f.turn.toolCalls };
 }
 
@@ -100,4 +107,11 @@ export async function onAlarm(ctx: HerdContext, alarm: Alarm): Promise<void> {
     title: f.task.title,
     text: alarm.detail,
   });
+}
+
+/** Moves reply text gathered since the last tool call into the task's transcript. */
+export function flushReply(ctx: HerdContext, f: Following): void {
+  const text = f.pending ?? "";
+  f.pending = "";
+  if (text.trim() !== "") ctx.store.addTranscript(f.task.id, "agent", text.trim());
 }

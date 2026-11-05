@@ -15,9 +15,30 @@ import {
   toSessionRow,
   toStoredItem,
 } from "./store-rows.ts";
-import { LATEST_SCHEMA_VERSION, SCHEMA_SQL, STATE_TABLE_SQL } from "./store-schema.ts";
+import {
+  LATEST_SCHEMA_VERSION,
+  SCHEMA_SQL,
+  STATE_TABLE_SQL,
+  TRANSCRIPT_TABLE_SQL,
+} from "./store-schema.ts";
 
 export type { AuditRow, DecisionRow, SessionRow, StoredItem } from "./store-rows.ts";
+
+/** One line of a task's conversation. */
+export interface TranscriptEntry {
+  id: number;
+  at: string;
+  /** prompt: what AgentHerd sent the agent; agent: its reply; tool: a tool call; note: an event. */
+  role: "prompt" | "agent" | "tool" | "note";
+  text: string;
+  /** Tool calls only: pending, in_progress, completed or failed. */
+  status?: string;
+}
+
+/** Entries kept per task; older ones are dropped. */
+export const TRANSCRIPT_MAX_ENTRIES = 2000;
+/** Characters kept per entry. */
+export const TRANSCRIPT_MAX_CHARS = 20_000;
 
 export interface StoreOptions {
   secrets?: Record<string, string>;
@@ -65,6 +86,10 @@ export class Store {
       if (version < 2) {
         this.db.exec(STATE_TABLE_SQL);
         this.db.prepare("UPDATE schema_version SET version = ?").run(2);
+      }
+      if (version < 3) {
+        this.db.exec(TRANSCRIPT_TABLE_SQL);
+        this.db.prepare("UPDATE schema_version SET version = ?").run(3);
       }
     }
 
@@ -268,6 +293,55 @@ export class Store {
   auditRows(kind?: string): AuditRow[] {
     const rows = kind === undefined ? this.stmtAuditRows.all() : this.stmtAuditRowsByKind.all(kind);
     return rows.map(toAuditRow);
+  }
+
+  /** Adds a line to a task's conversation (secrets redacted). */
+  addTranscript(
+    taskId: string,
+    role: TranscriptEntry["role"],
+    text: string,
+    tool?: { id: string; status?: string },
+  ): void {
+    const cut =
+      text.length > TRANSCRIPT_MAX_CHARS ? `${text.slice(0, TRANSCRIPT_MAX_CHARS)}…` : text;
+    this.db
+      .prepare(
+        "INSERT INTO transcript(task_id, at, role, text, tool_call_id, status) VALUES (?, ?, ?, ?, ?, ?)",
+      )
+      .run(
+        taskId,
+        new Date().toISOString(),
+        role,
+        redact(cut, this.secrets),
+        tool?.id ?? null,
+        tool?.status ?? null,
+      );
+  }
+
+  /** Sets the status of a tool call already in the conversation. */
+  setToolStatus(taskId: string, toolCallId: string, status: string): void {
+    this.db
+      .prepare("UPDATE transcript SET status = ? WHERE task_id = ? AND tool_call_id = ?")
+      .run(status, taskId, toolCallId);
+  }
+
+  /** The last {@link TRANSCRIPT_MAX_ENTRIES} lines of a task's conversation, oldest first. */
+  transcript(taskId: string): TranscriptEntry[] {
+    const rows = this.db
+      .prepare(
+        "SELECT id, at, role, text, status FROM transcript WHERE task_id = ? ORDER BY id DESC LIMIT ?",
+      )
+      .all(taskId, TRANSCRIPT_MAX_ENTRIES);
+    return rows.reverse().map((r) => {
+      const e: TranscriptEntry = {
+        id: Number(r.id),
+        at: String(r.at),
+        role: r.role as TranscriptEntry["role"],
+        text: String(r.text),
+      };
+      if (typeof r.status === "string") e.status = r.status;
+      return e;
+    });
   }
 
   getState<T>(key: string): T | undefined {

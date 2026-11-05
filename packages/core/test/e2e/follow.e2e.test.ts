@@ -192,3 +192,24 @@ turns:
     );
   });
 });
+
+describe("E2E-TRANSCRIPT", () => {
+  it("records the prompt, the reply around tool calls, and the summary turn", async () => {
+    const { herd } = await setup(`
+turns:
+  - - message: "Looking at the tests. "
+    - tool_call: { id: t1, title: "Run tests", kind: execute, command: "npm test" }
+    - message: "All 42 tests pass."
+    - end_turn: end_turn
+`);
+    await herd.run("mock", dir, "Fix the flaky test");
+    const { entries, live } = herd.transcript(herd.tasks()[0]?.id ?? "");
+    expect(entries.map((e) => [e.role, e.text, e.status])).toEqual([
+      ["prompt", "Fix the flaky test", undefined],
+      ["agent", "Looking at the tests.", undefined],
+      ["tool", "npm test", "completed"],
+      ["agent", "All 42 tests pass.", undefined],
+    ]);
+    expect(live).toBe("");
+  });
+});

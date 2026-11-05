@@ -85,6 +85,8 @@ export interface Following {
   endedWhy?: string;
   /** Text and tool calls of the current turn. */
   turn: { text: string; toolCalls: number };
+  /** Reply text since the last tool call, not yet in the transcript. */
+  pending?: string;
   /** Turns that ended normally; a model switch only happens before the first. */
   turnsEnded?: number;
   /** Models this task already ran into an error with. */

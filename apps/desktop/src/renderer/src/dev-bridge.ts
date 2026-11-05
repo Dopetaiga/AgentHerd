@@ -14,6 +14,7 @@
 //   add-builtin      the 添加服务 form of OpenRouter, with a few models chosen
 //   add-custom       the 添加服务 form of an OpenAI-compatible address
 //   edit-<id>        the edit dialog of the service <id> (deepseek, gateway)
+//   task-<id>        the conversation of the task <id> (s2 has one)
 
 import type {
   AgentView,
@@ -26,7 +27,13 @@ import type {
   Tier,
 } from "@agentherd/host/api";
 import type { Bridge } from "../../shared/bridge";
-import { PLACEHOLDER_QR, providers, sampleServices, sampleTasks } from "./dev-fixtures";
+import {
+  PLACEHOLDER_QR,
+  providers,
+  sampleServices,
+  sampleTasks,
+  sampleTranscript,
+} from "./dev-fixtures";
 
 type Listener<T> = (value: T) => void;
 
@@ -265,6 +272,7 @@ function installFakeBridge(): void {
       return delay(status, 900);
     },
     tasks: () => delay(tasks),
+    transcript: (taskId) => delay(sampleTranscript(taskId)),
     providers: () => delay(providers),
     models: () => delay(models),
     putService: (service, key) => {

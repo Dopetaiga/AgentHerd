@@ -52,6 +52,7 @@ import type {
   SetupState,
   TasksView,
   Tier,
+  TranscriptView,
 } from "./api.ts";
 import type { AgentDef, Fetchers } from "./catalog.ts";
 import { type CliConfig, readConfig, writeConfig } from "./config.ts";
@@ -388,6 +389,10 @@ export class Host implements HostApi {
       };
     });
     return { tasks, items };
+  }
+
+  transcript(taskId: string): TranscriptView {
+    return this.herd?.transcript(taskId) ?? { entries: [], live: "" };
   }
 
   providers(): ProviderView[] {

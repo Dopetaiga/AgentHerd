@@ -41,8 +41,15 @@ export {
   reportView,
   summaryPrompt,
 } from "./report.ts";
-export type { AuditRow, DecisionRow, SessionRow, StoredItem, StoreOptions } from "./store.ts";
-export { Store } from "./store.ts";
+export type {
+  AuditRow,
+  DecisionRow,
+  SessionRow,
+  StoredItem,
+  StoreOptions,
+  TranscriptEntry,
+} from "./store.ts";
+export { Store, TRANSCRIPT_MAX_CHARS, TRANSCRIPT_MAX_ENTRIES } from "./store.ts";
 export type { StageInput, Task } from "./tasks.ts";
 export { projectName, sortForBoard, stageOf, TITLE_MAX_CHARS, taskTitle } from "./tasks.ts";
 export { CORE_TEXTS, type CoreTexts, coreTexts } from "./texts.ts";

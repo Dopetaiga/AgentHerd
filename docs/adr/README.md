@@ -35,3 +35,4 @@ Format and rules: [ADR 0001](0001-record-architecture-decisions.md).
 | [0029](0029-only-mass-deletes-ask-the-owner.md) | Only a mass delete asks the owner; AgentHerd approves everything else | Accepted |
 | [0030](0030-switch-model-when-a-turn-breaks-before-acting.md) | Switch the model and run again when a task's first turn breaks before it acts | Accepted |
 | [0031](0031-pick-the-agent-from-the-model.md) | No agent choice: GPT models run in Codex, the rest in Pi; DSH only when named; OpenCode, Gemini CLI, Claude Code removed | Accepted |
+| [0032](0032-task-conversation-in-the-app.md) | Each task's conversation (prompts, replies, tool calls) opens from the 任务 page | Accepted |
