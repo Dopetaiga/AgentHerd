@@ -5,6 +5,7 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "n
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { ModelSettings, SecretStore } from "@agentherd/core";
+import type { ModelTiers } from "@agentherd/herder";
 import type { AgentProfile, ChannelBinding, Locale, Mode } from "@agentherd/protocol";
 
 export interface CliConfig {
@@ -18,8 +19,8 @@ export interface CliConfig {
   models?: ModelSettings;
   /** Keep the Mac awake while tasks run (desktop app). */
   keepAwake?: boolean;
-  /** The owner's model guide for the Herder (ADR 0026); unset = AgentHerd's default. */
-  modelGuide?: string;
+  /** Where the owner dragged models to (ADR 0028); models not here are placed by name. */
+  modelTiers?: Partial<ModelTiers>;
 }
 
 export function agentherdHome(env: NodeJS.ProcessEnv = process.env): string {

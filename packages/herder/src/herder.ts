@@ -16,7 +16,7 @@ export interface HerderOptions {
   streamFn: StreamFn;
   getApiKey?: (provider: string) => string | undefined | Promise<string | undefined>;
   maxSavedMessages?: number;
-  /** The model guide for picking a task's model (ADR 0026). Read at each session_list. */
+  /** The model tiers as text, for picking a task's model (ADR 0028). Read at each session_list. */
   modelGuide?: () => string;
 }
 

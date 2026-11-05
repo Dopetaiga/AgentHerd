@@ -1,6 +1,6 @@
 # ADR 0026: A model guide tells the Herder which models are strong; the owner can edit it
 
-- Status: Accepted
+- Status: Superseded by [ADR 0028](0028-model-tiers-by-drag.md)
 - Date: 2026-11-05
 - Related: [ADR 0025](0025-herder-picks-model-per-task.md)
 

@@ -19,15 +19,17 @@ import {
 import {
   builtinBaseUrls,
   builtinProviders,
-  DEFAULT_MODEL_GUIDE,
-  effectiveModelGuide,
   herderFromSettings,
   modelChoices,
   modelEnvFor,
   piModelEnv,
+  placeModels,
   resolveModel,
   serviceKey,
+  TIERS,
+  type TierPlacement,
   testModel,
+  tiersText,
 } from "@agentherd/herder";
 import type { AgentProfile, Channel, Locale, Mode, SetupUI } from "@agentherd/protocol";
 import { DEFAULT_LOCALE } from "@agentherd/protocol";
@@ -40,14 +42,15 @@ import type {
   HostEvent,
   HostStatus,
   ItemSummary,
-  ModelGuideView,
   ModelsView,
   ModelTest,
+  ModelTiersView,
   PiDesktopImport,
   ProviderView,
   SettingsPatch,
   SetupState,
   TasksView,
+  Tier,
 } from "./api.ts";
 import type { AgentDef, Fetchers } from "./catalog.ts";
 import { type CliConfig, readConfig, writeConfig } from "./config.ts";
@@ -269,14 +272,14 @@ export class Host implements HostApi {
 
   private herderFactory() {
     const choice = herderFromSettings(this.settings(), this.opts.secrets, this.opts.env, () =>
-      effectiveModelGuide(this.config().modelGuide),
+      tiersText(this.placement()),
     );
     return "factory" in choice ? choice.factory : undefined;
   }
 
   private refreshHerderChoice(): void {
     const choice = herderFromSettings(this.settings(), this.opts.secrets, this.opts.env, () =>
-      effectiveModelGuide(this.config().modelGuide),
+      tiersText(this.placement()),
     );
     if ("reason" in choice) {
       this.herderReason = choice.reason;
@@ -510,23 +513,44 @@ export class Host implements HostApi {
     return this.status();
   }
 
-  modelGuide(): ModelGuideView {
-    const own = this.config().modelGuide?.trim();
-    return {
-      text: effectiveModelGuide(own),
-      custom: own !== undefined && own !== "",
-      defaultText: DEFAULT_MODEL_GUIDE,
-    };
+  private placement(): TierPlacement {
+    const refs = this.settings().services.flatMap((s) => s.models.map((m) => `${s.id}/${m}`));
+    return placeModels(refs, this.config().modelTiers);
   }
 
-  setModelGuide(text: string | null): ModelGuideView {
+  modelTiers(): ModelTiersView {
+    const names = new Map(this.settings().services.map((s) => [s.id, s.name]));
+    const placement = this.placement();
+    const tiers = {} as ModelTiersView["tiers"];
+    for (const tier of TIERS) {
+      tiers[tier] = placement[tier].map(({ ref, auto }) => {
+        const slash = ref.indexOf("/");
+        const serviceId = ref.slice(0, slash);
+        return {
+          ref,
+          model: ref.slice(slash + 1),
+          serviceName: names.get(serviceId) ?? serviceId,
+          auto,
+        };
+      });
+    }
+    return { tiers, custom: this.config().modelTiers !== undefined };
+  }
+
+  setModelTiers(tiers: Record<Tier, string[]> | null): ModelTiersView {
     const next: CliConfig = { ...this.config() };
-    const own = text?.trim();
-    if (own === undefined || own === "" || own === DEFAULT_MODEL_GUIDE.trim())
-      delete next.modelGuide;
-    else next.modelGuide = own;
+    if (tiers === null) delete next.modelTiers;
+    else {
+      const clean: Record<Tier, string[]> = { strong: [], balanced: [], fast: [] };
+      for (const tier of TIERS) {
+        const list = tiers[tier];
+        if (!Array.isArray(list)) throw new Error(`tier "${tier}" must be a list of models`);
+        clean[tier] = list.filter((r): r is string => typeof r === "string");
+      }
+      next.modelTiers = clean;
+    }
     writeConfig(this.opts.home, next);
-    return this.modelGuide();
+    return this.modelTiers();
   }
 }
 

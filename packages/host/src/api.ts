@@ -133,12 +133,23 @@ export interface SettingsPatch {
 }
 
 /** Everything the host offers. Each method is one request on the socket. */
-export interface ModelGuideView {
-  /** The guide in effect. */
-  text: string;
-  /** True when the owner wrote it; false when it is AgentHerd's default. */
+export type Tier = "strong" | "balanced" | "fast";
+
+/** One model in the tier board. */
+export interface TierModelView {
+  /** `service/model`. */
+  ref: string;
+  model: string;
+  serviceName: string;
+  /** True when placed by AgentHerd's name rules, not by the owner. */
+  auto: boolean;
+}
+
+/** The owner's models in three tiers (ADR 0028). */
+export interface ModelTiersView {
+  tiers: Record<Tier, TierModelView[]>;
+  /** True when the owner has placed any model. */
   custom: boolean;
-  defaultText: string;
 }
 
 export interface HostApi {
@@ -159,10 +170,10 @@ export interface HostApi {
   cancelSetup(): SetupState;
   setupState(): SetupState;
   updateSettings(patch: SettingsPatch): HostStatus;
-  /** The guide the Herder reads to pick a task's model (ADR 0026). */
-  modelGuide(): ModelGuideView;
-  /** Saves the owner's guide; null or "" goes back to AgentHerd's default. */
-  setModelGuide(text: string | null): ModelGuideView;
+  /** The owner's models in tiers; the Herder reads them to pick a task's model (ADR 0028). */
+  modelTiers(): ModelTiersView;
+  /** Saves where the owner put each model; null forgets it and uses the name rules. */
+  setModelTiers(tiers: Record<Tier, string[]> | null): ModelTiersView;
   /** Connects the channel again, e.g. after a network failure. */
   reconnect(): Promise<HostStatus>;
   agents(): AgentView[];
@@ -192,8 +203,8 @@ export const HOST_METHODS: readonly HostMethod[] = [
   "cancelSetup",
   "setupState",
   "updateSettings",
-  "modelGuide",
-  "setModelGuide",
+  "modelTiers",
+  "setModelTiers",
   "reconnect",
   "agents",
   "installAgent",

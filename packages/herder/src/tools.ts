@@ -274,6 +274,6 @@ function modelLines(host: HerderHost, modelGuide?: () => string): string[] {
   if (models.length === 0) return ["(none; agents use their own settings)"];
   const lines = models.map((m) => `- ${m.ref}: ${m.agents.join(", ") || "(no agent can run it)"}`);
   const guide = modelGuide?.().trim();
-  if (guide) lines.push("Model guide (advice from the owner for picking a model):", guide);
+  if (guide) lines.push(guide);
   return lines;
 }
