@@ -2,6 +2,7 @@
 
 import { randomUUID } from "node:crypto";
 import { type AgentConnection, startAgent } from "@agentherd/acp-client";
+import type { AgentProfile } from "@agentherd/protocol";
 import {
   type Following,
   firstLine,
@@ -17,6 +18,8 @@ import { askSummary, sendReport, setReport } from "./task-report.ts";
 import { projectName, taskTitle } from "./tasks.ts";
 
 export const SESSION_IDLE_MINUTES = 60;
+/** At most this many models are tried for one task before it fails. */
+export const MAX_MODEL_SWITCHES = 3;
 
 export class TaskRunner {
   private readonly ctx: HerdContext;
@@ -219,6 +222,67 @@ export class TaskRunner {
     });
   }
 
+  /**
+   * When the task's model broke its first turn before any text or tool call, restarts the agent
+   * on the next model that answers (ADR 0030). False when the task keeps failing.
+   */
+  private async switchModel(f: Following, why: string): Promise<boolean> {
+    const { ctx } = this;
+    const models = ctx.opts.agentModels;
+    const failed = f.task.model;
+    if (models?.next === undefined || failed === undefined || f.endedWhy !== undefined)
+      return false;
+    if ((f.turnsEnded ?? 0) > 0 || f.turn.text.trim() !== "" || f.turn.toolCalls > 0) return false;
+    const tried = f.triedModels ?? [];
+    if (!tried.includes(failed)) tried.push(failed);
+    f.triedModels = tried;
+    if (tried.length > MAX_MODEL_SWITCHES) return false;
+    const base = ctx.opts.profiles.find((p) => p.id === f.profile.id);
+    if (base === undefined) return false;
+    let ref: string | undefined;
+    let profile: AgentProfile;
+    try {
+      ref = await models.next(base.id, failed, tried);
+      if (ref === undefined) return false;
+      profile = { ...base, env: { ...base.env, ...models.envFor(base.id, ref) } };
+    } catch {
+      return false;
+    }
+    for (const off of f.offs) off();
+    f.offs = [];
+    const old = f.connection;
+    delete f.connection;
+    await old?.close();
+    try {
+      const connection = await startAgent(profile, { cwd: f.cwd });
+      f.connection = connection;
+      f.agentSessionId = await connection.newSession(f.cwd);
+    } catch (error) {
+      ctx.store.audit("task.model-switch-failed", {
+        taskId: f.task.id,
+        to: ref,
+        message: (error as Error).message,
+      });
+      return false;
+    }
+    f.profile = profile;
+    f.failed = false;
+    f.task.model = ref;
+    f.task.agent = `${profile.name} · ${ref}`;
+    f.hinted = false;
+    this.listen(f, f.connection, f.agentSessionId);
+    const short = why.length > 200 ? `${why.slice(0, 200)}…` : why;
+    ctx.store.audit("task.model-switched", {
+      taskId: f.task.id,
+      from: failed,
+      to: ref,
+      why: short,
+    });
+    await say(ctx, ctx.texts.modelSwitched(failed, ref, short), f.task.title);
+    ctx.board.changed();
+    return true;
+  }
+
   private async runTurn(f: Following, text: string): Promise<RunResult> {
     const { ctx } = this;
     const sessionId = f.task.id;
@@ -240,6 +304,7 @@ export class TaskRunner {
       const { stopReason } = await connection.prompt(agentSessionId, prompt);
       ctx.watchdog.turnEnded(sessionId);
       f.finished = stopReason === "end_turn";
+      f.turnsEnded = (f.turnsEnded ?? 0) + 1;
       ctx.store.audit("turn.ended", { sessionId, stopReason });
       ctx.registry.set(sessionId, "idle");
       await ctx.inbox.expireSession(sessionId, ctx.texts.turnEnded);
@@ -257,6 +322,7 @@ export class TaskRunner {
       // the agent's exit.
       const message = f.endedWhy ?? (error as Error).message;
       ctx.watchdog.turnEnded(sessionId);
+      if (await this.switchModel(f, message)) return this.runTurn(f, text);
       if (ctx.registry.get(sessionId)?.state !== "ended") ctx.registry.set(sessionId, "error");
       await sendReport(ctx, f, ctx.texts.failedBody(message), null);
       await this.ops.endTask(sessionId, ctx.texts.turnFailed);

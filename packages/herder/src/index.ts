@@ -44,4 +44,11 @@ export {
   quoteAgent,
   systemPrompt,
 } from "./prompt.ts";
-export { findTasks, herderTools, isVerbatim, resolveProject, type TurnContext } from "./tools.ts";
+export {
+  fallbackOrder,
+  findTasks,
+  herderTools,
+  isVerbatim,
+  resolveProject,
+  type TurnContext,
+} from "./tools.ts";

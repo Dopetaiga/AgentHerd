@@ -99,3 +99,78 @@ describe("E2E-MODEL-PER-TASK", () => {
     );
   });
 });
+
+describe("E2E-MODEL-FALLBACK", () => {
+  /** An agent that crashes before saying anything when its model is svc/broken. */
+  function switching(): AgentProfile {
+    const good = join(dir, "good.yaml");
+    writeFileSync(good, ONE_TURN);
+    const bad = join(dir, "bad.yaml");
+    writeFileSync(bad, "turns:\n  - - crash: 1\n");
+    const wrapper = join(dir, "switch.mjs");
+    writeFileSync(
+      wrapper,
+      `process.argv.push("--script", process.env.TEST_MODEL === "svc/broken" ? ${JSON.stringify(bad)} : ${JSON.stringify(good)});
+await import(${JSON.stringify(BIN)});
+`,
+    );
+    return {
+      id: "mock",
+      name: "Mock",
+      command: [process.execPath, wrapper],
+      env: {},
+      exporter: null,
+    };
+  }
+
+  async function start(next: AgentModels["next"]) {
+    const channel = new FakeChannel("owner");
+    const store = Store.open(":memory:");
+    const herd = new Herd({
+      home: dir,
+      userHome: "/Users/me",
+      channel,
+      binding: { channelId: "fake", ownerId: "owner", data: {} },
+      mode: "assist",
+      locale: "en",
+      profiles: [switching()],
+      store,
+      boardDebounceMs: 10,
+      agentModels: {
+        list: () => [
+          { ref: "svc/broken", agents: ["mock"] },
+          { ref: "svc/good", agents: ["mock"] },
+        ],
+        envFor: (_p, ref) => ({ TEST_MODEL: ref }),
+        ...(next === undefined ? {} : { next }),
+      },
+    });
+    herds.push(herd);
+    await herd.start();
+    return { channel, store, herd };
+  }
+
+  it("runs the turn again on the next model when the first broke before doing anything", async () => {
+    const asked: string[][] = [];
+    const { channel, store, herd } = await start(async (_p, failed, tried) => {
+      asked.push([failed, ...tried]);
+      return "svc/good";
+    });
+    const { taskId, turn } = await herd.startTask("mock", dir, "fix it", "fix it", "svc/broken");
+    expect((await turn).stopReason).toBe("end_turn");
+    expect(asked).toEqual([["svc/broken", "svc/broken"]]);
+    const task = herd.tasks().find((t) => t.id === taskId);
+    expect(task?.model).toBe("svc/good");
+    expect(store.auditRows("task.model-switched")).toHaveLength(1);
+    const notes = channel.ofKind("text").map((m) => JSON.stringify(m.view));
+    expect(notes.some((n) => n.includes("running again with svc/good"))).toBe(true);
+    const report = channel.ofKind("report").map((m) => m.view as ReportView)[0];
+    expect(report?.title).toContain("Mock · svc/good");
+  });
+
+  it("fails as before when no other model answers", async () => {
+    const { herd } = await start(async () => undefined);
+    const { turn } = await herd.startTask("mock", dir, "fix it", "fix it", "svc/broken");
+    await expect(turn).rejects.toThrow();
+  });
+});
