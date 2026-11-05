@@ -64,19 +64,23 @@
   --ah-shadow-dialog: 0 16px 48px rgba(0, 0, 0, 0.5);
   --ah-shadow-toast: 0 8px 24px rgba(0, 0, 0, 0.4);
 
-  /* Type: six steps, a mac-like 13px body. */
-  --ah-text-sm: 12px;
-  --ah-text-md: 13px;
-  --ah-text-lg: 14px;
-  --ah-text-xl: 16px;
-  --ah-text-2xl: 18px;
-  --ah-text-3xl: 24px;
-  --ah-leading-sm: 16px;
-  --ah-leading-md: 18px;
-  --ah-leading-lg: 20px;
-  --ah-leading-xl: 22px;
-  --ah-leading-2xl: 24px;
-  --ah-leading-3xl: 30px;
+  /* Type: six steps, a mac-like 13px body, times the owner's font size (设置 → 字体大小).
+     --ah-font-scale is set on <html> by src/font-scale.ts. */
+  --ah-font-scale: 1;
+  --ah-text-xs: calc(11px * var(--ah-font-scale));
+  --ah-text-sm: calc(12px * var(--ah-font-scale));
+  --ah-text-md: calc(13px * var(--ah-font-scale));
+  --ah-text-lg: calc(14px * var(--ah-font-scale));
+  --ah-text-xl: calc(16px * var(--ah-font-scale));
+  --ah-text-2xl: calc(18px * var(--ah-font-scale));
+  --ah-text-3xl: calc(24px * var(--ah-font-scale));
+  --ah-leading-sm: calc(16px * var(--ah-font-scale));
+  --ah-leading-md: calc(18px * var(--ah-font-scale));
+  --ah-leading-lg: calc(20px * var(--ah-font-scale));
+  --ah-leading-xl: calc(22px * var(--ah-font-scale));
+  --ah-leading-2xl: calc(24px * var(--ah-font-scale));
+  --ah-leading-3xl: calc(30px * var(--ah-font-scale));
+  --ah-leading-xs: calc(14px * var(--ah-font-scale));
 
   /* Spacing. */
   --ah-space-1: 4px;

@@ -1,10 +1,12 @@
-// 设置: the Feishu channel, mode, keep awake, the first run, and where AgentHerd keeps its files.
+// 设置: the Feishu channel, mode, font size, keep awake, the first run, and where AgentHerd keeps
+// its files.
 
 import type { SettingsPatch } from "@agentherd/host/api";
-import { Check, Eye, FolderOpen, Hand, Info, MoonStar, Rocket } from "lucide-react";
+import { Check, Eye, FolderOpen, Hand, Info, MoonStar, Rocket, Type } from "lucide-react";
 import { useState } from "react";
 import { FeishuSection } from "../components/FeishuSection";
-import { Button, Group, IconTile, Row, Section, Switch } from "../components/ui";
+import { Button, Group, IconTile, Row, Section, Segmented, Switch } from "../components/ui";
+import { FONT_SCALES, setFontScale, useFontScale } from "../font-scale";
 import { call, type Mode, useApp } from "../store";
 
 const MODES: { mode: Mode; title: string; hint: string; icon: typeof Eye }[] = [
@@ -16,6 +18,7 @@ export function SettingsPage() {
   const status = useApp((s) => s.status);
   const openFirstRun = useApp((s) => s.openFirstRun);
   const [busy, setBusy] = useState(false);
+  const fontScale = useFontScale();
 
   const update = async (patch: SettingsPatch) => {
     setBusy(true);
@@ -61,6 +64,28 @@ export function SettingsPage() {
           {!MODES.some((m) => m.mode === status.mode) && (
             <div className="px-4 py-2.5 text-ink-muted text-sm">当前模式：{status.mode}</div>
           )}
+        </Group>
+      </Section>
+
+      <Section title="外观">
+        <Group>
+          <Row
+            icon={
+              <IconTile>
+                <Type size={15} strokeWidth={1.75} />
+              </IconTile>
+            }
+            title="字体大小"
+            description="整个界面的文字大小，只对这台电脑生效"
+            trailing={
+              <Segmented
+                label="字体大小"
+                options={FONT_SCALES}
+                value={fontScale}
+                onChange={setFontScale}
+              />
+            }
+          />
         </Group>
       </Section>
 

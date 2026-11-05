@@ -52,8 +52,8 @@
   --color-danger-soft-hover: var(--ah-danger-soft-hover);
   --color-paper: var(--ah-paper);
 
-  --text-xs: 11px;
-  --text-xs--line-height: 14px;
+  --text-xs: var(--ah-text-xs);
+  --text-xs--line-height: var(--ah-leading-xs);
   --text-sm: var(--ah-text-sm);
   --text-sm--line-height: var(--ah-leading-sm);
   --text-md: var(--ah-text-md);
