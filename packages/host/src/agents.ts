@@ -5,7 +5,7 @@ import { existsSync } from "node:fs";
 import type { AgentProfile } from "@agentherd/protocol";
 import type { AgentSource, AgentView } from "./api.ts";
 import { AGENTS, type AgentDef, type Fetchers, httpFetchers, npmRuntime } from "./catalog.ts";
-import { DSH_APP_BIN, onPath } from "./profiles.ts";
+import { dshAppBins, onPath } from "./profiles.ts";
 import { currentTarget, type InstallProgress, type RuntimeStore } from "./runtimes.ts";
 
 export interface AgentsOptions {
@@ -56,7 +56,7 @@ export class Agents {
     return (this.opts.exists ?? existsSync)(path);
   }
 
-  /** Where `id` runs from: its env variable, then the app's download, then PATH, then its app. */
+  /** Where `id` runs from: its env variable, then the app's download, then PATH and the DSH app. */
   find(id: string): AgentPath | undefined {
     const def = this.catalog.find((d) => d.id === id);
     if (def === undefined) return undefined;
@@ -67,14 +67,29 @@ export class Agents {
       return { path: managed.path, source: "managed", version: managed.version };
     }
     const platform = this.opts.platform ?? process.platform;
+    const app = (): AgentPath | undefined => {
+      if (id !== "dsh") return undefined;
+      const path = this.dshApps(platform).find((p) => this.exists(p));
+      return path === undefined ? undefined : { path, source: "app" };
+    };
+    // On Windows the app comes first: the `dsh` on PATH is usually the npm launcher, which
+    // lacks the `acp` profile unless installed separately (see findAgent).
+    if (platform === "win32") {
+      const fromApp = app();
+      if (fromApp !== undefined) return fromApp;
+    }
     const onSystem = onPath(def.systemNames, this.env.PATH, (p) => this.exists(p), platform);
     if (onSystem !== undefined) return { path: onSystem, source: "system" };
-    if (id === "dsh") {
-      // The default is the macOS app bundle; other systems only use an explicit one.
-      const app = this.opts.dshApp ?? (platform === "win32" ? undefined : DSH_APP_BIN);
-      if (app !== undefined && this.exists(app)) return { path: app, source: "app" };
-    }
-    return undefined;
+    return platform === "win32" ? undefined : app();
+  }
+
+  private appBins: string[] | undefined;
+
+  /** The DSH app's CLI candidates; the registry is read once per host. */
+  private dshApps(platform: NodeJS.Platform): string[] {
+    if (this.opts.dshApp !== undefined) return [this.opts.dshApp];
+    this.appBins ??= dshAppBins(platform);
+    return this.appBins;
   }
 
   views(configured: AgentProfile[], modelRefs: Record<string, string>): AgentView[] {

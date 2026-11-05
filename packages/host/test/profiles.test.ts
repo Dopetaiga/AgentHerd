@@ -4,6 +4,8 @@ import {
   availableProfiles,
   commandCandidates,
   DSH_APP_BIN,
+  dshAppBins,
+  dshInstallDirs,
   findAgent,
   resolveProfile,
   searchPath,
@@ -142,20 +144,65 @@ describe("findAgent on Windows", () => {
       paths.includes(p);
   const PATH = "C:\\a;C:\\nodejs";
 
+  const APP = "D:\\Apps\\DSH\\resources\\runtime\\cli\\bin\\dsh.cmd";
+  const noApp = () => [];
+
   it("finds npm's .cmd shim, not the shell script beside it", () => {
     const found = findAgent(
       "dsh",
       { PATH },
       has("C:\\nodejs\\dsh", "C:\\nodejs\\dsh.cmd"),
       "win32",
+      noApp,
     );
     expect(found).toBe("C:\\nodejs\\dsh.cmd");
   });
   it("finds an .exe", () => {
     expect(findAgent("pi", { PATH }, has("C:\\a\\pi.exe"), "win32")).toBe("C:\\a\\pi.exe");
   });
+  it("prefers the installed DSH app over the npm launcher on PATH", () => {
+    const found = findAgent("dsh", { PATH }, has("C:\\nodejs\\dsh.cmd", APP), "win32", () => [APP]);
+    expect(found).toBe(APP);
+  });
+  it("still prefers AGENTHERD_DSH", () => {
+    expect(
+      findAgent("dsh", { AGENTHERD_DSH: "C:\\x\\dsh.cmd" }, has(APP), "win32", () => [APP]),
+    ).toBe("C:\\x\\dsh.cmd");
+  });
   it("does not look for the macOS app bundle", () => {
-    expect(findAgent("dsh", { PATH: "" }, () => true, "win32")).toBeUndefined();
+    expect(findAgent("dsh", { PATH: "" }, () => true, "win32", noApp)).toBeUndefined();
+    expect(dshAppBins("win32", () => "")).toEqual([]);
+  });
+});
+
+describe("DSH app on Windows", () => {
+  // `reg query HKCU\...\Uninstall /s /f "DeepSeek Harness" /d` on a per-user install.
+  const OUTPUT = [
+    "",
+    "HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\1bf39983-50d0-5fe0-9ef4-cece76f67c5e",
+    "    DisplayName    REG_SZ    DeepSeek Harness 0.2.1-rc.2",
+    '    UninstallString    REG_SZ    "G:\\Program File\\DSH\\Uninstall DeepSeek Harness.exe" /currentuser',
+    "    DisplayIcon    REG_SZ    G:\\Program File\\DSH\\DeepSeek Harness.exe,0",
+    "",
+    "HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\other",
+    "    DisplayName    REG_SZ    Notes about DeepSeek Harness",
+    "    DisplayIcon    REG_SZ    C:\\Notes\\notes.exe",
+    "",
+    "Search end: 3 match(es) found.",
+  ].join("\r\n");
+
+  it("reads install folders from the uninstall entries", () => {
+    expect(dshInstallDirs(OUTPUT)).toEqual(["G:\\Program File\\DSH"]);
+  });
+  it("points at the CLI launcher in each folder, per-user first", () => {
+    const asked: string[] = [];
+    const bins = dshAppBins("win32", (args) => {
+      asked.push(args[1] ?? "");
+      if (args[1]?.startsWith("HKLM")) throw new Error("ERROR: no match");
+      return OUTPUT;
+    });
+    expect(asked.map((k) => k.slice(0, 4))).toEqual(["HKCU", "HKLM"]);
+    expect(bins).toEqual(["G:\\Program File\\DSH\\resources\\runtime\\cli\\bin\\dsh.cmd"]);
   });
 });
 
