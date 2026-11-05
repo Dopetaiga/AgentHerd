@@ -1,6 +1,6 @@
 // One model service: its models (with a per-model test), key, edit and delete actions.
 
-import { CheckCircle2, ChevronRight, Loader2, Play, XCircle } from "lucide-react";
+import { CheckCircle2, Loader2, Play, XCircle } from "lucide-react";
 import { useState } from "react";
 import { devOpen } from "../dev-bridge";
 import { applyModels, call, errorText, host, type ServiceView, useApp } from "../store";
@@ -16,38 +16,9 @@ type TestResult =
   | { state: "error"; text: string };
 
 export function ServiceCard({ service }: { service: ServiceView }) {
-  const [tests, setTests] = useState<Record<string, TestResult>>({});
-  const [keyOpen, setKeyOpen] = useState(false);
-  const [key, setKey] = useState("");
   const [editing, setEditing] = useState(() => devOpen() === `edit-${service.id}`);
   const [armedDelete, setArmedDelete] = useState(false);
   const [busy, setBusy] = useState(false);
-  // Collapsed by default: a list of services should not read as a wall of model ids.
-  const [open, setOpen] = useState(false);
-
-  const test = async (model: string) => {
-    setTests((t) => ({ ...t, [model]: { state: "running" } }));
-    let result: TestResult;
-    try {
-      const r = await host().testModel({ serviceId: service.id, model });
-      result = r.ok ? { state: "ok", text: r.reply } : { state: "error", text: r.message };
-    } catch (error) {
-      result = { state: "error", text: errorText(error) };
-    }
-    setTests((t) => ({ ...t, [model]: result }));
-  };
-
-  const saveKey = async () => {
-    setBusy(true);
-    const result = await call((h) => h.setKey(service.id, key));
-    setBusy(false);
-    if (result !== undefined) {
-      applyModels(result);
-      useApp.getState().toast(key === "" ? "Key 已删除" : "Key 已保存", "info");
-      setKey("");
-      setKeyOpen(false);
-    }
-  };
 
   const remove = async () => {
     setBusy(true);
@@ -63,15 +34,6 @@ export function ServiceCard({ service }: { service: ServiceView }) {
     <>
       <Group>
         <div className="flex min-h-14 items-center gap-3 px-4 py-2.5">
-          <button
-            type="button"
-            aria-expanded={open}
-            aria-label={open ? "收起模型" : "展开模型"}
-            className="-ml-1 flex size-6 shrink-0 items-center justify-center rounded text-ink-muted hover:bg-hover hover:text-ink"
-            onClick={() => setOpen((o) => !o)}
-          >
-            <ChevronRight size={15} className={`transition-transform ${open ? "rotate-90" : ""}`} />
-          </button>
           <IconTile tone={service.kind === "builtin" ? "blue" : "gray"}>
             <span className="font-semibold text-sm">{service.name.slice(0, 1).toUpperCase()}</span>
           </IconTile>
@@ -89,13 +51,7 @@ export function ServiceCard({ service }: { service: ServiceView }) {
             <div className="selectable mt-0.5 flex min-w-0 items-center gap-1.5 text-ink-muted text-sm">
               <span className="truncate">{where}</span>
               <span className="text-ink-dim">·</span>
-              <button
-                type="button"
-                className="shrink-0 hover:text-ink"
-                onClick={() => setOpen((o) => !o)}
-              >
-                {service.models.length} 个模型
-              </button>
+              <span className="shrink-0">{service.models.length} 个模型</span>
               <span className="text-ink-dim">·</span>
               <span className="flex shrink-0 items-center gap-1">
                 <Dot tone={service.hasKey ? "green" : "amber"} />
@@ -116,7 +72,7 @@ export function ServiceCard({ service }: { service: ServiceView }) {
             ) : (
               <>
                 <Button variant="ghost" onClick={() => setEditing(true)}>
-                  编辑模型
+                  编辑
                 </Button>
                 <Button variant="ghost" onClick={() => setArmedDelete(true)}>
                   删除
@@ -125,87 +81,57 @@ export function ServiceCard({ service }: { service: ServiceView }) {
             )}
           </div>
         </div>
-
-        {open && (
-          <div className="flex min-h-11 items-center gap-2 px-4 py-1.5">
-            <span className="flex-1 font-mono text-ink-muted text-sm">{service.id}</span>
-            {!keyOpen && (
-              <Button variant="ghost" onClick={() => setKeyOpen(true)}>
-                更换 Key
-              </Button>
-            )}
-          </div>
-        )}
-
-        {open && keyOpen && (
-          <div className="flex items-center gap-2 bg-inset px-4 py-2.5">
-            <input
-              type="password"
-              autoFocus
-              autoComplete="off"
-              className={`${inputClass} font-mono`}
-              placeholder="新的 API Key（留空并保存 = 删除已保存的 Key）"
-              value={key}
-              onChange={(e) => setKey(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") void saveKey();
-              }}
-            />
-            <Button variant="primary" onClick={saveKey} disabled={busy}>
-              保存
-            </Button>
-            <Button
-              onClick={() => {
-                setKey("");
-                setKeyOpen(false);
-              }}
-            >
-              取消
-            </Button>
-          </div>
-        )}
-
-        {open &&
-          service.models.map((m) => {
-            const t = tests[m];
-            return (
-              <div key={m} className="flex min-h-11 min-w-0 items-center gap-3 px-4 py-1.5">
-                <span className="selectable shrink-0 truncate font-mono text-ink-2 text-sm">
-                  {m}
-                </span>
-                <span className="min-w-0 flex-1">
-                  {t?.state === "ok" && (
-                    <span className="selectable flex min-w-0 items-center gap-1.5 text-sm text-success-text">
-                      <CheckCircle2 size={13} className="shrink-0" />
-                      <span className="truncate">可用：{t.text}</span>
-                    </span>
-                  )}
-                  {t?.state === "error" && (
-                    <span className="selectable flex min-w-0 items-center gap-1.5 text-danger-text text-sm">
-                      <XCircle size={13} className="shrink-0" />
-                      <span className="truncate" title={t.text}>
-                        {t.text}
-                      </span>
-                    </span>
-                  )}
-                </span>
-                <Button
-                  variant="ghost"
-                  onClick={() => void test(m)}
-                  disabled={t?.state === "running"}
-                >
-                  {t?.state === "running" ? (
-                    <Loader2 size={12} className="animate-spin" />
-                  ) : (
-                    <Play size={12} />
-                  )}
-                  测试
-                </Button>
-              </div>
-            );
-          })}
       </Group>
       {editing && <EditModelsDialog service={service} onClose={() => setEditing(false)} />}
+    </>
+  );
+}
+
+/** Tests one model with the saved key and shows the result inline. */
+function TestModel({ serviceId, model }: { serviceId: string; model: string }) {
+  const [result, setResult] = useState<TestResult | null>(null);
+  const run = async () => {
+    setResult({ state: "running" });
+    try {
+      const r = await host().testModel({ serviceId, model });
+      setResult(r.ok ? { state: "ok", text: r.reply } : { state: "error", text: r.message });
+    } catch (error) {
+      setResult({ state: "error", text: errorText(error) });
+    }
+  };
+  return (
+    <>
+      {result?.state === "ok" && (
+        <span
+          className="flex min-w-0 items-center gap-1 text-sm text-success-text"
+          title={result.text}
+        >
+          <CheckCircle2 size={13} className="shrink-0" />
+          可用
+        </span>
+      )}
+      {result?.state === "error" && (
+        <span
+          className="flex min-w-0 items-center gap-1 text-danger-text text-sm"
+          title={result.text}
+        >
+          <XCircle size={13} className="shrink-0" />
+          <span className="max-w-48 truncate">{result.text}</span>
+        </span>
+      )}
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={() => void run()}
+        disabled={result?.state === "running"}
+      >
+        {result?.state === "running" ? (
+          <Loader2 size={12} className="animate-spin" />
+        ) : (
+          <Play size={12} />
+        )}
+        测试
+      </Button>
     </>
   );
 }
@@ -274,8 +200,17 @@ function EditModelsDialog({ service, onClose }: { service: ServiceView; onClose:
           />
         </SmallField>
       </div>
-      <FieldNote error={null} hint="去掉的模型如果正被使用，对应用途会被清空。" />
-      <ModelPanes options={catalog} selected={picked} onChange={setPicked} disabled={saving} />
+      <FieldNote
+        error={null}
+        hint="「测试」用已保存的 Key。去掉的模型如果正被使用，对应用途会被清空。"
+      />
+      <ModelPanes
+        options={catalog}
+        selected={picked}
+        onChange={setPicked}
+        disabled={saving}
+        rowExtra={(id) => <TestModel serviceId={service.id} model={id} />}
+      />
     </Modal>
   );
 }
