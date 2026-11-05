@@ -37,7 +37,7 @@ export function Modal({
   }, [onClose]);
   if (size === "large") {
     return (
-      <div className="ah-fade-in fixed inset-0 z-40 flex items-center justify-center bg-overlay">
+      <div className="app-no-drag ah-fade-in fixed inset-0 z-40 flex items-center justify-center bg-overlay">
         <div
           role="dialog"
           aria-modal="true"
@@ -70,7 +70,7 @@ export function Modal({
   }
   const widened = wide || size === "wide";
   return (
-    <div className="ah-fade-in fixed inset-0 z-40 flex items-center justify-center bg-overlay p-8">
+    <div className="app-no-drag ah-fade-in fixed inset-0 z-40 flex items-center justify-center bg-overlay p-8">
       <div
         role="dialog"
         aria-modal="true"
