@@ -55,6 +55,7 @@ export interface CoreTexts {
   agentCouldNotStart: string;
   agentExited: string;
   turnFailed: string;
+  modelSwitched(from: string, to: string, why: string): string;
   // Prompts to the agent, labeled as from AgentHerd.
   replyHint(chars: number): string;
   summaryPrompt(chars: number): string;
@@ -123,6 +124,7 @@ const zh: CoreTexts = {
   agentCouldNotStart: "Agent 启动失败",
   agentExited: "Agent 已退出",
   turnFailed: "这一轮执行失败",
+  modelSwitched: (from, to, why) => `${from} 出错（${why}），还没动手，换成 ${to} 重跑`,
   replyHint: (n) =>
     `[AgentHerd] 你的回复会在手机上阅读。每条回复不超过 ${n} 字，先写结论；细节写进文件或提交说明，不要贴长代码或日志。下面是任务原文。`,
   summaryPrompt: (n) =>
@@ -181,6 +183,8 @@ const en: CoreTexts = {
   agentCouldNotStart: "the agent could not start",
   agentExited: "the agent exited",
   turnFailed: "the turn failed",
+  modelSwitched: (from, to, why) =>
+    `${from} failed (${why}) before doing anything; running again with ${to}`,
   replyHint: (n) =>
     [
       "[AgentHerd] Your replies are read on a phone. Keep each reply under",

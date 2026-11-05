@@ -306,13 +306,17 @@ export interface PickedModel {
  * (one service, or every service offering the name), other services offering the same name, the
  * other models of its tier, then the other tiers. Only models the agent can run count.
  */
-async function pickService(
-  host: HerderHost,
+/**
+ * Refs to try for `asked`, in order: `asked` itself (one service, or every service offering the
+ * name), other services offering the same name, the other models of its tier, then the other
+ * tiers. Only models `profile` can run. Throws when the name is unknown or the agent cannot run it.
+ */
+export function fallbackOrder(
+  models: readonly { ref: string; agents: string[] }[],
   asked: string,
   profile: string,
   tiers?: TierPlacement,
-): Promise<PickedModel> {
-  const models = host.models();
+): string[] {
   const nameOf = (ref: string) => ref.slice(ref.indexOf("/") + 1);
   const exact = models.find((m) => m.ref === asked);
   const name = exact !== undefined ? nameOf(exact.ref) : asked;
@@ -336,9 +340,16 @@ async function pickService(
       for (const e of tiers[tier]) for (const ref of byName(e.model)) add(ref);
     }
   }
-  const runnable = order.filter((ref) =>
-    models.find((m) => m.ref === ref)?.agents.includes(profile),
-  );
+  return order.filter((ref) => models.find((m) => m.ref === ref)?.agents.includes(profile));
+}
+
+async function pickService(
+  host: HerderHost,
+  asked: string,
+  profile: string,
+  tiers?: TierPlacement,
+): Promise<PickedModel> {
+  const runnable = fallbackOrder(host.models(), asked, profile, tiers);
   const failures: string[] = [];
   for (const ref of runnable) {
     const check = await host.checkModel(ref);

@@ -33,3 +33,4 @@ Format and rules: [ADR 0001](0001-record-architecture-decisions.md).
 | [0027](0027-import-model-services-from-pi-desktop.md) | Import model services and keys from PI-Desktop | Accepted |
 | [0028](0028-model-tiers-by-drag.md) | Model tiers the owner arranges by dragging, filled in by name | Accepted |
 | [0029](0029-only-mass-deletes-ask-the-owner.md) | Only a mass delete asks the owner; AgentHerd approves everything else | Accepted |
+| [0030](0030-switch-model-when-a-turn-breaks-before-acting.md) | Switch the model and run again when a task's first turn breaks before it acts | Accepted |

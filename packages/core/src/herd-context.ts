@@ -59,6 +59,11 @@ export interface AgentModels {
   envFor(profileId: string, ref: string): Record<string, string>;
   /** Whether the model answers now (a short test call, may be cached). */
   check?(ref: string): Promise<{ ok: true } | { ok: false; message: string }>;
+  /**
+   * The model to switch to when `failed` broke a turn before it did anything, skipping `tried`.
+   * Undefined when none answers.
+   */
+  next?(profileId: string, failed: string, tried: readonly string[]): Promise<string | undefined>;
 }
 
 /** Per-task state that only the Herd and its listeners use. */
@@ -75,6 +80,10 @@ export interface Following {
   endedWhy?: string;
   /** Text and tool calls of the current turn. */
   turn: { text: string; toolCalls: number };
+  /** Turns that ended normally; a model switch only happens before the first. */
+  turnsEnded?: number;
+  /** Models this task already ran into an error with. */
+  triedModels?: string[];
   connection?: AgentConnection;
   agentSessionId?: string;
   offs: (() => void)[];

@@ -19,6 +19,7 @@ import {
 import {
   builtinBaseUrls,
   builtinProviders,
+  fallbackOrder,
   herderFromSettings,
   modelChoices,
   modelEnvFor,
@@ -200,6 +201,7 @@ export class Host implements HostApi {
         envFor: (profileId, ref) =>
           modelEnvFor(this.settings(), this.opts.secrets, profileId, ref, this.opts.env),
         check: (ref) => this.checkModel(ref),
+        next: (profileId, failed, tried) => this.nextModel(profileId, failed, tried),
       },
     });
     herd.registry.onChange(() => this.emitTasks());
@@ -547,6 +549,27 @@ export class Host implements HostApi {
       }));
     }
     return { tiers, custom: this.config().modelTiers !== undefined };
+  }
+
+  /** After `failed` broke a task: the next model in fallback order that answers (ADR 0030). */
+  private async nextModel(
+    profileId: string,
+    failed: string,
+    tried: readonly string[],
+  ): Promise<string | undefined> {
+    this.modelChecks.set(failed, {
+      result: { ok: false, message: "failed in a task" },
+      until: Date.now() + 120_000,
+    });
+    const choices = modelChoices(
+      this.settings(),
+      this.profileList.map((p) => p.id),
+    );
+    for (const ref of fallbackOrder(choices, failed, profileId, this.placement())) {
+      if (tried.includes(ref)) continue;
+      if ((await this.checkModel(ref)).ok) return ref;
+    }
+    return undefined;
   }
 
   /** Test calls by ref: a working model is trusted for 10 minutes, a failing one for 2. */
