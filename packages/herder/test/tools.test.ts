@@ -161,16 +161,16 @@ describe("tools", () => {
     expect(rec.started).toHaveLength(2);
   });
 
-  it("session_list adds the model guide when there are models", async () => {
+  it("session_list adds the model tiers when there are models", async () => {
     const models = [{ ref: "a/strong", agents: ["mock"] }];
-    let guide = "Opus 最强";
+    let guide = "Model tiers: Strong: a/opus";
     const withModels = tools({}, { models }, () => guide);
-    expect(await withModels.call("session_list", {})).toContain("Model guide");
-    expect(await withModels.call("session_list", {})).toContain("Opus 最强");
-    guide = "改过的参考";
-    expect(await withModels.call("session_list", {})).toContain("改过的参考");
+    expect(await withModels.call("session_list", {})).toContain("Model tiers");
+    expect(await withModels.call("session_list", {})).toContain("a/opus");
+    guide = "Model tiers: Fast: a/flash";
+    expect(await withModels.call("session_list", {})).toContain("a/flash");
     const none = tools({}, {}, () => guide);
-    expect(await none.call("session_list", {})).not.toContain("Model guide");
+    expect(await none.call("session_list", {})).not.toContain("Model tiers");
   });
 
   it("session_prompt labels text that is not the owner's", async () => {

@@ -7,7 +7,16 @@ export {
   OPENCODE_PROVIDER,
 } from "./agent-models.ts";
 export { HERDER_STATE_KEY, Herder, type HerderOptions, MAX_SAVED_MESSAGES } from "./herder.ts";
-export { DEFAULT_MODEL_GUIDE, effectiveModelGuide } from "./model-guide.ts";
+export {
+  type ModelTiers,
+  placeModels,
+  TIERS,
+  type Tier,
+  type TierEntry,
+  type TierPlacement,
+  tierOf,
+  tiersText,
+} from "./model-guide.ts";
 export {
   type BuiltinProvider,
   builtinBaseUrls,

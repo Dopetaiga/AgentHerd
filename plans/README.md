@@ -30,3 +30,4 @@ States: `TODO`, `IN PROGRESS`, `DONE`, `BLOCKED: <reason>`, `REJECTED: <reason>`
 | [015](015-herder-picks-model.md) | The Herder picks the model of each task (ADR 0025) | M2 | M | 014 | DONE (manual run pending) |
 | [016](016-model-guide.md) | A model guide for the Herder, editable on the 主管 page (ADR 0026) | M2 | S | 015 | DONE (manual run pending) |
 | [017](017-import-pi-desktop.md) | Import model services from PI-Desktop (ADR 0027) | M2 | S | 010 | DONE (manual run pending) |
+| [018](018-model-tiers.md) | Model tiers arranged by dragging (ADR 0028) | M2 | S | 016 | DONE (manual run pending) |

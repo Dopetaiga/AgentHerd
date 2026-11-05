@@ -19,10 +19,11 @@ import type {
   AgentView,
   HostEvent,
   HostStatus,
-  ModelGuideView,
   ModelsView,
+  ModelTiersView,
   RemoteHost,
   SetupState,
+  Tier,
 } from "@agentherd/host/api";
 import type { Bridge } from "../../shared/bridge";
 import { PLACEHOLDER_QR, providers, sampleServices, sampleTasks } from "./dev-fixtures";
@@ -173,9 +174,31 @@ function installFakeBridge(): void {
     setAgents(agents.map((a) => (a.id === id ? ({ ...a, ...change } as AgentView) : a)));
   const reset = (a: AgentView): AgentView => missing(a.id, a.name);
 
-  const defaultGuide =
-    "模型选择参考（2026-11，按能力从强到弱）：\n\n最强：Claude Opus\n均衡：Claude Sonnet、DeepSeek V4 Pro\n便宜快：DeepSeek Flash";
-  let guide: ModelGuideView = { text: defaultGuide, custom: false, defaultText: defaultGuide };
+  // The fake places models by a few names; the real rules are in packages/herder/src/model-guide.ts.
+  let placed: Record<Tier, string[]> | null = null;
+  const fakeTier = (model: string): Tier =>
+    /opus|gpt-6|pro-latest/.test(model)
+      ? "strong"
+      : /flash|mini|haiku/.test(model)
+        ? "fast"
+        : "balanced";
+  const tiersView = (): ModelTiersView => {
+    const all = models.services.flatMap((s) =>
+      s.models.map((m) => ({ ref: `${s.id}/${m}`, model: m, serviceName: s.name })),
+    );
+    const tiers: ModelTiersView["tiers"] = { strong: [], balanced: [], fast: [] };
+    const done = new Set<string>();
+    for (const tier of ["strong", "balanced", "fast"] as const) {
+      for (const ref of placed?.[tier] ?? []) {
+        const m = all.find((x) => x.ref === ref);
+        if (m === undefined || done.has(ref)) continue;
+        done.add(ref);
+        tiers[tier].push({ ...m, auto: false });
+      }
+    }
+    for (const m of all) if (!done.has(m.ref)) tiers[fakeTier(m.model)].push({ ...m, auto: true });
+    return { tiers, custom: placed !== null };
+  };
 
   const fake: RemoteHost = {
     agents: () => delay(agents),
@@ -359,11 +382,10 @@ function installFakeBridge(): void {
       return delay(setup);
     },
     setupState: () => delay(setup),
-    modelGuide: () => delay(structuredClone(guide)),
-    setModelGuide: (text) => {
-      const own = text?.trim() ?? "";
-      guide = { ...guide, custom: own !== "", text: own === "" ? guide.defaultText : own };
-      return delay(structuredClone(guide));
+    modelTiers: () => delay(tiersView()),
+    setModelTiers: (tiers) => {
+      placed = tiers;
+      return delay(tiersView());
     },
     updateSettings: (patch) => {
       status = { ...status, ...patch };
