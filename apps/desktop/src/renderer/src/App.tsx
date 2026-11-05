@@ -80,7 +80,7 @@ function Sidebar() {
               />
               <span className="flex-1">{label}</span>
               {p === "tasks" && waiting > 0 && (
-                <span className="flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-warning px-1.5 font-semibold text-[11px] text-white">
+                <span className="flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-warning px-1.5 font-semibold text-white text-xs">
                   {waiting}
                 </span>
               )}

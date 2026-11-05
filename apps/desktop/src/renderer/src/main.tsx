@@ -5,6 +5,9 @@ import "./styles.css";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
+import { initFontScale } from "./font-scale";
+
+initFontScale();
 
 // Electron on macOS draws the window with vibrancy; a plain browser preview does not.
 if (navigator.userAgent.includes("Mac") && navigator.userAgent.includes("Electron"))

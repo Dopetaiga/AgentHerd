@@ -221,7 +221,7 @@ export function FirstRun() {
           <div className="ah-fr-step my-auto flex flex-col items-center gap-7 text-center">
             <Logo size={64} />
             <div className="flex flex-col items-center gap-3">
-              <h1 className="font-semibold text-[30px] text-ink tracking-[-0.6px]">
+              <h1 className="font-semibold text-[length:calc(30px*var(--ah-font-scale))] text-ink tracking-[-0.6px]">
                 欢迎使用 AgentHerd
               </h1>
               <p className="max-w-[400px] text-base text-ink-muted leading-6">

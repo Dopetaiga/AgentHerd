@@ -129,6 +129,10 @@ share them; the renderer and
 Electron main never see a key after it is saved (plan 011). They are never written to
 `config.json`, logs or `herd.db`.
 
+Display preferences of one screen stay in the desktop app's `localStorage`, not in the home:
+the font size (设置 → 字体大小, `agentherd.fontScale`, 90%–130%; it scales every text size and
+line height, not spacing or icons) and whether the first run ran.
+
 All TypeScript is erasable syntax only (`erasableSyntaxOnly`), so Node runs the sources
 directly with type stripping; there is no build step for packages.
 
