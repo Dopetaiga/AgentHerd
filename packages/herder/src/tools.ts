@@ -6,6 +6,7 @@ import { basename, isAbsolute, join, resolve } from "node:path";
 import type { HerderHost, Task } from "@agentherd/core";
 import type { AgentTool, AgentToolResult } from "@agentherd/herder-loop";
 import { arr, obj, opt, str } from "@earendil-works/pi-schema";
+import { TIERS, type TierPlacement, tiersText } from "./model-guide.ts";
 import { composeTaskPrompt, HERDER_LABEL } from "./prompt.ts";
 
 /** What the current Herder turn is about. */
@@ -104,7 +105,7 @@ const emptySchema = obj({});
 export function herderTools(
   host: HerderHost,
   turn: () => TurnContext,
-  modelGuide?: () => string,
+  modelTiers?: () => TierPlacement,
 ): AgentTool[] {
   const tools = [
     {
@@ -125,7 +126,7 @@ export function herderTools(
             .map((p) => `${p.id} (${p.name})`)
             .join(", ")}`,
           "Models (name: services offering it, in order of preference; agents that can run it):",
-          ...modelLines(host, modelGuide),
+          ...modelLines(host, modelTiers),
           `Recent projects: ${host.recentProjects().join(", ") || "(none)"}`,
           `Relay: ${host.relayTaskId()?.slice(0, 8) ?? "none"}`,
         ];
@@ -169,15 +170,24 @@ export function herderTools(
           throw new Error(`unknown profile "${args.profile}"`);
         }
         const asked = args.model?.trim() || undefined;
-        const model =
-          asked === undefined ? undefined : await pickService(host, asked, args.profile);
+        const picked =
+          asked === undefined
+            ? undefined
+            : await pickService(host, asked, args.profile, modelTiers?.());
+        const model = picked?.ref;
         const cwd = resolveProject(host, args.project);
         if (!isDirectory(cwd)) throw new Error(`${cwd} is not a directory`);
         const prompt = composeTaskPrompt(args.ownerText.trim(), args.addedContext);
         const title = args.ownerText.trim();
         const taskId = await host.startTask(args.profile, cwd, title, prompt, model);
         const using = model === undefined ? "its own model settings" : model;
-        return ok(`started task ${taskId.slice(0, 8)} in ${cwd} with ${args.profile}, ${using}`);
+        const switched =
+          picked?.switched === undefined
+            ? ""
+            : `\nModel switched: ${picked.switched}. Tell the owner in one line.`;
+        return ok(
+          `started task ${taskId.slice(0, 8)} in ${cwd} with ${args.profile}, ${using}${switched}`,
+        );
       },
     },
     {
@@ -284,44 +294,72 @@ export function modelsByName(
   return [...out.values()];
 }
 
-/**
- * The `service/model` to run: `asked` itself when it names one service, else the first service
- * offering the model name that the agent can run and that answers a test call now.
- */
-async function pickService(host: HerderHost, asked: string, profile: string): Promise<string> {
-  const models = host.models();
-  const exact = models.find((m) => m.ref === asked);
-  const candidates =
-    exact !== undefined
-      ? [exact]
-      : models.filter(
-          (m) =>
-            m.ref.endsWith(`/${asked}`) && m.ref.indexOf("/") === m.ref.length - asked.length - 1,
-        );
-  if (candidates.length === 0) throw new Error(`unknown model "${asked}"; see session_list`);
-  const runnable = candidates.filter((m) => m.agents.includes(profile));
-  if (runnable.length === 0) {
-    const can = [...new Set(candidates.flatMap((m) => m.agents))].join(", ") || "no agent";
-    throw new Error(`agent "${profile}" cannot run ${asked} (can: ${can})`);
-  }
-  if (exact !== undefined) return exact.ref;
-  const failures: string[] = [];
-  for (const m of runnable) {
-    const check = await host.checkModel(m.ref);
-    if (check.ok) return m.ref;
-    failures.push(`${m.ref}: ${check.message}`);
-  }
-  throw new Error(`no service answers for ${asked}: ${failures.join("; ")}`);
+/** A model to run and, when it is not the one asked for, why it was swapped. */
+export interface PickedModel {
+  ref: string;
+  /** Set when AgentHerd moved away from what was asked; the Herder tells the owner. */
+  switched?: string;
 }
 
-function modelLines(host: HerderHost, modelGuide?: () => string): string[] {
+/**
+ * The `service/model` to run. Tries, in order, each answering a test call first: what was asked
+ * (one service, or every service offering the name), other services offering the same name, the
+ * other models of its tier, then the other tiers. Only models the agent can run count.
+ */
+async function pickService(
+  host: HerderHost,
+  asked: string,
+  profile: string,
+  tiers?: TierPlacement,
+): Promise<PickedModel> {
+  const models = host.models();
+  const nameOf = (ref: string) => ref.slice(ref.indexOf("/") + 1);
+  const exact = models.find((m) => m.ref === asked);
+  const name = exact !== undefined ? nameOf(exact.ref) : asked;
+  const same = models.filter((m) => nameOf(m.ref) === name);
+  if (same.length === 0) throw new Error(`unknown model "${asked}"; see session_list`);
+  if (!same.some((m) => m.agents.includes(profile))) {
+    const can = [...new Set(same.flatMap((m) => m.agents))].join(", ") || "no agent";
+    throw new Error(`agent "${profile}" cannot run ${asked} (can: ${can})`);
+  }
+  const order: string[] = [];
+  const add = (ref: string) => {
+    if (!order.includes(ref)) order.push(ref);
+  };
+  if (exact !== undefined) add(exact.ref);
+  for (const m of same) add(m.ref);
+  const byName = (n: string) => models.filter((m) => nameOf(m.ref) === n).map((m) => m.ref);
+  if (tiers !== undefined) {
+    const home = TIERS.find((t) => tiers[t].some((e) => e.model === name));
+    const rest = TIERS.filter((t) => t !== home);
+    for (const tier of home === undefined ? rest : [home, ...rest]) {
+      for (const e of tiers[tier]) for (const ref of byName(e.model)) add(ref);
+    }
+  }
+  const runnable = order.filter((ref) =>
+    models.find((m) => m.ref === ref)?.agents.includes(profile),
+  );
+  const failures: string[] = [];
+  for (const ref of runnable) {
+    const check = await host.checkModel(ref);
+    if (check.ok) {
+      if (failures.length === 0) return { ref };
+      return { ref, switched: `${failures.join("; ")}; switched to ${ref}` };
+    }
+    failures.push(`${ref} failed (${check.message})`);
+  }
+  throw new Error(`no model answers: ${failures.join("; ")}`);
+}
+
+function modelLines(host: HerderHost, modelTiers?: () => TierPlacement): string[] {
   const models = modelsByName(host.models());
   if (models.length === 0) return ["(none; agents use their own settings)"];
   const lines = models.map(
     (m) =>
       `- ${m.name}: ${m.services.join(", ")}; ${m.agents.join(", ") || "(no agent can run it)"}`,
   );
-  const guide = modelGuide?.().trim();
+  const placement = modelTiers?.();
+  const guide = placement === undefined ? "" : tiersText(placement);
   if (guide) lines.push(guide);
   return lines;
 }

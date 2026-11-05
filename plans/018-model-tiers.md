@@ -21,3 +21,5 @@ name, owner's drag kept, new model appended, reset), tools test (tiers in sessio
 - 2026-11-05: same-name models are one card (tiers keyed by model name, `TierModelView.services`);
   `session_start` with a bare name fails over between services via `HerderHost.checkModel`
   (host caches test calls). Test: tools test "merges a model offered by several services…".
+- 2026-11-05: a model that fails its test call is swapped (same name on other services → same
+  tier → other tiers); tools test "swaps a model that does not answer…".
