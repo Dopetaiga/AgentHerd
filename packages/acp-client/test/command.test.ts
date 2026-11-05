@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { commandLine, npmShimTarget } from "../src/command.ts";
+import { commandLine, killTree, npmShimTarget } from "../src/command.ts";
 
 // What npm's cmd-shim writes for a global CLI.
 const NPM_SHIM = [
@@ -74,5 +74,30 @@ describe("commandLine", () => {
       },
     });
     expect(line.command).toBe("cmd.exe");
+  });
+});
+
+describe("killTree", () => {
+  const child = (pid: number | undefined) => {
+    const signals: string[] = [];
+    return { pid, signals, kill: (s?: NodeJS.Signals) => signals.push(s ?? "") > 0 };
+  };
+
+  it("ends the whole process tree on Windows", () => {
+    const c = child(42);
+    const runs: string[][] = [];
+    killTree(c, "SIGTERM", { platform: "win32", run: (cmd, args) => runs.push([cmd, ...args]) });
+    expect(runs).toEqual([["taskkill", "/pid", "42", "/t", "/f"]]);
+    expect(c.signals).toEqual([]);
+  });
+  it("sends the signal elsewhere", () => {
+    const c = child(42);
+    killTree(c, "SIGTERM", { platform: "linux", run: () => expect.unreachable() });
+    expect(c.signals).toEqual(["SIGTERM"]);
+  });
+  it("falls back to kill when the process never started", () => {
+    const c = child(undefined);
+    killTree(c, "SIGKILL", { platform: "win32", run: () => expect.unreachable() });
+    expect(c.signals).toEqual(["SIGKILL"]);
   });
 });

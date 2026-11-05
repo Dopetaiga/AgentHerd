@@ -16,7 +16,7 @@ import {
 } from "@agentclientprotocol/sdk";
 import type { AgentProfile, ToolCallInfo } from "@agentherd/protocol";
 import { redact } from "@agentherd/rules";
-import { commandLine } from "./command.ts";
+import { commandLine, killTree } from "./command.ts";
 import { type PermissionAnswer, ToolCallTracker, toAcpOutcome, toToolCallInfo } from "./mapping.ts";
 
 export const STDERR_LINES = 200;
@@ -168,7 +168,7 @@ export async function startAgent(
   options.signal?.addEventListener(
     "abort",
     () => {
-      if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
+      if (child.exitCode === null && child.signalCode === null) killTree(child, "SIGKILL");
     },
     { once: true },
   );
@@ -265,9 +265,9 @@ export async function startAgent(
   // SIGTERM, then SIGKILL after a grace period for an agent that ignores SIGTERM.
   const terminate = () => {
     if (child.exitCode !== null || child.signalCode !== null) return;
-    child.kill("SIGTERM");
+    killTree(child, "SIGTERM");
     const force = setTimeout(() => {
-      if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
+      if (child.exitCode === null && child.signalCode === null) killTree(child, "SIGKILL");
     }, CLOSE_GRACE_MS);
     force.unref();
     void exited.then(() => clearTimeout(force));

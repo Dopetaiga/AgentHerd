@@ -225,8 +225,9 @@ describe("startAgent with an agent that ignores SIGTERM", () => {
     };
     const abort = new AbortController();
     setTimeout(() => abort.abort(), 200);
+    // Windows has no signals: taskkill ends the process tree with exit code 1.
     await expect(startAgent(profile, { cwd: tmpdir(), signal: abort.signal })).rejects.toThrow(
-      /signal SIGKILL/,
+      process.platform === "win32" ? /exited \(code 1, signal null\)/ : /signal SIGKILL/,
     );
   });
 });

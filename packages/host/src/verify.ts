@@ -65,6 +65,10 @@ export async function verifyProfile(
   } finally {
     clearTimeout(timer);
     await connection?.close().catch(() => {});
-    rmSync(dir, { recursive: true, force: true });
+    // On Windows the folder stays busy until the agent's process tree has gone; a folder left
+    // behind in the temp dir must not turn the check's answer into an error.
+    try {
+      rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+    } catch {}
   }
 }

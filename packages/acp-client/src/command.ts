@@ -3,6 +3,7 @@
 // a shim that just runs a Node script is replaced by that script under this process's Node. Any
 // other batch file runs through `cmd.exe`.
 
+import { spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { win32 } from "node:path";
 
@@ -60,4 +61,35 @@ export function commandLine(
   // Without /s, cmd keeps the quotes Node puts around a path with spaces.
   const comspec = opts.comspec ?? process.env.ComSpec ?? "cmd.exe";
   return { command: comspec, args: ["/d", "/c", command, ...args], env: {} };
+}
+
+export interface KillOptions {
+  platform?: NodeJS.Platform;
+  /** Starts `taskkill`; default: spawn. */
+  run?: (command: string, args: string[]) => void;
+}
+
+/**
+ * Stops `child` and, on Windows, every process it started. There a batch file runs under
+ * `cmd.exe`, and killing `cmd.exe` would leave the agent it started running and holding its
+ * working folder, so `taskkill /t` ends the whole tree (always forcefully: Windows has no SIGTERM).
+ */
+export function killTree(
+  child: { pid?: number | undefined; kill(signal?: NodeJS.Signals): boolean },
+  signal: NodeJS.Signals,
+  opts: KillOptions = {},
+): void {
+  const platform = opts.platform ?? process.platform;
+  if (platform !== "win32" || child.pid === undefined) {
+    child.kill(signal);
+    return;
+  }
+  const run =
+    opts.run ??
+    ((command: string, args: string[]) => {
+      const taskkill = spawn(command, args, { stdio: "ignore", windowsHide: true });
+      // Without taskkill, at least the direct child goes.
+      taskkill.on("error", () => child.kill(signal));
+    });
+  run("taskkill", ["/pid", String(child.pid), "/t", "/f"]);
 }
