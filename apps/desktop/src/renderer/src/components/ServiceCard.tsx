@@ -1,6 +1,6 @@
 // One model service: its models (with a per-model test), key, edit and delete actions.
 
-import { CheckCircle2, Loader2, Play, XCircle } from "lucide-react";
+import { CheckCircle2, ChevronRight, Loader2, Play, XCircle } from "lucide-react";
 import { useState } from "react";
 import { devOpen } from "../dev-bridge";
 import { applyModels, call, errorText, host, type ServiceView, useApp } from "../store";
@@ -22,6 +22,8 @@ export function ServiceCard({ service }: { service: ServiceView }) {
   const [editing, setEditing] = useState(() => devOpen() === `edit-${service.id}`);
   const [armedDelete, setArmedDelete] = useState(false);
   const [busy, setBusy] = useState(false);
+  // Collapsed by default: a list of services should not read as a wall of model ids.
+  const [open, setOpen] = useState(false);
 
   const test = async (model: string) => {
     setTests((t) => ({ ...t, [model]: { state: "running" } }));
@@ -61,18 +63,44 @@ export function ServiceCard({ service }: { service: ServiceView }) {
     <>
       <Group>
         <div className="flex min-h-14 items-center gap-3 px-4 py-2.5">
+          <button
+            type="button"
+            aria-expanded={open}
+            aria-label={open ? "收起模型" : "展开模型"}
+            className="-ml-1 flex size-6 shrink-0 items-center justify-center rounded text-ink-muted hover:bg-hover hover:text-ink"
+            onClick={() => setOpen((o) => !o)}
+          >
+            <ChevronRight size={15} className={`transition-transform ${open ? "rotate-90" : ""}`} />
+          </button>
           <IconTile tone={service.kind === "builtin" ? "blue" : "gray"}>
             <span className="font-semibold text-sm">{service.name.slice(0, 1).toUpperCase()}</span>
           </IconTile>
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
               <h3 className="truncate font-medium text-ink">{service.name}</h3>
-              <Badge>{service.kind === "builtin" ? "内置服务商" : "OpenAI 兼容"}</Badge>
+              <Badge>
+                {service.kind === "builtin"
+                  ? "内置服务商"
+                  : service.api === "anthropic-messages"
+                    ? "Anthropic 兼容"
+                    : "OpenAI 兼容"}
+              </Badge>
             </div>
             <div className="selectable mt-0.5 flex min-w-0 items-center gap-1.5 text-ink-muted text-sm">
-              <span className="shrink-0 font-mono">{service.id}</span>
-              <span className="text-ink-dim">·</span>
               <span className="truncate">{where}</span>
+              <span className="text-ink-dim">·</span>
+              <button
+                type="button"
+                className="shrink-0 hover:text-ink"
+                onClick={() => setOpen((o) => !o)}
+              >
+                {service.models.length} 个模型
+              </button>
+              <span className="text-ink-dim">·</span>
+              <span className="flex shrink-0 items-center gap-1">
+                <Dot tone={service.hasKey ? "green" : "amber"} />
+                {service.hasKey ? "Key 已保存" : "Key 未保存"}
+              </span>
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-1">
@@ -98,17 +126,18 @@ export function ServiceCard({ service }: { service: ServiceView }) {
           </div>
         </div>
 
-        <div className="flex min-h-11 items-center gap-2 px-4 py-1.5">
-          <Dot tone={service.hasKey ? "green" : "amber"} />
-          <span className="flex-1 text-ink-2">{service.hasKey ? "Key 已保存" : "Key 未保存"}</span>
-          {!keyOpen && (
-            <Button variant="ghost" onClick={() => setKeyOpen(true)}>
-              更换 Key
-            </Button>
-          )}
-        </div>
+        {open && (
+          <div className="flex min-h-11 items-center gap-2 px-4 py-1.5">
+            <span className="flex-1 font-mono text-ink-muted text-sm">{service.id}</span>
+            {!keyOpen && (
+              <Button variant="ghost" onClick={() => setKeyOpen(true)}>
+                更换 Key
+              </Button>
+            )}
+          </div>
+        )}
 
-        {keyOpen && (
+        {open && keyOpen && (
           <div className="flex items-center gap-2 bg-inset px-4 py-2.5">
             <input
               type="password"
@@ -136,42 +165,45 @@ export function ServiceCard({ service }: { service: ServiceView }) {
           </div>
         )}
 
-        {service.models.map((m) => {
-          const t = tests[m];
-          return (
-            <div key={m} className="flex min-h-11 min-w-0 items-center gap-3 px-4 py-1.5">
-              <span className="selectable shrink-0 truncate font-mono text-ink-2 text-sm">{m}</span>
-              <span className="min-w-0 flex-1">
-                {t?.state === "ok" && (
-                  <span className="selectable flex min-w-0 items-center gap-1.5 text-sm text-success-text">
-                    <CheckCircle2 size={13} className="shrink-0" />
-                    <span className="truncate">可用：{t.text}</span>
-                  </span>
-                )}
-                {t?.state === "error" && (
-                  <span className="selectable flex min-w-0 items-center gap-1.5 text-danger-text text-sm">
-                    <XCircle size={13} className="shrink-0" />
-                    <span className="truncate" title={t.text}>
-                      {t.text}
+        {open &&
+          service.models.map((m) => {
+            const t = tests[m];
+            return (
+              <div key={m} className="flex min-h-11 min-w-0 items-center gap-3 px-4 py-1.5">
+                <span className="selectable shrink-0 truncate font-mono text-ink-2 text-sm">
+                  {m}
+                </span>
+                <span className="min-w-0 flex-1">
+                  {t?.state === "ok" && (
+                    <span className="selectable flex min-w-0 items-center gap-1.5 text-sm text-success-text">
+                      <CheckCircle2 size={13} className="shrink-0" />
+                      <span className="truncate">可用：{t.text}</span>
                     </span>
-                  </span>
-                )}
-              </span>
-              <Button
-                variant="ghost"
-                onClick={() => void test(m)}
-                disabled={t?.state === "running"}
-              >
-                {t?.state === "running" ? (
-                  <Loader2 size={12} className="animate-spin" />
-                ) : (
-                  <Play size={12} />
-                )}
-                测试
-              </Button>
-            </div>
-          );
-        })}
+                  )}
+                  {t?.state === "error" && (
+                    <span className="selectable flex min-w-0 items-center gap-1.5 text-danger-text text-sm">
+                      <XCircle size={13} className="shrink-0" />
+                      <span className="truncate" title={t.text}>
+                        {t.text}
+                      </span>
+                    </span>
+                  )}
+                </span>
+                <Button
+                  variant="ghost"
+                  onClick={() => void test(m)}
+                  disabled={t?.state === "running"}
+                >
+                  {t?.state === "running" ? (
+                    <Loader2 size={12} className="animate-spin" />
+                  ) : (
+                    <Play size={12} />
+                  )}
+                  测试
+                </Button>
+              </div>
+            );
+          })}
       </Group>
       {editing && <EditModelsDialog service={service} onClose={() => setEditing(false)} />}
     </>
