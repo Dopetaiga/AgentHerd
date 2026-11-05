@@ -131,8 +131,8 @@ describe("tools", () => {
     ];
     const { call, rec } = tools({ ownerText: "修一下构建" }, { models });
     const list = await call("session_list", {});
-    expect(list).toContain("- deepseek-v4-pro: deepseek; mock");
-    expect(list).toContain("- claude-x: anthropic; (no agent can run it)");
+    expect(list).toContain("- deepseek-v4-pro: deepseek\n");
+    expect(list).toContain("- claude-x: anthropic (no agent can run it)");
     const out = await call("session_start", {
       project: dir,
       profile: "mock",
@@ -169,7 +169,7 @@ describe("tools", () => {
       { ref: "backup/gpt-x", agents: ["mock"] },
     ];
     const { call, rec } = tools({ ownerText: "修一下构建" }, { models, failing: ["site/gpt-x"] });
-    expect(await call("session_list", {})).toContain("- gpt-x: site, backup; mock");
+    expect(await call("session_list", {})).toContain("- gpt-x: site, backup\n");
     const start = { project: dir, profile: "mock", ownerText: "修一下构建", model: "gpt-x" };
     await call("session_start", start);
     expect(rec.started[0]?.model).toBe("backup/gpt-x");
@@ -179,6 +179,27 @@ describe("tools", () => {
     );
     await expect(all.call("session_start", start)).rejects.toThrow(/no model answers/);
     expect(all.rec.started).toHaveLength(0);
+  });
+
+  it("picks the agent from the model when the owner names none (ADR 0031)", async () => {
+    const dir = tmpdir();
+    const models = [
+      { ref: "site/gpt-6.1-sol", agents: ["pi", "codex"] },
+      { ref: "deepseek/deepseek-v4-pro", agents: ["pi"] },
+    ];
+    const profiles = [
+      { id: "dsh", name: "DeepSeek Harness" },
+      { id: "pi", name: "Pi" },
+      { id: "codex", name: "Codex" },
+    ];
+    const { call, rec } = tools({ ownerText: "修一下构建" }, { models, profiles });
+    const base = { project: dir, ownerText: "修一下构建" };
+    expect(await call("session_start", { ...base, model: "gpt-6.1-sol" })).toContain("with codex");
+    await call("session_start", { ...base, model: "deepseek-v4-pro" });
+    await call("session_start", base);
+    await call("session_start", { ...base, profile: "dsh" });
+    expect(rec.started.map((s) => s.profileId)).toEqual(["codex", "pi", "pi", "dsh"]);
+    expect(rec.started[0]?.model).toBe("site/gpt-6.1-sol");
   });
 
   it("swaps a model that does not answer for the next in its tier, then other tiers", async () => {

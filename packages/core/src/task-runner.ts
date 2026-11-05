@@ -89,22 +89,32 @@ export class TaskRunner {
       f.agentSessionId = await connection.newSession(cwd);
     } catch (error) {
       const message = (error as Error).message;
+      await f.connection?.close().catch(() => {});
+      delete f.connection;
+      if (await this.switchModel(f, message)) {
+        this.started(f, model);
+        return { taskId: sessionId, turn: this.ops.promptTask(sessionId, prompt) };
+      }
       setReport(ctx, f, ctx.texts.couldNotStart(message));
       ctx.registry.set(sessionId, "error");
       await sendReport(ctx, f, ctx.texts.couldNotStartBody(message), null);
       await this.ops.endTask(sessionId, ctx.texts.agentCouldNotStart);
       throw error;
     }
-    ctx.store.audit("session.started", {
-      sessionId,
-      profileId,
-      cwd,
-      ...(model === undefined ? {} : { model }),
+    this.listen(f, f.connection, f.agentSessionId);
+    this.started(f, model);
+    return { taskId: sessionId, turn: this.ops.promptTask(sessionId, prompt) };
+  }
+
+  private started(f: Following, asked: string | undefined): void {
+    this.ctx.store.audit("session.started", {
+      sessionId: f.task.id,
+      profileId: f.profile.id,
+      cwd: f.cwd,
+      ...(asked === undefined ? {} : { model: f.task.model ?? asked }),
       agentSessionId: f.agentSessionId,
     });
-    ctx.watchdog.track(sessionId);
-    this.listen(f, f.connection, f.agentSessionId);
-    return { taskId: sessionId, turn: this.ops.promptTask(sessionId, prompt) };
+    this.ctx.watchdog.track(f.task.id);
   }
 
   /** Sends a prompt to an open task. Queued while a turn runs; settles when its turn ends. */
@@ -223,8 +233,9 @@ export class TaskRunner {
   }
 
   /**
-   * When the task's model broke its first turn before any text or tool call, restarts the agent
-   * on the next model that answers (ADR 0030). False when the task keeps failing.
+   * When the task's model broke its first turn (or its agent did not start) before any text or
+   * tool call, restarts on the next agent and model that answers (ADR 0030, 0031). False when the
+   * task keeps failing.
    */
   private async switchModel(f: Following, why: string): Promise<boolean> {
     const { ctx } = this;
@@ -236,14 +247,17 @@ export class TaskRunner {
     const tried = f.triedModels ?? [];
     if (!tried.includes(failed)) tried.push(failed);
     f.triedModels = tried;
-    if (tried.length > MAX_MODEL_SWITCHES) return false;
-    const base = ctx.opts.profiles.find((p) => p.id === f.profile.id);
-    if (base === undefined) return false;
-    let ref: string | undefined;
+    f.switches = (f.switches ?? 0) + 1;
+    if (f.switches > MAX_MODEL_SWITCHES) return false;
+    const fromLabel = f.task.agent;
+    let ref: string;
     let profile: AgentProfile;
     try {
-      ref = await models.next(base.id, failed, tried);
-      if (ref === undefined) return false;
+      const next = await models.next(f.profile.id, failed, tried);
+      if (next === undefined) return false;
+      const base = ctx.opts.profiles.find((p) => p.id === next.profileId);
+      if (base === undefined) return false;
+      ref = next.model;
       profile = { ...base, env: { ...base.env, ...models.envFor(base.id, ref) } };
     } catch {
       return false;
@@ -274,11 +288,11 @@ export class TaskRunner {
     const short = why.length > 200 ? `${why.slice(0, 200)}…` : why;
     ctx.store.audit("task.model-switched", {
       taskId: f.task.id,
-      from: failed,
-      to: ref,
+      from: fromLabel,
+      to: f.task.agent,
       why: short,
     });
-    await say(ctx, ctx.texts.modelSwitched(failed, ref, short), f.task.title);
+    await say(ctx, ctx.texts.modelSwitched(fromLabel, f.task.agent, short), f.task.title);
     ctx.board.changed();
     return true;
   }

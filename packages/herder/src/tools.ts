@@ -6,6 +6,7 @@ import { basename, isAbsolute, join, resolve } from "node:path";
 import type { HerderHost, Task } from "@agentherd/core";
 import type { AgentTool, AgentToolResult } from "@agentherd/herder-loop";
 import { arr, obj, opt, str } from "@earendil-works/pi-schema";
+import { agentForModel } from "./agent-models.ts";
 import { TIERS, type TierPlacement, tiersText } from "./model-guide.ts";
 import { composeTaskPrompt, HERDER_LABEL } from "./prompt.ts";
 
@@ -78,13 +79,18 @@ const sessionStartSchema = obj({
   project: str({
     description: "Project directory: absolute path, ~/path, or a recent project name",
   }),
-  profile: str({ description: "Agent profile id from session_list" }),
+  profile: opt(
+    str({
+      description:
+        "Only when the owner names an agent (e.g. dsh). Omit otherwise: AgentHerd picks the agent from the model.",
+    }),
+  ),
   ownerText: str({ description: "The owner's request, copied exactly from their message" }),
   addedContext: opt(str({ description: "Anything you add, sent below the owner's words" })),
   model: opt(
     str({
       description:
-        "Model name from session_list (e.g. claude-opus-5-5), one the chosen agent can run; AgentHerd uses the first service offering it that answers. service/model picks one service. Omit to use the agent's own settings.",
+        "Model name from session_list (e.g. deepseek-v4-pro); AgentHerd uses the first service offering it that answers. service/model picks one service. Omit to use the agent's own settings.",
     }),
   ),
 });
@@ -121,11 +127,11 @@ export function herderTools(
           ...(tasks.length === 0
             ? ["(none)"]
             : tasks.map((t) => `${taskLine(t)}${open.has(t.id) ? "" : " (ended)"}`)),
-          `Agent profiles: ${host
+          `Agents: AgentHerd picks one from the model (GPT models run in Codex, the rest in Pi). Installed: ${host
             .profiles()
             .map((p) => `${p.id} (${p.name})`)
             .join(", ")}`,
-          "Models (name: services offering it, in order of preference; agents that can run it):",
+          "Models (name: services offering it, in order of preference):",
           ...modelLines(host, modelTiers),
           `Recent projects: ${host.recentProjects().join(", ") || "(none)"}`,
           `Relay: ${host.relayTaskId()?.slice(0, 8) ?? "none"}`,
@@ -155,7 +161,7 @@ export function herderTools(
         _id: string,
         args: {
           project: string;
-          profile: string;
+          profile?: string;
           ownerText: string;
           addedContext?: string;
           model?: string;
@@ -166,27 +172,28 @@ export function herderTools(
         if (!isVerbatim(args.ownerText, t.ownerText)) {
           throw new Error("ownerText must be the owner's words copied exactly from their message");
         }
-        if (!host.profiles().some((p) => p.id === args.profile)) {
-          throw new Error(`unknown profile "${args.profile}"`);
+        const named = args.profile?.trim() || undefined;
+        const ids = host.profiles().map((p) => p.id);
+        if (named !== undefined && !ids.includes(named)) {
+          throw new Error(`unknown profile "${named}"`);
         }
         const asked = args.model?.trim() || undefined;
         const picked =
-          asked === undefined
-            ? undefined
-            : await pickService(host, asked, args.profile, modelTiers?.());
+          asked === undefined ? undefined : await pickService(host, asked, named, modelTiers?.());
         const model = picked?.ref;
+        const profile = named ?? agentForModel(model, ids);
         const cwd = resolveProject(host, args.project);
         if (!isDirectory(cwd)) throw new Error(`${cwd} is not a directory`);
         const prompt = composeTaskPrompt(args.ownerText.trim(), args.addedContext);
         const title = args.ownerText.trim();
-        const taskId = await host.startTask(args.profile, cwd, title, prompt, model);
+        const taskId = await host.startTask(profile, cwd, title, prompt, model);
         const using = model === undefined ? "its own model settings" : model;
         const switched =
           picked?.switched === undefined
             ? ""
             : `\nModel switched: ${picked.switched}. Tell the owner in one line.`;
         return ok(
-          `started task ${taskId.slice(0, 8)} in ${cwd} with ${args.profile}, ${using}${switched}`,
+          `started task ${taskId.slice(0, 8)} in ${cwd} with ${profile}, ${using}${switched}`,
         );
       },
     },
@@ -309,12 +316,13 @@ export interface PickedModel {
 /**
  * Refs to try for `asked`, in order: `asked` itself (one service, or every service offering the
  * name), other services offering the same name, the other models of its tier, then the other
- * tiers. Only models `profile` can run. Throws when the name is unknown or the agent cannot run it.
+ * tiers. Only models `profile` can run; with no profile, any model an agent can run (AgentHerd then
+ * picks the agent from the model, ADR 0031). Throws when the name is unknown or nothing can run it.
  */
 export function fallbackOrder(
   models: readonly { ref: string; agents: string[] }[],
   asked: string,
-  profile: string,
+  profile: string | undefined,
   tiers?: TierPlacement,
 ): string[] {
   const nameOf = (ref: string) => ref.slice(ref.indexOf("/") + 1);
@@ -322,9 +330,13 @@ export function fallbackOrder(
   const name = exact !== undefined ? nameOf(exact.ref) : asked;
   const same = models.filter((m) => nameOf(m.ref) === name);
   if (same.length === 0) throw new Error(`unknown model "${asked}"; see session_list`);
-  if (!same.some((m) => m.agents.includes(profile))) {
+  const runs = (m: { agents: string[] } | undefined) =>
+    m !== undefined && (profile === undefined ? m.agents.length > 0 : m.agents.includes(profile));
+  if (!same.some(runs)) {
     const can = [...new Set(same.flatMap((m) => m.agents))].join(", ") || "no agent";
-    throw new Error(`agent "${profile}" cannot run ${asked} (can: ${can})`);
+    throw new Error(
+      `${profile === undefined ? "no agent" : `agent "${profile}"`} cannot run ${asked} (can: ${can})`,
+    );
   }
   const order: string[] = [];
   const add = (ref: string) => {
@@ -340,13 +352,13 @@ export function fallbackOrder(
       for (const e of tiers[tier]) for (const ref of byName(e.model)) add(ref);
     }
   }
-  return order.filter((ref) => models.find((m) => m.ref === ref)?.agents.includes(profile));
+  return order.filter((ref) => runs(models.find((m) => m.ref === ref)));
 }
 
 async function pickService(
   host: HerderHost,
   asked: string,
-  profile: string,
+  profile: string | undefined,
   tiers?: TierPlacement,
 ): Promise<PickedModel> {
   const runnable = fallbackOrder(host.models(), asked, profile, tiers);
@@ -367,7 +379,7 @@ function modelLines(host: HerderHost, modelTiers?: () => TierPlacement): string[
   if (models.length === 0) return ["(none; agents use their own settings)"];
   const lines = models.map(
     (m) =>
-      `- ${m.name}: ${m.services.join(", ")}; ${m.agents.join(", ") || "(no agent can run it)"}`,
+      `- ${m.name}: ${m.services.join(", ")}${m.agents.length === 0 ? " (no agent can run it)" : ""}`,
   );
   const placement = modelTiers?.();
   const guide = placement === undefined ? "" : tiersText(placement);

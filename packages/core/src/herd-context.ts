@@ -60,10 +60,15 @@ export interface AgentModels {
   /** Whether the model answers now (a short test call, may be cached). */
   check?(ref: string): Promise<{ ok: true } | { ok: false; message: string }>;
   /**
-   * The model to switch to when `failed` broke a turn before it did anything, skipping `tried`.
-   * Undefined when none answers.
+   * The agent and model to switch to when `failed` broke a turn (or the agent's start) before it
+   * did anything, skipping `tried` models. The same model in another agent counts (ADR 0031: Codex
+   * falls back to Pi). Undefined when none answers.
    */
-  next?(profileId: string, failed: string, tried: readonly string[]): Promise<string | undefined>;
+  next?(
+    profileId: string,
+    failed: string,
+    tried: readonly string[],
+  ): Promise<{ profileId: string; model: string } | undefined>;
 }
 
 /** Per-task state that only the Herd and its listeners use. */
@@ -84,6 +89,8 @@ export interface Following {
   turnsEnded?: number;
   /** Models this task already ran into an error with. */
   triedModels?: string[];
+  /** Agent or model switches so far. */
+  switches?: number;
   connection?: AgentConnection;
   agentSessionId?: string;
   offs: (() => void)[];

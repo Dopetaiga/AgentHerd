@@ -17,10 +17,12 @@ import {
   type SecretStore,
 } from "@agentherd/core";
 import {
+  agentForModel,
   builtinBaseUrls,
   builtinProviders,
   fallbackOrder,
   herderFromSettings,
+  isGptModel,
   modelChoices,
   modelEnvFor,
   piModelEnv,
@@ -63,6 +65,11 @@ export const HOST_VERSION = "0.0.0";
 
 export interface HostOptions {
   home: string;
+  /**
+   * Download the agents the model list needs (ADR 0031): Pi always, Codex when a GPT model is in
+   * the list. Off in tests.
+   */
+  autoInstallAgents?: boolean;
   userHome?: string;
   /** PI-Desktop data folder to import from; default ~/.pi-desktop. */
   piDesktopDir?: string;
@@ -146,10 +153,33 @@ export class Host implements HostApi {
 
   private saveSettings(models: ModelSettings): void {
     writeConfig(this.opts.home, { ...this.config(), models });
+    this.installNeededAgents();
+  }
+
+  /** Agents the model list needs: Pi always, Codex when a GPT model is listed (ADR 0031). */
+  neededAgents(): string[] {
+    const gpt = this.settings().services.some((s) => s.models.some((m) => isGptModel(m)));
+    return gpt ? ["pi", "codex"] : ["pi"];
+  }
+
+  private installNeededAgents(): void {
+    if (this.opts.autoInstallAgents !== true || this.stopped) return;
+    const views = this.agentList.views([], {});
+    for (const id of this.neededAgents()) {
+      const view = views.find((v) => v.id === id);
+      if (view?.state !== "missing" || !view.canInstall || view.error !== undefined) continue;
+      this.log(`[agents] downloading ${id}, which the model list needs`);
+      try {
+        this.agentList.install(id);
+      } catch (error) {
+        this.log(`[agents] could not download ${id}: ${(error as Error).message}`);
+      }
+    }
   }
 
   /** Starts following tasks if a channel is bound. */
   async start(): Promise<void> {
+    this.installNeededAgents();
     await this.restartHerd();
   }
 
@@ -551,23 +581,34 @@ export class Host implements HostApi {
     return { tiers, custom: this.config().modelTiers !== undefined };
   }
 
-  /** After `failed` broke a task: the next model in fallback order that answers (ADR 0030). */
+  /**
+   * After `failed` broke a task before it acted: Codex hands the same model to Pi (ADR 0031);
+   * otherwise the next model in fallback order that answers (ADR 0030), in the agent that model
+   * gets.
+   */
   private async nextModel(
     profileId: string,
     failed: string,
     tried: readonly string[],
-  ): Promise<string | undefined> {
+  ): Promise<{ profileId: string; model: string } | undefined> {
+    const ids = this.profileList.map((p) => p.id);
+    if (profileId === "codex" && ids.includes("pi")) return { profileId: "pi", model: failed };
     this.modelChecks.set(failed, {
       result: { ok: false, message: "failed in a task" },
       until: Date.now() + 120_000,
     });
-    const choices = modelChoices(
-      this.settings(),
-      this.profileList.map((p) => p.id),
-    );
-    for (const ref of fallbackOrder(choices, failed, profileId, this.placement())) {
+    const choices = modelChoices(this.settings(), ids);
+    const auto = profileId === "pi" || profileId === "codex";
+    for (const ref of fallbackOrder(
+      choices,
+      failed,
+      auto ? undefined : profileId,
+      this.placement(),
+    )) {
       if (tried.includes(ref)) continue;
-      if ((await this.checkModel(ref)).ok) return ref;
+      if ((await this.checkModel(ref)).ok) {
+        return { profileId: auto ? agentForModel(ref, ids) : profileId, model: ref };
+      }
     }
     return undefined;
   }

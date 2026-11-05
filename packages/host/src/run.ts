@@ -25,6 +25,7 @@ export async function runHost(opts: RunHostOptions): Promise<RunningHost> {
   process.env.PATH = searchPath(process.env);
   const host = new Host({
     home: opts.home,
+    autoInstallAgents: true,
     secrets: secretFile(opts.home),
     createChannel: (locale) =>
       new FeishuChannel({
