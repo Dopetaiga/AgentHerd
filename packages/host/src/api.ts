@@ -133,6 +133,14 @@ export interface SettingsPatch {
 }
 
 /** Everything the host offers. Each method is one request on the socket. */
+export interface ModelGuideView {
+  /** The guide in effect. */
+  text: string;
+  /** True when the owner wrote it; false when it is AgentHerd's default. */
+  custom: boolean;
+  defaultText: string;
+}
+
 export interface HostApi {
   status(): HostStatus;
   tasks(): TasksView;
@@ -149,6 +157,10 @@ export interface HostApi {
   cancelSetup(): SetupState;
   setupState(): SetupState;
   updateSettings(patch: SettingsPatch): HostStatus;
+  /** The guide the Herder reads to pick a task's model (ADR 0026). */
+  modelGuide(): ModelGuideView;
+  /** Saves the owner's guide; null or "" goes back to AgentHerd's default. */
+  setModelGuide(text: string | null): ModelGuideView;
   /** Connects the channel again, e.g. after a network failure. */
   reconnect(): Promise<HostStatus>;
   agents(): AgentView[];
@@ -177,6 +189,8 @@ export const HOST_METHODS: readonly HostMethod[] = [
   "cancelSetup",
   "setupState",
   "updateSettings",
+  "modelGuide",
+  "setModelGuide",
   "reconnect",
   "agents",
   "installAgent",

@@ -18,6 +18,8 @@ export interface CliConfig {
   models?: ModelSettings;
   /** Keep the Mac awake while tasks run (desktop app). */
   keepAwake?: boolean;
+  /** The owner's model guide for the Herder (ADR 0026); unset = AgentHerd's default. */
+  modelGuide?: string;
 }
 
 export function agentherdHome(env: NodeJS.ProcessEnv = process.env): string {

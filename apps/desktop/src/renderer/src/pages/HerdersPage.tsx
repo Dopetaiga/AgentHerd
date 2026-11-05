@@ -5,6 +5,7 @@ import type { HerderStatus, ModelTest } from "@agentherd/host/api";
 import { Bot, Check, CircleAlert, Loader2, Plus } from "lucide-react";
 import { useState } from "react";
 import { herderReasonLabel } from "../components/labels";
+import { ModelGuide } from "../components/ModelGuide";
 import { RoleSelect } from "../components/RolePicker";
 import { Button, Dot, Group, IconTile, Row } from "../components/ui";
 import { call, type ModelRef, type ModelRole, useApp } from "../store";
@@ -134,6 +135,7 @@ export function HerdersPage() {
         </Button>
         <span className="text-ink-dim text-sm">以后支持多个主管</span>
       </div>
+      <ModelGuide />
     </div>
   );
 }
