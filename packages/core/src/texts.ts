@@ -49,6 +49,7 @@ export interface CoreTexts {
   agentStoppedWaiting: string;
   agentherdStopped: string;
   noRuleMatched: string;
+  massDelete: string;
   guardHit: (reason: string) => string;
   runFinished: string;
   agentCouldNotStart: string;
@@ -116,6 +117,7 @@ const zh: CoreTexts = {
   agentStoppedWaiting: "Agent 不再等待",
   agentherdStopped: "AgentHerd 已停止",
   noRuleMatched: "没有规则自动处理这个请求",
+  massDelete: "一次删除大量文件，需要你确认",
   guardHit: (reason) => `碰到保护名单：${reason}`,
   runFinished: "任务已运行结束",
   agentCouldNotStart: "Agent 启动失败",
@@ -173,6 +175,7 @@ const en: CoreTexts = {
   agentStoppedWaiting: "the agent stopped waiting",
   agentherdStopped: "AgentHerd stopped",
   noRuleMatched: "no rule matched",
+  massDelete: "deletes a lot at once; needs your confirmation",
   guardHit: (reason) => `guard list: ${reason}`,
   runFinished: "the run finished",
   agentCouldNotStart: "the agent could not start",

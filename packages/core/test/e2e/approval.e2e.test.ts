@@ -56,11 +56,12 @@ async function setup(script: string, opts: { remindMinutes?: number; clock?: Fak
 const isOpenItem = (m: SentMessage) =>
   m.view.kind === "item" && (m.view as ItemView).final === undefined;
 
-const ONE_PERMISSION = (expect: string) => `
+// Only a mass delete reaches the owner (ADR 0029); a plain command is approved by AgentHerd.
+const ONE_PERMISSION = (expect: string, command = "rm -rf ./*") => `
 turns:
-  - - tool_call: { id: t1, title: "Run pnpm test", kind: execute, command: "pnpm test", status: pending }
+  - - tool_call: { id: t1, title: "Run ${command}", kind: execute, command: "${command}", status: pending }
     - request_permission:
-        toolCall: { id: t1, title: "Run pnpm test", kind: execute, command: "pnpm test" }
+        toolCall: { id: t1, title: "Run ${command}", kind: execute, command: "${command}" }
         expect: ${expect}
     - message: "done"
     - end_turn: end_turn
@@ -72,7 +73,8 @@ describe("E2E-APPROVE", () => {
     const run = herd.run("mock", dir, "go");
     const card = await channel.waitFor(isOpenItem);
     const view = card.view as ItemView;
-    expect(view.body).toContain("pnpm test");
+    expect(view.body).toContain("rm -rf ./*");
+    expect(view.reason).toBe("deletes a lot at once; needs your confirmation");
     await channel.tap(view.itemId, "allow");
     const result = await run;
     expect(result.stopReason).toBe("end_turn");
@@ -93,11 +95,18 @@ describe("E2E-APPROVE", () => {
     expect((card.view as ItemView).final).toBe("Denied by you");
   });
 
-  it("a matching allow rule answers without a card", async () => {
-    const { channel, store, herd } = await setup(ONE_PERMISSION("allow"));
+  it("a command that is not a mass delete is approved without a card", async () => {
+    const { channel, store, herd } = await setup(ONE_PERMISSION("allow", "pnpm test"));
+    await herd.run("mock", dir, "go");
+    expect(channel.ofKind("item")).toHaveLength(0);
+    expect(store.auditRows("item.decided")).toHaveLength(1);
+  });
+
+  it("an owner's deny rule answers without a card", async () => {
+    const { channel, store, herd } = await setup(ONE_PERMISSION("deny", "pnpm test"));
     herd.addRule({
       id: "r1",
-      action: "allow",
+      action: "deny",
       match: { command: "pnpm test" },
       createdAt: "2026-11-04T00:00:00Z",
       createdBy: "owner",
@@ -156,7 +165,7 @@ describe("E2E-REMIND", () => {
     await new Promise((r) => setImmediate(r));
     const reminders = channel.ofKind("text");
     expect(reminders).toHaveLength(2);
-    expect(reminders[0]?.view.text).toBe("Still waiting for you: Run pnpm test");
+    expect(reminders[0]?.view.text).toBe("Still waiting for you: Run rm -rf ./*");
     expect(store.decisionsFor(itemId)).toHaveLength(0);
     expect(store.getItem(itemId)?.state).toBe("open");
     await channel.tap(itemId, "allow");

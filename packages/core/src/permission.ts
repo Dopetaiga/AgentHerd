@@ -51,7 +51,9 @@ export async function onPermission(
       });
       store.updateItem(item.id, { state: "decided", decidedAt: now() });
       store.audit("item.decided", { itemId: item.id, source: "rule", action });
-      const f = ctx.following.get(sessionId);
+      // Requests approved only because they are not a mass delete are in the audit log; the
+      // report lists decisions made by the owner's rules.
+      const f = result.ruleId === undefined ? undefined : ctx.following.get(sessionId);
       if (f !== undefined) {
         f.task.automaticDecisions.push(
           ctx.texts.byRule(action === "allow", result.ruleId, item.body || item.title),

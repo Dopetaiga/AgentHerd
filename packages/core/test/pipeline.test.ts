@@ -1,7 +1,7 @@
 import type { Item, Rule, ToolCallInfo } from "@agentherd/protocol";
 import { describe, expect, it } from "vitest";
 import { BODY_MAX_LINES, itemBody, itemView } from "../src/inbox.ts";
-import { decide } from "../src/pipeline.ts";
+import { AUTO_APPROVED, decide } from "../src/pipeline.ts";
 
 const HOME = "/Users/me";
 
@@ -40,15 +40,26 @@ const denyPush: Rule = {
 };
 
 describe("decide", () => {
-  it("no rule → escalate to the owner", () => {
-    const r = decide(item({ command: "pnpm test" }), { mode: "assist", rules: [], home: HOME });
-    expect(r.apply).toBe(false);
-    expect(r.decision).toMatchObject({
-      action: "escalate",
-      risk: "medium",
-      reason: "no rule matched",
-    });
+  it.each(["assist", "auto"] as const)("no rule → approved in %s (ADR 0029)", (mode) => {
+    const r = decide(item({ command: "pnpm test" }), { mode, rules: [], home: HOME });
+    expect(r.apply).toBe(true);
+    expect(r.decision).toMatchObject({ action: "allow", source: "rule", reason: AUTO_APPROVED });
+    expect(r.ruleId).toBeUndefined();
   });
+
+  it("no rule → the owner in observe", () => {
+    const r = decide(item({ command: "pnpm test" }), { mode: "observe", rules: [], home: HOME });
+    expect(r.apply).toBe(false);
+    expect(r.decision).toMatchObject({ action: "escalate", reason: "no rule matched" });
+  });
+
+  it.each(["git push --force", "sudo ls", "cat ~/.ssh/id_rsa", "rm -rf node_modules"])(
+    "%s is approved: only mass deletes ask",
+    (command) => {
+      const r = decide(item({ command }), { mode: "assist", rules: [], home: HOME });
+      expect(r.apply).toBe(true);
+    },
+  );
 
   it("assist applies an allow rule", () => {
     const r = decide(item({ command: "pnpm test" }), {
@@ -84,12 +95,12 @@ describe("decide", () => {
   });
 
   it.each(["assist", "auto", "observe"] as const)(
-    "guard list beats an allow-all rule in %s",
+    "a mass delete beats an allow-all rule in %s",
     (mode) => {
       const r = decide(item({ command: "sudo rm -rf /" }), { mode, rules: [allowAll], home: HOME });
       expect(r.apply).toBe(false);
       expect(r.decision).toMatchObject({ action: "escalate", risk: "high" });
-      expect(r.decision.reason).toMatch(/^guard list:/);
+      expect(r.decision.reason).toMatch(/^mass delete:/);
     },
   );
 
