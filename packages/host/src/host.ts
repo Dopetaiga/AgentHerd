@@ -97,6 +97,10 @@ export class Host implements HostApi {
   private channelError: string | undefined;
   private herderReason: string | undefined;
   private herderRef: string | undefined;
+  private readonly modelChecks = new Map<
+    string,
+    { result: { ok: true } | { ok: false; message: string }; until: number }
+  >();
   private setup: SetupState = { phase: "idle" };
   private setupRun = 0;
   private profileList: AgentProfile[] = [];
@@ -196,6 +200,7 @@ export class Host implements HostApi {
           ),
         envFor: (profileId, ref) =>
           modelEnvFor(this.settings(), this.opts.secrets, profileId, ref, this.opts.env),
+        check: (ref) => this.checkModel(ref),
       },
     });
     herd.registry.onChange(() => this.emitTasks());
@@ -514,27 +519,47 @@ export class Host implements HostApi {
   }
 
   private placement(): TierPlacement {
-    const refs = this.settings().services.flatMap((s) => s.models.map((m) => `${s.id}/${m}`));
-    return placeModels(refs, this.config().modelTiers);
+    const services = this.settings().services;
+    const names = [...new Set(services.flatMap((s) => s.models))];
+    const saved = this.config().modelTiers;
+    // Plan 018 saved `service/model` refs; read those as the model name.
+    const ids = new Set(services.map((s) => s.id));
+    const asName = (entry: string) => {
+      if (names.includes(entry)) return entry;
+      const slash = entry.indexOf("/");
+      return slash > 0 && ids.has(entry.slice(0, slash)) ? entry.slice(slash + 1) : entry;
+    };
+    const normalized =
+      saved === undefined
+        ? undefined
+        : Object.fromEntries(TIERS.map((t) => [t, (saved[t] ?? []).map(asName)]));
+    return placeModels(names, normalized);
   }
 
   modelTiers(): ModelTiersView {
-    const names = new Map(this.settings().services.map((s) => [s.id, s.name]));
+    const services = this.settings().services;
     const placement = this.placement();
     const tiers = {} as ModelTiersView["tiers"];
     for (const tier of TIERS) {
-      tiers[tier] = placement[tier].map(({ ref, auto }) => {
-        const slash = ref.indexOf("/");
-        const serviceId = ref.slice(0, slash);
-        return {
-          ref,
-          model: ref.slice(slash + 1),
-          serviceName: names.get(serviceId) ?? serviceId,
-          auto,
-        };
-      });
+      tiers[tier] = placement[tier].map(({ model, auto }) => ({
+        model,
+        services: services.filter((s) => s.models.includes(model)).map((s) => s.name),
+        auto,
+      }));
     }
     return { tiers, custom: this.config().modelTiers !== undefined };
+  }
+
+  /** Test calls by ref: a working model is trusted for 10 minutes, a failing one for 2. */
+  private async checkModel(ref: string): Promise<{ ok: true } | { ok: false; message: string }> {
+    const now = Date.now();
+    const cached = this.modelChecks.get(ref);
+    if (cached !== undefined && cached.until > now) return cached.result;
+    const slash = ref.indexOf("/");
+    const r = await this.testModel({ serviceId: ref.slice(0, slash), model: ref.slice(slash + 1) });
+    const result = r.ok ? ({ ok: true } as const) : { ok: false as const, message: r.message };
+    this.modelChecks.set(ref, { result, until: now + (r.ok ? 600_000 : 120_000) });
+    return result;
   }
 
   setModelTiers(tiers: Record<Tier, string[]> | null): ModelTiersView {

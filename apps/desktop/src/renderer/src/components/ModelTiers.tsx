@@ -21,12 +21,12 @@ interface DropAt {
   index: number;
 }
 
-function move(board: Board, ref: string, to: DropAt): Board {
+function move(board: Board, model: string, to: DropAt): Board {
   const next = { strong: [...board.strong], balanced: [...board.balanced], fast: [...board.fast] };
   let item: TierModelView | undefined;
   let index = to.index;
   for (const tier of Object.keys(next) as Tier[]) {
-    const at = next[tier].findIndex((m) => m.ref === ref);
+    const at = next[tier].findIndex((m) => m.model === model);
     if (at < 0) continue;
     [item] = next[tier].splice(at, 1);
     if (tier === to.tier && at < index) index -= 1;
@@ -55,9 +55,9 @@ export function ModelTiers() {
       board === null
         ? null
         : {
-            strong: board.strong.map((m) => m.ref),
-            balanced: board.balanced.map((m) => m.ref),
-            fast: board.fast.map((m) => m.ref),
+            strong: board.strong.map((m) => m.model),
+            balanced: board.balanced.map((m) => m.model),
+            fast: board.fast.map((m) => m.model),
           };
     const v = await call((h) => h.setModelTiers(tiers));
     if (v !== undefined) setView(v);
@@ -68,11 +68,11 @@ export function ModelTiers() {
 
   const drop = (e: DragEvent, at: DropAt) => {
     e.preventDefault();
-    const ref = e.dataTransfer.getData("text/plain") || dragging;
+    const model = e.dataTransfer.getData("text/plain") || dragging;
     setDragging(null);
     setOver(null);
-    if (!ref) return;
-    const board = move(view.tiers, ref, at);
+    if (!model) return;
+    const board = move(view.tiers, model, at);
     setView({ tiers: board, custom: true });
     void save(board);
   };
@@ -127,18 +127,18 @@ export function ModelTiers() {
                   <p className="text-ink-muted text-xs">{hint}</p>
                 </header>
                 {list.map((m, index) => (
-                  <div key={m.ref}>
-                    {over?.tier === tier && over.index === index && dragging !== m.ref && (
+                  <div key={m.model}>
+                    {over?.tier === tier && over.index === index && dragging !== m.model && (
                       <div className="mb-1.5 h-0.5 rounded bg-accent" />
                     )}
                     {/* biome-ignore lint/a11y/noStaticElementInteractions: a drag handle; dragging has no keyboard equivalent here */}
                     <div
                       draggable
-                      title={`${m.serviceName} · ${m.model}`}
+                      title={`${m.model}：${m.services.join("、")}`}
                       onDragStart={(e) => {
-                        e.dataTransfer.setData("text/plain", m.ref);
+                        e.dataTransfer.setData("text/plain", m.model);
                         e.dataTransfer.effectAllowed = "move";
-                        setDragging(m.ref);
+                        setDragging(m.model);
                       }}
                       onDragEnd={() => {
                         setDragging(null);
@@ -150,13 +150,15 @@ export function ModelTiers() {
                         allowDrop(e, { tier, index: after ? index + 1 : index });
                       }}
                       className={`flex cursor-grab items-center gap-2 rounded-md bg-surface px-2 py-1.5 ring-1 ring-line active:cursor-grabbing ${
-                        dragging === m.ref ? "opacity-40" : ""
+                        dragging === m.model ? "opacity-40" : ""
                       }`}
                     >
                       <GripVertical size={14} className="shrink-0 text-ink-dim" />
                       <div className="min-w-0 flex-1">
                         <div className="truncate font-mono text-ink text-sm">{m.model}</div>
-                        <div className="truncate text-ink-muted text-xs">{m.serviceName}</div>
+                        <div className="truncate text-ink-muted text-xs">
+                          {m.services.join(" · ")}
+                        </div>
                       </div>
                       {m.auto && (
                         <span className="shrink-0 text-ink-dim text-xs" title="按名字自动归档">

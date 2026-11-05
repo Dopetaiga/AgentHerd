@@ -135,12 +135,11 @@ export interface SettingsPatch {
 /** Everything the host offers. Each method is one request on the socket. */
 export type Tier = "strong" | "balanced" | "fast";
 
-/** One model in the tier board. */
+/** One model in the tier board; a model several services offer is one entry. */
 export interface TierModelView {
-  /** `service/model`. */
-  ref: string;
   model: string;
-  serviceName: string;
+  /** Names of the services offering it, in the order AgentHerd tries them. */
+  services: string[];
   /** True when placed by AgentHerd's name rules, not by the owner. */
   auto: boolean;
 }
@@ -172,7 +171,7 @@ export interface HostApi {
   updateSettings(patch: SettingsPatch): HostStatus;
   /** The owner's models in tiers; the Herder reads them to pick a task's model (ADR 0028). */
   modelTiers(): ModelTiersView;
-  /** Saves where the owner put each model; null forgets it and uses the name rules. */
+  /** Saves where the owner put each model (by name); null forgets it and uses the name rules. */
   setModelTiers(tiers: Record<Tier, string[]> | null): ModelTiersView;
   /** Connects the channel again, e.g. after a network failure. */
   reconnect(): Promise<HostStatus>;

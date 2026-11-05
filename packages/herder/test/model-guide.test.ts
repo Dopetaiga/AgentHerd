@@ -16,21 +16,21 @@ describe("model tiers", () => {
   });
 
   it("keeps the owner's placement, drops removed models, appends new ones", () => {
-    const p = placeModels(["s/a", "s/claude-opus-5", "s/new-flash"], {
-      fast: ["s/a", "s/gone"],
+    const p = placeModels(["a", "claude-opus-5", "new-flash"], {
+      fast: ["a", "gone"],
     });
     expect(p.fast).toEqual([
-      { ref: "s/a", auto: false },
-      { ref: "s/new-flash", auto: true },
+      { model: "a", auto: false },
+      { model: "new-flash", auto: true },
     ]);
-    expect(p.strong).toEqual([{ ref: "s/claude-opus-5", auto: true }]);
+    expect(p.strong).toEqual([{ model: "claude-opus-5", auto: true }]);
     expect(p.balanced).toEqual([]);
   });
 
   it("writes text for the Herder, empty without models", () => {
-    const text = tiersText(placeModels(["s/claude-opus-5", "s/deepseek-flash"]));
+    const text = tiersText(placeModels(["claude-opus-5", "deepseek-flash"]));
     expect(text).toContain("Strong");
-    expect(text).toContain("s/claude-opus-5");
+    expect(text).toContain("claude-opus-5");
     expect(text).toContain("what the task is");
     expect(text).not.toContain("Balanced");
     expect(tiersText(placeModels([]))).toBe("");

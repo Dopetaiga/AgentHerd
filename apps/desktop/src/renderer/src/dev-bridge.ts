@@ -183,20 +183,23 @@ function installFakeBridge(): void {
         ? "fast"
         : "balanced";
   const tiersView = (): ModelTiersView => {
-    const all = models.services.flatMap((s) =>
-      s.models.map((m) => ({ ref: `${s.id}/${m}`, model: m, serviceName: s.name })),
-    );
+    const names = [...new Set(models.services.flatMap((s) => s.models))];
+    const all = names.map((model) => ({
+      model,
+      services: models.services.filter((s) => s.models.includes(model)).map((s) => s.name),
+    }));
     const tiers: ModelTiersView["tiers"] = { strong: [], balanced: [], fast: [] };
     const done = new Set<string>();
     for (const tier of ["strong", "balanced", "fast"] as const) {
-      for (const ref of placed?.[tier] ?? []) {
-        const m = all.find((x) => x.ref === ref);
-        if (m === undefined || done.has(ref)) continue;
-        done.add(ref);
+      for (const name of placed?.[tier] ?? []) {
+        const m = all.find((x) => x.model === name);
+        if (m === undefined || done.has(name)) continue;
+        done.add(name);
         tiers[tier].push({ ...m, auto: false });
       }
     }
-    for (const m of all) if (!done.has(m.ref)) tiers[fakeTier(m.model)].push({ ...m, auto: true });
+    for (const m of all)
+      if (!done.has(m.model)) tiers[fakeTier(m.model)].push({ ...m, auto: true });
     return { tiers, custom: placed !== null };
   };
 

@@ -83,7 +83,7 @@ const sessionStartSchema = obj({
   model: opt(
     str({
       description:
-        "Model for this task as service/model from session_list, one the chosen agent can run. Omit to use the agent's own settings.",
+        "Model name from session_list (e.g. claude-opus-5-5), one the chosen agent can run; AgentHerd uses the first service offering it that answers. service/model picks one service. Omit to use the agent's own settings.",
     }),
   ),
 });
@@ -124,7 +124,7 @@ export function herderTools(
             .profiles()
             .map((p) => `${p.id} (${p.name})`)
             .join(", ")}`,
-          "Models (service/model: agents that can run it):",
+          "Models (name: services offering it, in order of preference; agents that can run it):",
           ...modelLines(host, modelGuide),
           `Recent projects: ${host.recentProjects().join(", ") || "(none)"}`,
           `Relay: ${host.relayTaskId()?.slice(0, 8) ?? "none"}`,
@@ -168,15 +168,9 @@ export function herderTools(
         if (!host.profiles().some((p) => p.id === args.profile)) {
           throw new Error(`unknown profile "${args.profile}"`);
         }
-        const model = args.model?.trim() || undefined;
-        if (model !== undefined) {
-          const choice = host.models().find((m) => m.ref === model);
-          if (choice === undefined) throw new Error(`unknown model "${model}"; see session_list`);
-          if (!choice.agents.includes(args.profile)) {
-            const can = choice.agents.join(", ") || "no agent";
-            throw new Error(`agent "${args.profile}" cannot run ${model} (can: ${can})`);
-          }
-        }
+        const asked = args.model?.trim() || undefined;
+        const model =
+          asked === undefined ? undefined : await pickService(host, asked, args.profile);
         const cwd = resolveProject(host, args.project);
         if (!isDirectory(cwd)) throw new Error(`${cwd} is not a directory`);
         const prompt = composeTaskPrompt(args.ownerText.trim(), args.addedContext);
@@ -269,10 +263,64 @@ export function herderTools(
   return tools.map((t) => t as unknown as AgentTool);
 }
 
-function modelLines(host: HerderHost, modelGuide?: () => string): string[] {
+/** The owner's models grouped by name: services in list order, agents that can run any of them. */
+export function modelsByName(
+  models: { ref: string; agents: string[] }[],
+): { name: string; refs: string[]; services: string[]; agents: string[] }[] {
+  const out = new Map<
+    string,
+    { name: string; refs: string[]; services: string[]; agents: string[] }
+  >();
+  for (const m of models) {
+    const slash = m.ref.indexOf("/");
+    const service = m.ref.slice(0, slash);
+    const name = m.ref.slice(slash + 1);
+    const entry = out.get(name) ?? { name, refs: [], services: [], agents: [] };
+    entry.refs.push(m.ref);
+    entry.services.push(service);
+    for (const a of m.agents) if (!entry.agents.includes(a)) entry.agents.push(a);
+    out.set(name, entry);
+  }
+  return [...out.values()];
+}
+
+/**
+ * The `service/model` to run: `asked` itself when it names one service, else the first service
+ * offering the model name that the agent can run and that answers a test call now.
+ */
+async function pickService(host: HerderHost, asked: string, profile: string): Promise<string> {
   const models = host.models();
+  const exact = models.find((m) => m.ref === asked);
+  const candidates =
+    exact !== undefined
+      ? [exact]
+      : models.filter(
+          (m) =>
+            m.ref.endsWith(`/${asked}`) && m.ref.indexOf("/") === m.ref.length - asked.length - 1,
+        );
+  if (candidates.length === 0) throw new Error(`unknown model "${asked}"; see session_list`);
+  const runnable = candidates.filter((m) => m.agents.includes(profile));
+  if (runnable.length === 0) {
+    const can = [...new Set(candidates.flatMap((m) => m.agents))].join(", ") || "no agent";
+    throw new Error(`agent "${profile}" cannot run ${asked} (can: ${can})`);
+  }
+  if (exact !== undefined) return exact.ref;
+  const failures: string[] = [];
+  for (const m of runnable) {
+    const check = await host.checkModel(m.ref);
+    if (check.ok) return m.ref;
+    failures.push(`${m.ref}: ${check.message}`);
+  }
+  throw new Error(`no service answers for ${asked}: ${failures.join("; ")}`);
+}
+
+function modelLines(host: HerderHost, modelGuide?: () => string): string[] {
+  const models = modelsByName(host.models());
   if (models.length === 0) return ["(none; agents use their own settings)"];
-  const lines = models.map((m) => `- ${m.ref}: ${m.agents.join(", ") || "(no agent can run it)"}`);
+  const lines = models.map(
+    (m) =>
+      `- ${m.name}: ${m.services.join(", ")}; ${m.agents.join(", ") || "(no agent can run it)"}`,
+  );
   const guide = modelGuide?.().trim();
   if (guide) lines.push(guide);
   return lines;

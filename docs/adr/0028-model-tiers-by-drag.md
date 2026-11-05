@@ -12,8 +12,8 @@ Asked, they chose tiers with drag-and-drop ordering, unknown models defaulting t
 
 ## Decision
 
-- Three tiers: 最强 (strong), 均衡 (balanced), 便宜快 (fast). Each holds the owner's models
-  (`service/model`), strongest first. The 主管 page shows them as three columns; the owner drags a
+- Three tiers: 最强 (strong), 均衡 (balanced), 便宜快 (fast). Each holds the owner's models by
+  name, strongest first. The 主管 page shows them as three columns; the owner drags a
   model to another tier or another place in a tier.
 - `config.json` `modelTiers` keeps where the owner put models. Models not there are placed by name
   rules in `packages/herder/src/model-guide.ts` (`tierOf`: flash/mini/haiku/… → fast;
@@ -21,10 +21,19 @@ Asked, they chose tiers with drag-and-drop ordering, unknown models defaulting t
   removed from the list drop out. 「恢复自动分档」 forgets the owner's placement.
 - The Herder reads the tiers in `session_list`, each tier with the kind of task it suits, and picks
   the tier from the task; a model the owner names wins.
+- A model name offered by several services is one card listing those services (amended
+  2026-11-05, user asked about same-name models). When the Herder picks it, `session_start` tries
+  the services the agent can use in list order, each checked with a test call (a pass is trusted
+  for 10 minutes, a failure for 2), and uses the first that answers; the start fails only when
+  none does. The Herder may still name `service/model` to force one service. Placements saved as
+  `service/model` before this change are read as the model name.
 - The free-text guide and its API (`modelGuide`, `setModelGuide`) are removed; an old
   `modelGuide` value in `config.json` is ignored.
 
 ## Consequences
+
+- Starting a task on a model that has not been checked recently costs one short test call per
+  service tried.
 
 - The name rules go stale as models change; the owner fixes a wrong placement by dragging, and the
   rules are updated with AgentHerd.
