@@ -16,12 +16,15 @@ export function ModelPanes({
   selected,
   onChange,
   disabled = false,
+  rowExtra,
 }: {
   /** The service's catalog; empty for an OpenAI-compatible service. */
   options: ModelOption[];
   selected: string[];
   onChange: (models: string[]) => void;
   disabled?: boolean;
+  /** Extra controls on each chosen model's row, e.g. a test button. */
+  rowExtra?: (id: string) => ReactNode;
 }) {
   const [query, setQuery] = useState("");
   const [typed, setTyped] = useState("");
@@ -208,6 +211,7 @@ export function ModelPanes({
               className="flex min-h-9 shrink-0 items-center gap-2 rounded-md py-1 pr-1 pl-2.5 hover:bg-hover"
             >
               <ModelLabel id={id} name={names.get(lower(id)) ?? id} />
+              {rowExtra?.(id)}
               <button
                 type="button"
                 aria-label={`移除 ${id}`}
