@@ -38,3 +38,7 @@ Format and rules: [ADR 0001](0001-record-architecture-decisions.md).
 | [0032](0032-task-conversation-in-the-app.md) | Each task's conversation (prompts, replies, tool calls) opens from the 任务 page | Accepted |
 | [0033](0033-herder-does-not-repeat-reports.md) | Task reports and alarms start no Herder turn; they go with the owner's next message | Accepted |
 | [0034](0034-herder-names-tasks.md) | The Herder gives each task a short name instead of using the owner's first line | Accepted |
+| [0035](0035-herder-finds-projects-owner-picks.md) | The Herder finds project folders by name; the owner always picks with buttons | Accepted |
+| [0036](0036-message-cards-by-kind.md) | Herder questions, task reports and approvals are cards with their own colour; reports ≤400 chars | Accepted |
+| [0037](0037-herder-retries-and-never-drops.md) | The Herder retries, switches model, and never drops an owner message | Accepted |
+| [0038](0038-herder-memory.md) | The Herder has a long-term memory (six kinds) in herd.db with code-checked writes | Accepted |
