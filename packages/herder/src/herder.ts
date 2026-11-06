@@ -8,7 +8,13 @@ import type { Api, Model } from "@earendil-works/pi-ai";
 import { errorKind, HELD_RETRY_MS, RETRY_DELAYS_MS, shortError } from "./errors.ts";
 import { memorySnapshot, memoryTools, recallBlock } from "./memory.ts";
 import type { TierPlacement } from "./model-guide.ts";
-import { eventsPrompt, ownerAnswerPrompt, ownerMessagePrompt, systemPrompt } from "./prompt.ts";
+import {
+  eventsPrompt,
+  nowLine,
+  ownerAnswerPrompt,
+  ownerMessagePrompt,
+  systemPrompt,
+} from "./prompt.ts";
 import { herderTools, otherOption, pathsIn, resolveProject, type TurnContext } from "./tools.ts";
 
 export const HERDER_STATE_KEY = "herder.messages";
@@ -243,6 +249,8 @@ export class Herder implements HerderPort {
       prompt = `${eventsPrompt(this.events)}\n\n${prompt}`;
       this.events = [];
     }
+    // In the message, not the system prompt, so the cached prefix stays the same.
+    prompt = `${nowLine(this.now())}\n${prompt}`;
     this.refreshMemory();
     this.host.audit("herder.turn", { kind: job.kind });
     const done = await this.runWithRetries(job, prompt, images);

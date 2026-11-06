@@ -113,6 +113,12 @@ Code checks (a rejected write is logged to `memory_log` with the reason):
 - `memory_search(query)` tool for anything the recall missed, including `herder_turns`.
 - When a memory drives an action, the Herder says so ("按你说过的：…"). The owner's "不对" marks it
   superseded.
+- Dates: every entry the Herder or an agent sees (snapshot, recall, `memory_search`, owner
+  preferences and lessons in a task prompt) ends with the local day it was written, e.g.
+  「(记于 2026-11-06，到 2026-12-31)」. Each Herder message starts with "[Now: 2026-11-06 18:05,
+  Friday]" (in the message, not the system prompt, to keep the cache). The prompt tells the Herder
+  to weigh entries by age, check old ones before acting and say how old one is when it relies on
+  it. Feishu `/记忆` shows the day too.
 
 ### Viewing
 

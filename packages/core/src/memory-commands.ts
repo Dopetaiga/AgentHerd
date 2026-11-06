@@ -7,8 +7,16 @@ import type { CoreTexts } from "./texts.ts";
 /** Entries shown per kind in the list, newest first. */
 export const LIST_PER_KIND = 8;
 
+/** The local day an entry was written, e.g. 2026-11-06. */
+function day(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso.slice(0, 10);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
 function line(r: MemoryRow): string {
-  return `- ${r.id.slice(0, 8)} ${r.abstract}`;
+  return `- ${r.id.slice(0, 8)} ${r.abstract}（${day(r.createdAt)}）`;
 }
 
 export function memoryListText(memory: MemoryStore, query: string, t: CoreTexts): string {
