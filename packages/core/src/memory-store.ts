@@ -23,6 +23,36 @@ export type MemoryStatus = "active" | "superseded" | "expired" | "deleted";
 /** `said`: the owner's words; `noticed`: the Herder's own; `task`: a task-end job; `review`: a review job; `owner_edit`: the app. */
 export type MemorySource = "said" | "noticed" | "task" | "review" | "owner_edit";
 
+/** Turns text into vectors for memory search (ADR 0038). Supplied by the host; may be missing. */
+export interface Embedder {
+  /** Name of the model; vectors of another model are not compared. */
+  readonly model: string;
+  /** One normalized vector per text, or undefined while the model is not ready. */
+  embed(texts: readonly string[]): Promise<Float32Array[] | undefined>;
+}
+
+/** One request to a cheap model: system and user text in, reply text out. */
+export type Completer = (system: string, user: string, signal: AbortSignal) => Promise<string>;
+
+/** Weight of vector similarity in hybrid search; the rest is keyword rank. */
+export const VECTOR_WEIGHT = 0.7;
+/** A hit found by vectors alone must be at least this similar. */
+export const VECTOR_ONLY_MIN = 0.5;
+
+export function cosine(a: Float32Array, b: Float32Array): number {
+  let dot = 0;
+  let na = 0;
+  let nb = 0;
+  for (let i = 0; i < a.length; i++) {
+    const x = a[i] as number;
+    const y = b[i] as number;
+    dot += x * y;
+    na += x * x;
+    nb += y * y;
+  }
+  return na === 0 || nb === 0 ? 0 : dot / Math.sqrt(na * nb);
+}
+
 export interface MemoryRow {
   id: string;
   kind: MemoryKind;
@@ -601,6 +631,47 @@ export class MemoryStore {
       }
     }
     return [...hits.values()].sort((a, b) => b.score - a.score).slice(0, limit);
+  }
+
+  /**
+   * Keyword search blended with vector similarity when `embedder` is ready: 0.7 cosine + 0.3
+   * keyword rank scaled to the best keyword hit. Falls back to keywords alone.
+   */
+  async searchHybrid(
+    query: string,
+    embedder: Embedder | undefined,
+    opts: { kinds?: readonly MemoryKind[]; limit?: number } = {},
+  ): Promise<MemoryHit[]> {
+    const limit = opts.limit ?? 10;
+    const words = this.search(query, { ...opts, limit: limit * 3 });
+    if (embedder === undefined || query.trim() === "") return words.slice(0, limit);
+    let qv: Float32Array | undefined;
+    try {
+      qv = (await embedder.embed([query]))?.[0];
+    } catch {
+      qv = undefined;
+    }
+    if (qv === undefined) return words.slice(0, limit);
+    const top = Math.max(...words.map((h) => h.score), 0);
+    const scores = new Map<string, number>();
+    for (const h of words) scores.set(h.id, (1 - VECTOR_WEIGHT) * (top > 0 ? h.score / top : 0));
+    const sims = new Map<string, number>();
+    for (const v of this.vectors(embedder.model, opts.kinds)) {
+      sims.set(v.id, cosine(qv, v.vec));
+    }
+    for (const [id, sim] of sims) {
+      if (!scores.has(id) && sim < VECTOR_ONLY_MIN) continue;
+      scores.set(id, (scores.get(id) ?? 0) + VECTOR_WEIGHT * sim);
+    }
+    const byId = new Map(words.map((h) => [h.id, h] as const));
+    const hits: MemoryHit[] = [];
+    for (const [id, score] of [...scores].sort((a, b) => b[1] - a[1])) {
+      const row = byId.get(id) ?? this.get(id);
+      if (row === undefined || row.status !== "active") continue;
+      hits.push({ ...row, score });
+      if (hits.length >= limit) break;
+    }
+    return hits;
   }
 
   /** Counts a use of entries the Herder was shown. */

@@ -5,6 +5,7 @@
 
 import {
   CASE_JOB,
+  type Embedder,
   type HerderTurn,
   type MemoryJob,
   type MemoryOp,
@@ -30,8 +31,13 @@ export interface MemoryWorkerDeps {
   herderTurns(limit: number): HerderTurn[];
   /** One request to the memory model; returns its text. Undefined when no model is set up. */
   complete?: (system: string, user: string, signal: AbortSignal) => Promise<string>;
+  /** Fills vectors for entries that have none, after the jobs. */
+  embedder?: Embedder;
   log?: (line: string) => void;
 }
+
+/** Entries embedded per batch. */
+export const VECTOR_BATCH = 16;
 
 /** The first JSON object in a reply, which may sit in a code fence or among words. */
 export function parseJson(text: string): Record<string, unknown> {
@@ -130,6 +136,34 @@ export class MemoryWorker {
 
   /** Runs every due job. For tests and `kick`. */
   async drain(): Promise<void> {
+    await this.runJobs();
+    await this.fillVectors();
+  }
+
+  /** Embeds entries without a vector; stops quietly while the model is not ready. */
+  async fillVectors(): Promise<void> {
+    const { embedder, memory } = this.deps;
+    if (embedder === undefined) return;
+    for (;;) {
+      if (this.stopped) return;
+      const rows = memory.missingVectors(embedder.model).slice(0, VECTOR_BATCH);
+      if (rows.length === 0) return;
+      let vecs: Float32Array[] | undefined;
+      try {
+        vecs = await embedder.embed(rows.map((r) => `${r.abstract}\n${r.body.slice(0, 500)}`));
+      } catch (error) {
+        this.deps.log?.(`[memory] vectors failed: ${(error as Error).message}`);
+        return;
+      }
+      if (vecs === undefined) return;
+      rows.forEach((r, i) => {
+        const v = vecs?.[i];
+        if (v !== undefined) memory.setVector(r.id, embedder.model, v);
+      });
+    }
+  }
+
+  private async runJobs(): Promise<void> {
     if (this.deps.complete === undefined) return;
     for (
       let job = this.deps.memory.claimJob();

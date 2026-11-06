@@ -179,6 +179,10 @@ export class Herd {
       audit: (type, data) => this.store.audit(type, data),
       recordTurn: (role, text, taskId) => this.store.addHerderTurn(role, text, taskId),
       memory: this.store.memory,
+      ...(this.opts.embedder === undefined ? {} : { embedder: this.opts.embedder }),
+      ...(this.opts.memoryComplete === undefined
+        ? {}
+        : { memoryComplete: this.opts.memoryComplete }),
       getState: (key) => this.store.getState(key),
       setState: (key, value) => this.store.setState(key, value),
     };

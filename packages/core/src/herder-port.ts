@@ -2,7 +2,7 @@
 // not import the Herder or any model library: the CLI or the app passes a factory.
 
 import type { Locale } from "@agentherd/protocol";
-import type { MemoryStore } from "./memory-store.ts";
+import type { Completer, Embedder, MemoryStore } from "./memory-store.ts";
 import type { DecisionRow } from "./store.ts";
 import type { Task } from "./tasks.ts";
 import type { CoreTexts } from "./texts.ts";
@@ -68,6 +68,10 @@ export interface HerderHost {
   recordTurn(role: HerderTurnRole, text: string, taskId?: string): void;
   /** The Herder's long-term memory (ADR 0038); absent in tests that do not use it. */
   readonly memory?: MemoryStore;
+  /** Vectors for memory search; absent or not ready → keyword search alone. */
+  readonly embedder?: Embedder;
+  /** A cheap model for small judgements such as ranking past cases; absent → skip them. */
+  readonly memoryComplete?: Completer;
   getState<T>(key: string): T | undefined;
   setState(key: string, value: unknown): void;
 }

@@ -118,7 +118,9 @@ export class Herder implements HerderPort {
         thinkingLevel: "off",
         tools: [
           ...herderTools(this.host, () => this.turn, opts.modelTiers),
-          ...(this.host.memory === undefined ? [] : memoryTools(this.host.memory, () => this.turn)),
+          ...(this.host.memory === undefined
+            ? []
+            : memoryTools(this.host.memory, () => this.turn, this.host.embedder)),
         ],
         messages: saved,
       },
@@ -211,7 +213,10 @@ export class Herder implements HerderPort {
       };
       if (!job.recorded) this.host.recordTurn("owner", job.text);
       prompt = ownerMessagePrompt(job.text, images, this.host.texts);
-      const recall = this.host.memory === undefined ? "" : recallBlock(this.host.memory, job.text);
+      const recall =
+        this.host.memory === undefined
+          ? ""
+          : await recallBlock(this.host.memory, job.text, this.host.embedder);
       if (recall !== "") prompt = `${prompt}\n\n${recall}`;
     } else {
       const text = `${this.lastOwnerText}\n${job.answer}`;

@@ -19,10 +19,13 @@ export {
 } from "./herder.ts";
 export {
   HERDER_KINDS,
+  LESSONS_MAX,
+  lessonsText,
   MAX_OPS,
   memorySnapshot,
   memoryTools,
   opProblem,
+  pastLessons,
   RECALL_KINDS,
   RECALL_MAX_CHARS,
   RECALL_MAX_HITS,

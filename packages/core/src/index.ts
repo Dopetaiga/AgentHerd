@@ -21,6 +21,9 @@ export {
   ABSTRACT_MAX_CHARS,
   BODY_MAX_CHARS,
   CASE_JOB,
+  type Completer,
+  cosine,
+  type Embedder,
   JOB_RETRY_MS,
   MEMORY_KINDS,
   MEMORY_TABLES_SQL,
@@ -38,6 +41,7 @@ export {
   RESIDENT_CAPS,
   RESIDENT_KINDS,
   REVIEW_JOB,
+  VECTOR_WEIGHT,
   type WriteMeta,
 } from "./memory-store.ts";
 export {

@@ -223,7 +223,7 @@ describe("snapshot and recall", () => {
     expect(snap).not.toContain("小王");
   });
 
-  it("recall finds non-resident entries for a message", () => {
+  it("recall finds non-resident entries for a message", async () => {
     const store = Store.open(":memory:");
     store.memory.write(
       [
@@ -232,11 +232,11 @@ describe("snapshot and recall", () => {
       ],
       { actor: "herder", source: "said" },
     );
-    const block = recallBlock(store.memory, "让小王看看 pi-desktop");
+    const block = await recallBlock(store.memory, "让小王看看 pi-desktop");
     expect(block).toContain("[记忆召回");
     expect(block).toContain("小王负责");
     expect(block).not.toContain("报告用中文");
-    expect(recallBlock(store.memory, "天气")).toBe("");
+    expect(await recallBlock(store.memory, "天气")).toBe("");
   });
 });
 

@@ -7,6 +7,7 @@ import type { HerderHost, OwnerImage, Task } from "@agentherd/core";
 import type { AgentTool, AgentToolResult } from "@agentherd/herder-loop";
 import { arr, obj, opt, str } from "@earendil-works/pi-schema";
 import { agentForModel } from "./agent-models.ts";
+import { lessonsText, pastLessons } from "./memory.ts";
 import { TIERS, type TierPlacement, tiersText } from "./model-guide.ts";
 import { findProjects, foundText } from "./project-find.ts";
 import { composeTaskPrompt, HERDER_LABEL } from "./prompt.ts";
@@ -231,7 +232,19 @@ export function herderTools(
           );
         }
         if (!isDirectory(cwd)) throw new Error(`${cwd} is not a directory`);
-        const prompt = composeTaskPrompt(args.ownerText.trim(), args.addedContext);
+        const lessons =
+          host.memory === undefined
+            ? []
+            : await pastLessons(
+                host.memory,
+                `${args.name.trim()}\n${args.ownerText}`,
+                host.embedder,
+                host.memoryComplete,
+              );
+        const added = [args.addedContext?.trim() ?? "", lessonsText(lessons)]
+          .filter((s) => s !== "")
+          .join("\n\n");
+        const prompt = composeTaskPrompt(args.ownerText.trim(), added === "" ? undefined : added);
         const title = args.name.trim() || args.ownerText.trim();
         const taskId =
           t.images.length === 0
@@ -242,8 +255,12 @@ export function herderTools(
           picked?.switched === undefined
             ? ""
             : `\nModel switched: ${picked.switched}. Tell the owner in one line.`;
+        const gave =
+          lessons.length === 0
+            ? ""
+            : `\nGave the agent ${lessons.length} past record(s): ${lessons.map((l) => l.abstract).join("; ")}`;
         return ok(
-          `started task ${taskId.slice(0, 8)} in ${cwd} with ${profile}, ${using}${switched}`,
+          `started task ${taskId.slice(0, 8)} in ${cwd} with ${profile}, ${using}${switched}${gave}`,
         );
       },
     },

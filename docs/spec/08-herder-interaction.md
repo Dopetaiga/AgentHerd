@@ -65,7 +65,7 @@ checks it again and the owner still picks).
   `global` or `project:<dir>`; `status` is `active|superseded|expired|deleted`. `abstract` (L0) ≤200
   chars, `body` (L1/L2) ≤4000.
 - `memories_fts` FTS5 `tokenize="trigram"`, kept in sync by triggers.
-- `memory_vectors(memory_id, dim, vec BLOB)`: 512-dim bge-small-zh-v1.5 vectors of `abstract`.
+- `memory_vectors(memory_id, model, vec BLOB)`: 512-dim bge-small-zh-v1.5 vectors of `abstract` plus the start of `body`, filled by the memory worker.
 - `memory_revisions(id, batch_id, memory_id, op, before_json, after_json, at, actor)`: undo by batch.
 - `memory_log(id, at, kind, text, ref)`: events and rejected candidates; searchable, never injected.
 - `herder_turns(id, at, role, text, task_id)`: every owner message (typed vs button answer apart),
@@ -108,7 +108,8 @@ Code checks (a rejected write is logged to `memory_log` with the reason):
 - Search is hybrid: 0.7 × local vector cosine + 0.3 × FTS (trigram) score. When the Herder starts
   a new task, the top 10 are reranked by the fast model. If the vector model is missing, FTS alone.
   Measured on 105 items / 40 queries: FTS R@3 0.60, vectors 0.73, hybrid 0.75, hybrid + rerank 0.86.
-- The vector model (bge-small-zh-v1.5 q8, 24 MB, onnxruntime) ships in the installer.
+- The vector model (bge-small-zh-v1.5 q8, 24 MB, onnxruntime) is downloaded once into `<home>/models` from huggingface.co, falling back to hf-mirror.com; retried after 10 minutes on failure. There is no installer yet; ship it in the installer once there is one. Until it loads, search is keyword-only. A vector-only hit needs cosine ≥ 0.5.
+- When a task starts, hybrid search over cases and experience gives ≤10 candidates; the memory model (8 s timeout) keeps ≤3 that apply, which go into the task prompt's added context and the session_start result. Model failure keeps the search order; any memory failure never blocks the task.
 - `memory_search(query)` tool for anything the recall missed, including `herder_turns`.
 - When a memory drives an action, the Herder says so ("按你说过的：…"). The owner's "不对" marks it
   superseded.

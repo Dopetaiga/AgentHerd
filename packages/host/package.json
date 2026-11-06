@@ -21,6 +21,7 @@
     "@agentherd/core": "workspace:*",
     "@agentherd/herder": "workspace:*",
     "@agentherd/protocol": "workspace:*",
+    "@huggingface/transformers": "3.7.5",
     "qrcode": "^1.5.4"
   },
   "devDependencies": {
