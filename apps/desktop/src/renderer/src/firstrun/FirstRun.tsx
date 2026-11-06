@@ -162,8 +162,7 @@ export function FirstRun() {
         reason = ready ? undefined : "先选一个服务";
         onPrimary = () => goPart("form");
       } else {
-        title =
-          draft.choice?.kind === "custom" ? "连接 OpenAI 兼容服务" : `连接 ${draft.choiceName}`;
+        title = draft.choice?.kind === "custom" ? "连接自定义服务" : `连接 ${draft.choiceName}`;
         hint = "填写 Key，选择要启用的模型。之后可在「模型」页修改。";
         body = (
           <div className={`${WIDE} ${FILL} flex flex-col gap-3`}>

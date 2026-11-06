@@ -168,7 +168,7 @@ export function useServiceDraft() {
     choice?.kind === "builtin"
       ? providerName(choice.provider.provider)
       : choice?.kind === "custom"
-        ? "OpenAI 兼容服务"
+        ? "自定义服务"
         : "";
 
   return {
