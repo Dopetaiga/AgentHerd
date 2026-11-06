@@ -23,6 +23,8 @@ import {
   fallbackOrder,
   herderFromSettings,
   isGptModel,
+  MemoryWorker,
+  memoryModel,
   modelChoices,
   modelEnvFor,
   piModelEnv,
@@ -72,6 +74,8 @@ export interface HostOptions {
    * the list. Off in tests.
    */
   autoInstallAgents?: boolean;
+  /** Run background memory jobs (task cases, reviews) with a cheap model. Off in tests. */
+  memoryJobs?: boolean;
   userHome?: string;
   /** Model keys (and anything else under account names). */
   secrets: SecretStore;
@@ -102,6 +106,8 @@ export class Host implements HostApi {
   private readonly opts: HostOptions;
   private readonly listeners = new Set<(event: HostEvent) => void>();
   private herd: Herd | undefined;
+  /** Background memory jobs of the running herd (ADR 0038). */
+  private memoryWorker: MemoryWorker | undefined;
   private connected = false;
   private channelError: string | undefined;
   private herderReason: string | undefined;
@@ -196,6 +202,9 @@ export class Host implements HostApi {
     const herd = this.herd;
     this.herd = undefined;
     this.connected = false;
+    const worker = this.memoryWorker;
+    this.memoryWorker = undefined;
+    await worker?.stop();
     if (herd !== undefined) await herd.stop();
   }
 
@@ -240,6 +249,7 @@ export class Host implements HostApi {
     try {
       await herd.start();
       this.herd = herd;
+      this.startMemoryWorker(herd);
       this.connected = true;
       this.channelError = undefined;
       this.log(
@@ -252,6 +262,28 @@ export class Host implements HostApi {
     }
     this.emitStatus();
     this.emitTasks();
+  }
+
+  private startMemoryWorker(herd: Herd): void {
+    if (this.opts.memoryJobs !== true) return;
+    const worker = new MemoryWorker({
+      memory: herd.store.memory,
+      transcript: (taskId) => herd.store.transcript(taskId),
+      herderTurns: (limit) => herd.store.herderTurns(limit),
+      complete: async (system, user, signal) => {
+        const model = memoryModel(
+          this.settings(),
+          this.opts.secrets,
+          this.placement(),
+          this.opts.env,
+        );
+        if (model === undefined) throw new Error("no model for memory");
+        return model.complete(system, user, signal);
+      },
+      log: (line) => this.log(line),
+    });
+    worker.start();
+    this.memoryWorker = worker;
   }
 
   private buildProfiles(config: CliConfig = this.config()): AgentProfile[] {

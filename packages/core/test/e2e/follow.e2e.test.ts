@@ -213,4 +213,17 @@ turns:
     ]);
     expect(live).toBe("");
   });
+
+  it("queues a memory case when the task ends", async () => {
+    const { herd } = await setup(`
+turns:
+  - - message: "Fixed it."
+    - end_turn: end_turn
+`);
+    await herd.run("mock", dir, "Fix the flaky test");
+    const taskId = herd.tasks()[0]?.id ?? "";
+    expect(herd.store.memory.jobs().map((j) => [j.kind, j.payload.taskId, j.payload.cwd])).toEqual([
+      ["case", taskId, dir],
+    ]);
+  });
 });

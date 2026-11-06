@@ -8,7 +8,15 @@ export {
   modelChoices,
   modelEnvFor,
 } from "./agent-models.ts";
-export { HERDER_STATE_KEY, Herder, type HerderOptions, MAX_SAVED_MESSAGES } from "./herder.ts";
+export {
+  HERDER_STATE_KEY,
+  Herder,
+  type HerderOptions,
+  MAX_SAVED_MESSAGES,
+  MEMORY_REFRESH_MS,
+  REVIEW_EVERY_TURNS,
+  REVIEW_IDLE_MS,
+} from "./herder.ts";
 export {
   HERDER_KINDS,
   MAX_OPS,
@@ -21,6 +29,18 @@ export {
   recallBlock,
   type ToolOp,
 } from "./memory.ts";
+export {
+  CASE_INPUT_CHARS,
+  CASE_SYSTEM,
+  EXPERIENCE_SYSTEM,
+  JOB_TIMEOUT_MS,
+  MemoryWorker,
+  type MemoryWorkerDeps,
+  parseJson,
+  REVIEW_SYSTEM,
+  REVIEW_TURNS,
+  WORKER_POLL_MS,
+} from "./memory-jobs.ts";
 export {
   type ModelTiers,
   placeModels,
@@ -40,6 +60,8 @@ export {
   type HerderChoice,
   herderFallbacks,
   herderFromSettings,
+  type MemoryModel,
+  memoryModel,
   PI_KEY_ENV,
   PI_MODEL_ENV,
   type PiModelChoice,

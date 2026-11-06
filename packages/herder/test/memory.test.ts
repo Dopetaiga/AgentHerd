@@ -7,7 +7,7 @@ import {
   streamSimple,
 } from "@earendil-works/pi-ai/compat";
 import { afterEach, describe, expect, it } from "vitest";
-import { Herder, MEMORY_REFRESH_MS } from "../src/herder.ts";
+import { Herder, MEMORY_REFRESH_MS, REVIEW_EVERY_TURNS } from "../src/herder.ts";
 import { memorySnapshot, memoryTools, opProblem, recallBlock } from "../src/memory.ts";
 import type { TurnContext } from "../src/tools.ts";
 import { fakeHost } from "./helpers.ts";
@@ -319,5 +319,30 @@ describe("Herder with memory", () => {
     herder.ownerMessage("在吗");
     await herder.idle();
     expect(systems[2]).toContain("主人默认用 kimi");
+  });
+});
+
+describe("Herder review trigger", () => {
+  it("queues one review after enough owner messages", async () => {
+    const store = Store.open(":memory:");
+    const registration = registerFauxProvider();
+    faux.push(registration);
+    const { host } = fakeHost({ memory: store.memory });
+    const herder = new Herder({
+      host,
+      model: registration.getModel(),
+      streamFn: streamSimple,
+      sleep: async () => {},
+    });
+    registration.setResponses(
+      Array.from({ length: REVIEW_EVERY_TURNS * 2 }, () => () => fauxAssistantMessage("好。")),
+    );
+    for (let i = 0; i < REVIEW_EVERY_TURNS * 2; i++) {
+      herder.ownerMessage(`消息 ${i}`);
+      await herder.idle();
+    }
+    // The first review is still waiting, so the second batch adds none.
+    expect(store.memory.jobs().map((j) => j.kind)).toEqual(["review"]);
+    await herder.stop();
   });
 });

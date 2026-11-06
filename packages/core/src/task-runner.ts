@@ -12,6 +12,7 @@ import {
   type TaskOps,
 } from "./herd-context.ts";
 import type { OwnerImage } from "./herder-port.ts";
+import { CASE_JOB } from "./memory-store.ts";
 import { onPermission } from "./permission.ts";
 import type { Relay } from "./relay.ts";
 import { REPLY_HINT_CHARS, replyHint } from "./report.ts";
@@ -175,6 +176,17 @@ export class TaskRunner {
     await f.connection?.close();
     ctx.registry.set(taskId, "ended");
     ctx.store.audit("task.ended", { taskId, why });
+    // A case for the Herder's memory is written later from the conversation (ADR 0038).
+    if (ctx.store.transcript(taskId).length >= 2) {
+      ctx.store.memory.enqueueJob(CASE_JOB, {
+        taskId,
+        title: f.task.title,
+        cwd: f.cwd,
+        agent: f.task.agent,
+        failed: f.failed,
+        why,
+      });
+    }
     if (this.relay.stored()?.taskId === taskId) {
       await this.relay.end("the task ended");
     }

@@ -260,3 +260,60 @@ function definedEnv(): Record<string, string> {
   for (const [k, v] of Object.entries(process.env)) if (v !== undefined) out[k] = v;
   return out;
 }
+
+/** The model for background memory work and how to call it. */
+export interface MemoryModel {
+  ref: string;
+  complete: (system: string, user: string, signal: AbortSignal) => Promise<string>;
+}
+
+/**
+ * The cheap model memory jobs run on (ADR 0038): the first model of the fast tier a service with a
+ * key offers, else the Herder's own model. Undefined when there is neither.
+ */
+export function memoryModel(
+  settings: ModelSettings,
+  secrets: SecretStore,
+  tiers?: TierPlacement,
+  env?: Record<string, string>,
+): MemoryModel | undefined {
+  const candidates: { service: ModelService; model: string }[] = [];
+  for (const entry of tiers?.fast ?? []) {
+    for (const service of settings.services) {
+      if (service.models.includes(entry.model)) candidates.push({ service, model: entry.model });
+    }
+  }
+  const herder = modelFor(settings, "herder");
+  if (herder !== undefined) candidates.push(herder);
+  for (const c of candidates) {
+    const key = serviceKey(c.service, secrets, env);
+    if (key === undefined && c.service.kind === "builtin") continue;
+    let model: Model<Api>;
+    try {
+      model = resolveModel(c.service, c.model);
+    } catch {
+      continue;
+    }
+    return {
+      ref: `${c.service.id}/${c.model}`,
+      complete: async (system, user, signal) => {
+        const reply = await completeSimple(
+          model,
+          {
+            systemPrompt: system,
+            messages: [{ role: "user", content: user, timestamp: Date.now() }],
+          },
+          { apiKey: key ?? "none", signal },
+        );
+        if (reply.stopReason === "error" || reply.stopReason === "aborted") {
+          throw new Error(reply.errorMessage ?? reply.stopReason);
+        }
+        return reply.content
+          .filter((c) => c.type === "text")
+          .map((c) => (c as { text: string }).text)
+          .join("");
+      },
+    };
+  }
+  return undefined;
+}

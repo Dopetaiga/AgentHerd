@@ -26,6 +26,7 @@ export async function runHost(opts: RunHostOptions): Promise<RunningHost> {
   const host = new Host({
     home: opts.home,
     autoInstallAgents: true,
+    memoryJobs: true,
     secrets: secretFile(opts.home),
     createChannel: (locale) =>
       new FeishuChannel({

@@ -1,6 +1,7 @@
 // The Herder: one resident session on a light model (docs/spec/04-herder.md §1, ADR 0018).
 
 import type { HerderEvent, HerderHost, HerderPort, OwnerImage } from "@agentherd/core";
+import { REVIEW_JOB } from "@agentherd/core";
 import { Agent, type AgentMessage, type StreamFn } from "@agentherd/herder-loop";
 import { guardCheck } from "@agentherd/rules";
 import type { Api, Model } from "@earendil-works/pi-ai";
@@ -51,6 +52,11 @@ type Attempt = { ok: true } | { ok: false; message: string; acted: boolean };
 /** A pause after which the memory in the system prompt is rebuilt. */
 export const MEMORY_REFRESH_MS = 60 * 60_000;
 
+/** A review of the conversation for lasting things runs after this many owner messages… */
+export const REVIEW_EVERY_TURNS = 6;
+/** …or after this long without one. */
+export const REVIEW_IDLE_MS = 2 * 60_000;
+
 /** Events kept for the next owner turn; older ones are dropped. */
 export const MAX_HELD_EVENTS = 10;
 
@@ -87,6 +93,8 @@ export class Herder implements HerderPort {
   private readonly now: () => number;
   /** When the last turn ran; after a long pause the memory in the system prompt is rebuilt. */
   private lastTurnAt = 0;
+  private ownerTurnsSinceReview = 0;
+  private reviewTimer: ReturnType<typeof setTimeout> | undefined;
 
   constructor(opts: HerderOptions) {
     this.host = opts.host;
@@ -147,6 +155,7 @@ export class Herder implements HerderPort {
 
   async stop(): Promise<void> {
     this.stopped = true;
+    if (this.reviewTimer !== undefined) clearTimeout(this.reviewTimer);
     if (this.heldTimer !== undefined) clearTimeout(this.heldTimer);
     this.jobs.length = 0;
     this.agent.abort();
@@ -232,6 +241,7 @@ export class Herder implements HerderPort {
     this.refreshMemory();
     this.host.audit("herder.turn", { kind: job.kind });
     const done = await this.runWithRetries(job, prompt, images);
+    if (job.kind === "owner") this.countForReview();
     if (!done) return;
     const last = this.agent.state.messages.at(-1);
     if (!this.turn.asked && last?.role === "assistant") {
@@ -298,6 +308,32 @@ export class Herder implements HerderPort {
     this.heldTimer.unref?.();
     await this.host.alert(this.host.texts.herderHeld(result.message), true);
     return false;
+  }
+
+  /** Queues a background review every few owner messages or after a quiet spell (ADR 0038). */
+  private countForReview(): void {
+    if (this.host.memory === undefined) return;
+    this.ownerTurnsSinceReview++;
+    if (this.reviewTimer !== undefined) clearTimeout(this.reviewTimer);
+    this.reviewTimer = undefined;
+    if (this.ownerTurnsSinceReview >= REVIEW_EVERY_TURNS) {
+      this.queueReview();
+      return;
+    }
+    this.reviewTimer = setTimeout(() => this.queueReview(), REVIEW_IDLE_MS);
+    this.reviewTimer.unref?.();
+  }
+
+  private queueReview(): void {
+    const memory = this.host.memory;
+    if (memory === undefined || this.ownerTurnsSinceReview === 0 || this.stopped) return;
+    this.ownerTurnsSinceReview = 0;
+    const waiting = memory
+      .jobs(20)
+      .some((j) => j.kind === REVIEW_JOB && (j.state === "pending" || j.state === "running"));
+    if (waiting) return;
+    const afterId = Number(memory.lastLog("review.done")?.ref ?? 0);
+    memory.enqueueJob(REVIEW_JOB, { afterId });
   }
 
   private fullSystemPrompt(): string {
