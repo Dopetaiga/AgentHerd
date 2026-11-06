@@ -8,6 +8,7 @@ import { parseCommand } from "./commands.ts";
 import { type HerdContext, openTasks, say, type TaskOps } from "./herd-context.ts";
 import type { OwnerImage } from "./herder-port.ts";
 import { HERDER_RETRY_TARGET } from "./herder-port.ts";
+import { forgetMemory, memoryListText, restoreMemory } from "./memory-commands.ts";
 import type { Relay } from "./relay.ts";
 import type { Task } from "./tasks.ts";
 import { taskTitle } from "./tasks.ts";
@@ -144,6 +145,15 @@ export class OwnerCommands {
         return;
       case "herder":
         await this.toHerder(command.text, images);
+        return;
+      case "memory":
+        await say(ctx, memoryListText(ctx.store.memory, command.query, ctx.texts));
+        return;
+      case "forget":
+        await say(ctx, forgetMemory(ctx.store.memory, command.target, ctx.texts));
+        return;
+      case "restore":
+        await say(ctx, restoreMemory(ctx.store.memory, command.target, ctx.texts));
         return;
       case "text": {
         if (relay === undefined) {

@@ -9,6 +9,9 @@ export type Command =
   | { kind: "end" }
   | { kind: "interrupt"; text: string }
   | { kind: "herder"; text: string }
+  | { kind: "memory"; query: string }
+  | { kind: "forget"; target: string }
+  | { kind: "restore"; target: string }
   | { kind: "text"; text: string }
   | { kind: "invalid"; command: string; usage: string };
 
@@ -17,6 +20,8 @@ const USAGE = {
   relay: "/relay <task>",
   interrupt: "/interrupt <text>",
   herder: "/herder <text>",
+  forget: "/忘掉 <编号>",
+  restore: "/恢复 <编号>",
 } as const;
 
 interface Token {
@@ -100,6 +105,16 @@ export function parseCommand(text: string): Command {
       return parseRequired("interrupt", rest);
     case "herder":
       return parseRequired("herder", rest);
+    case "记忆":
+    case "memory":
+      return { kind: "memory", query: rest.trim() };
+    case "忘掉":
+    case "忘记":
+    case "forget":
+      return rest.trim() === "" ? invalid("forget") : { kind: "forget", target: rest.trim() };
+    case "恢复":
+    case "restore":
+      return rest.trim() === "" ? invalid("restore") : { kind: "restore", target: rest.trim() };
     default:
       return { kind: "text", text: trimmed };
   }

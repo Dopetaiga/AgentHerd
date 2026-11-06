@@ -3,6 +3,7 @@
 import {
   Bot,
   Boxes,
+  Brain,
   ListTodo,
   Loader2,
   type LucideIcon,
@@ -17,6 +18,7 @@ import { Dot, Toasts } from "./components/ui";
 import { FirstRun } from "./firstrun/FirstRun";
 import { AgentsPage } from "./pages/AgentsPage";
 import { HerdersPage } from "./pages/HerdersPage";
+import { MemoryPage } from "./pages/MemoryPage";
 import { ModelsPage } from "./pages/ModelsPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { TasksPage } from "./pages/TasksPage";
@@ -25,6 +27,7 @@ import { type Page, startStore, useApp } from "./store";
 const NAV: { page: Page; label: string; icon: LucideIcon }[] = [
   { page: "tasks", label: "任务", icon: ListTodo },
   { page: "herders", label: "主管", icon: Bot },
+  { page: "memory", label: "记忆", icon: Brain },
   { page: "agents", label: "Agent", icon: SquareTerminal },
   { page: "models", label: "模型", icon: Boxes },
   { page: "settings", label: "设置", icon: Settings },
@@ -35,6 +38,10 @@ const HEADERS: Record<Page, { title: string; hint: string }> = {
   herders: {
     title: "主管",
     hint: "在飞书里回答你、帮你开任务、跟进进度；不会替你批准任何请求",
+  },
+  memory: {
+    title: "记忆",
+    hint: "主管长期记住的事；不对就改掉或忘掉，飞书里也能用 /记忆 查看",
   },
   agents: { title: "Agent", hint: "替你干活的编程 Agent；在飞书里用 /run 开任务" },
   models: { title: "模型", hint: "管理模型服务和 Key，选审查用的模型" },
@@ -123,6 +130,8 @@ function CurrentPage() {
       return <TasksPage />;
     case "herders":
       return <HerdersPage />;
+    case "memory":
+      return <MemoryPage />;
     case "agents":
       return <AgentsPage />;
     case "models":

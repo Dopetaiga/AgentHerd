@@ -261,6 +261,9 @@ describe("help text", () => {
         "/end",
         "/interrupt",
         "/herder",
+        expect.stringMatching(/^\/(记忆|memory)$/),
+        expect.stringMatching(/^\/(忘掉|forget)$/),
+        expect.stringMatching(/^\/(恢复|restore)$/),
         "/help",
       ]);
     }
