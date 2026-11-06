@@ -5,6 +5,7 @@ import { Agent, type AgentMessage, type StreamFn } from "@agentherd/herder-loop"
 import { guardCheck } from "@agentherd/rules";
 import type { Api, Model } from "@earendil-works/pi-ai";
 import { errorKind, HELD_RETRY_MS, RETRY_DELAYS_MS } from "./errors.ts";
+import { memorySnapshot, memoryTools, recallBlock } from "./memory.ts";
 import type { TierPlacement } from "./model-guide.ts";
 import { eventsPrompt, ownerAnswerPrompt, ownerMessagePrompt, systemPrompt } from "./prompt.ts";
 import { herderTools, otherOption, pathsIn, resolveProject, type TurnContext } from "./tools.ts";
@@ -29,6 +30,8 @@ export interface HerderOptions {
   /** How often a held message is tried again. */
   heldRetryMs?: number;
   sleep?: (ms: number) => Promise<void>;
+  /** Clock in ms, for tests. */
+  now?: () => number;
 }
 
 /** A model the Herder can run on. */
@@ -45,6 +48,9 @@ type Job = (
 
 type Attempt = { ok: true } | { ok: false; message: string; acted: boolean };
 
+/** A pause after which the memory in the system prompt is rebuilt. */
+export const MEMORY_REFRESH_MS = 60 * 60_000;
+
 /** Events kept for the next owner turn; older ones are dropped. */
 export const MAX_HELD_EVENTS = 10;
 
@@ -58,6 +64,7 @@ export class Herder implements HerderPort {
   private turn: TurnContext = {
     kind: "owner",
     ownerText: "",
+    typedText: "",
     images: [],
     asked: false,
     notified: false,
@@ -77,6 +84,9 @@ export class Herder implements HerderPort {
   /** A message every model failed on; it runs before anything else (ADR 0037). */
   private held: Job | undefined;
   private heldTimer: ReturnType<typeof setTimeout> | undefined;
+  private readonly now: () => number;
+  /** When the last turn ran; after a long pause the memory in the system prompt is rebuilt. */
+  private lastTurnAt = 0;
 
   constructor(opts: HerderOptions) {
     this.host = opts.host;
@@ -88,16 +98,20 @@ export class Herder implements HerderPort {
     const ownKey = opts.getApiKey;
     this.maxSaved = opts.maxSavedMessages ?? MAX_SAVED_MESSAGES;
     this.seesImages = opts.model.input.includes("image");
+    this.now = opts.now ?? (() => Date.now());
     const saved = this.host.getState<AgentMessage[]>(HERDER_STATE_KEY) ?? [];
     this.agent = new Agent({
       streamFn: opts.streamFn,
       getApiKey: async (provider) => this.current.apiKey ?? (await ownKey?.(provider)),
       beforeToolCall: async ({ toolCall, args }) => this.check(toolCall.name, args),
       initialState: {
-        systemPrompt: systemPrompt(this.host.locale),
+        systemPrompt: this.fullSystemPrompt(),
         model: opts.model,
         thinkingLevel: "off",
-        tools: herderTools(this.host, () => this.turn, opts.modelTiers),
+        tools: [
+          ...herderTools(this.host, () => this.turn, opts.modelTiers),
+          ...(this.host.memory === undefined ? [] : memoryTools(this.host.memory, () => this.turn)),
+        ],
         messages: saved,
       },
     });
@@ -180,6 +194,7 @@ export class Herder implements HerderPort {
       this.turn = {
         kind: "owner",
         ownerText: job.text,
+        typedText: job.text,
         images,
         asked: false,
         notified: false,
@@ -187,11 +202,14 @@ export class Herder implements HerderPort {
       };
       if (!job.recorded) this.host.recordTurn("owner", job.text);
       prompt = ownerMessagePrompt(job.text, images, this.host.texts);
+      const recall = this.host.memory === undefined ? "" : recallBlock(this.host.memory, job.text);
+      if (recall !== "") prompt = `${prompt}\n\n${recall}`;
     } else {
       const text = `${this.lastOwnerText}\n${job.answer}`;
       this.turn = {
         kind: "answer",
         ownerText: text,
+        typedText: this.lastOwnerText,
         images: this.lastOwnerImages,
         asked: false,
         notified: false,
@@ -211,6 +229,7 @@ export class Herder implements HerderPort {
       prompt = `${eventsPrompt(this.events)}\n\n${prompt}`;
       this.events = [];
     }
+    this.refreshMemory();
     this.host.audit("herder.turn", { kind: job.kind });
     const done = await this.runWithRetries(job, prompt, images);
     if (!done) return;
@@ -279,6 +298,31 @@ export class Herder implements HerderPort {
     this.heldTimer.unref?.();
     await this.host.alert(this.host.texts.herderHeld(result.message), true);
     return false;
+  }
+
+  private fullSystemPrompt(): string {
+    const base = systemPrompt(this.host.locale);
+    const snapshot = this.host.memory === undefined ? "" : memorySnapshot(this.host.memory);
+    return snapshot === "" ? base : `${base}\n\n${snapshot}`;
+  }
+
+  /**
+   * The system prompt keeps the memory as it was when the conversation started, so the prompt
+   * cache holds. After {@link MEMORY_REFRESH_MS} without a turn it is rebuilt with what was learnt.
+   */
+  private refreshMemory(): void {
+    const now = this.now();
+    const stale = this.lastTurnAt !== 0 && now - this.lastTurnAt >= MEMORY_REFRESH_MS;
+    this.lastTurnAt = now;
+    if (!stale || this.host.memory === undefined) return;
+    const first = this.agent.state.messages[0];
+    if (first?.role !== "system") return;
+    const prompt = this.fullSystemPrompt();
+    if (first.content === prompt) return;
+    this.agent.state.messages = [
+      { ...first, content: prompt },
+      ...this.agent.state.messages.slice(1),
+    ];
   }
 
   /** One try. A failed try leaves no trace in the session. */

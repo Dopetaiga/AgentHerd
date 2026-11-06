@@ -1,3 +1,5 @@
+import { MEMORY_TABLES_SQL } from "./memory-store.ts";
+
 // herd.db schema text and version. The Store applies it on open.
 
 // Added in schema version 2 so databases created before plan 008 get the table too.
@@ -37,7 +39,7 @@ CREATE TRIGGER IF NOT EXISTS herder_turns_ad AFTER DELETE ON herder_turns BEGIN
   INSERT INTO herder_turns_fts(herder_turns_fts, rowid, text) VALUES ('delete', old.id, old.text);
 END;`;
 
-export const LATEST_SCHEMA_VERSION = 4;
+export const LATEST_SCHEMA_VERSION = 5;
 
 export const SCHEMA_SQL = `
 CREATE TABLE sessions(
@@ -92,4 +94,5 @@ CREATE TABLE audit(
 ${STATE_TABLE_SQL}
 ${TRANSCRIPT_TABLE_SQL}
 ${HERDER_TURNS_TABLE_SQL}
+${MEMORY_TABLES_SQL}
 `;

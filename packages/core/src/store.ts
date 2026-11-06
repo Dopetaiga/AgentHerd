@@ -5,6 +5,7 @@ import { DatabaseSync } from "node:sqlite";
 import type { Decision, Item, MessageRef, Rule } from "@agentherd/protocol";
 import { redact } from "@agentherd/rules";
 import type { HerderTurnRole } from "./herder-port.ts";
+import { ftsQuery, MEMORY_TABLES_SQL, MemoryStore } from "./memory-store.ts";
 import {
   type AuditRow,
   type DecisionRow,
@@ -49,6 +50,8 @@ export interface StoreOptions {
 export class Store {
   private readonly db: DatabaseSync;
   private readonly secrets: Record<string, string> | undefined;
+  /** The Herder's long-term memory (ADR 0038). */
+  readonly memory: MemoryStore;
 
   private readonly stmtUpsertSession: StatementSync;
   private readonly stmtGetSession: StatementSync;
@@ -97,11 +100,16 @@ export class Store {
         this.db.exec(HERDER_TURNS_TABLE_SQL);
         this.db.prepare("UPDATE schema_version SET version = ?").run(4);
       }
+      if (version < 5) {
+        this.db.exec(MEMORY_TABLES_SQL);
+        this.db.prepare("UPDATE schema_version SET version = ?").run(5);
+      }
     }
 
     if (path !== ":memory:") {
       this.db.exec("PRAGMA journal_mode = WAL");
     }
+    this.memory = new MemoryStore(this.db, this.secrets);
 
     this.stmtUpsertSession = this.db.prepare(
       "INSERT OR REPLACE INTO sessions(id, profile_id, cwd, state, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
@@ -413,20 +421,4 @@ function toHerderTurn(r: Record<string, unknown>): HerderTurn {
   return t;
 }
 
-/**
- * An FTS5 trigram query: each word of 3+ characters quoted, joined by OR; Chinese runs are split
- * into overlapping 3-character pieces. Empty when nothing is long enough.
- */
-export function ftsQuery(text: string): string {
-  const pieces = new Set<string>();
-  for (const word of text.toLowerCase().split(/[\s\p{P}\p{S}]+/u)) {
-    const chars = [...word];
-    if (chars.length < 3) continue;
-    if (/\p{Script=Han}/u.test(word)) {
-      for (let i = 0; i + 3 <= chars.length; i++) pieces.add(chars.slice(i, i + 3).join(""));
-    } else {
-      pieces.add(word);
-    }
-  }
-  return [...pieces].map((p) => `"${p.replaceAll('"', '""')}"`).join(" OR ");
-}
+export { ftsQuery };

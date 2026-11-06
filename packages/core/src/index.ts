@@ -18,6 +18,27 @@ export { HERDER_RETRY_TARGET } from "./herder-port.ts";
 export type { Answerable, InboxOptions, OwnerAnswer } from "./inbox.ts";
 export { BODY_MAX_LINES, DEFAULT_REMIND_MINUTES, Inbox, itemBody, itemView } from "./inbox.ts";
 export {
+  ABSTRACT_MAX_CHARS,
+  BODY_MAX_CHARS,
+  JOB_RETRY_MS,
+  MEMORY_KINDS,
+  MEMORY_TABLES_SQL,
+  MemoryFullError,
+  type MemoryHit,
+  type MemoryJob,
+  type MemoryKind,
+  type MemoryLogRow,
+  type MemoryOp,
+  type MemoryRevision,
+  type MemoryRow,
+  type MemorySource,
+  type MemoryStatus,
+  MemoryStore,
+  RESIDENT_CAPS,
+  RESIDENT_KINDS,
+  type WriteMeta,
+} from "./memory-store.ts";
+export {
   type CustomApi,
   chooseModel,
   emptyModelSettings,

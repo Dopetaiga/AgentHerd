@@ -16,6 +16,11 @@ export interface TurnContext {
   kind: "owner" | "answer" | "event";
   /** The owner's words this turn may pass on: the message, or the one the answer belongs to. */
   ownerText: string;
+  /**
+   * What the owner typed: the message, or for an answer the message it belongs to (a tapped
+   * button is not their words). Memory evidence must come from it (ADR 0038).
+   */
+  typedText: string;
   /** The owner's images this turn; tasks started or messaged for the owner get them. */
   images: OwnerImage[];
   asked: boolean;

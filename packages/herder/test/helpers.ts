@@ -1,6 +1,6 @@
 // A HerderHost that records what the Herder does, for unit tests.
 
-import type { HerderHost, Task } from "@agentherd/core";
+import type { HerderHost, MemoryStore, Task } from "@agentherd/core";
 import { CORE_TEXTS } from "@agentherd/core";
 
 export interface Recorded {
@@ -45,6 +45,7 @@ export function fakeHost(
     models?: { ref: string; agents: string[] }[];
     failing?: string[];
     profiles?: { id: string; name: string }[];
+    memory?: MemoryStore;
   } = {},
 ): {
   host: HerderHost;
@@ -102,6 +103,7 @@ export function fakeHost(
     ask: async (text, options) => void rec.asked.push({ text, options }),
     audit: (type, data) => void rec.audits.push({ type, data }),
     recordTurn: (role, text) => void rec.turns.push({ role, text }),
+    ...(opts.memory === undefined ? {} : { memory: opts.memory }),
     getState: <T>(key: string) => rec.state.get(key) as T | undefined,
     setState: (key, value) => void rec.state.set(key, structuredClone(value)),
   };
