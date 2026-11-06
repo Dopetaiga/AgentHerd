@@ -22,6 +22,10 @@ in memory, and tool calls only went to the watchdog.
   returns `{ entries, live }`, the host exposes it as `transcript(taskId)`.
 - Clicking a task row opens a dialog with the conversation. It polls every 1.5 s, follows new
   lines while the owner is at the bottom, and shows a cursor after live text.
+- Agent text (lines and live text) is rendered as Markdown: headings, lists, quotes, fenced
+  code, tables, inline code, emphasis and http(s)/mailto links (added 2026-11-07). The
+  renderer's own reader builds React elements, never HTML, so agent text cannot inject markup;
+  the last report on a task row shows the same text without marks.
 - Approval requests stay where they are (the row and Feishu); the dialog is read-only.
 
 ## Consequences
