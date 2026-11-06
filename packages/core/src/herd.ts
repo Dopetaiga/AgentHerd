@@ -15,6 +15,7 @@ import {
   type HerdOptions,
   openTasks,
   type RunResult,
+  saveTask,
   say,
   send,
 } from "./herd-context.ts";
@@ -78,6 +79,9 @@ export class Herd {
       store: this.store,
       clock: this.clock,
       tasks: () => this.tasks(),
+      onChange: () => {
+        for (const f of this.ctx.following.values()) saveTask(this.ctx, f);
+      },
       ...(opts.boardDebounceMs === undefined ? {} : { debounceMs: opts.boardDebounceMs }),
     });
     const watchdog = new Watchdog({
@@ -108,6 +112,8 @@ export class Herd {
       const f = this.ctx.following.get(row.id);
       if (f !== undefined) restage(this.ctx, f);
     });
+    // Tasks from before a restart stay on the board and can be continued (ADR 0039).
+    this.runner.restore();
     this.herder = opts.herder?.(this.herderHost());
   }
 
@@ -213,7 +219,7 @@ export class Herd {
   async start(): Promise<void> {
     if (this.started) return;
     this.started = true;
-    // Sessions are not resumed after a restart, so an old relay points at nothing.
+    // Agents are not running after a restart, so an old relay points at nothing.
     this.relays.reset();
     await this.opts.channel.start(this.opts.binding, (inbound) => this.handle(inbound));
     this.store.audit("herd.started", { mode: this.mode, channel: this.opts.channel.id });

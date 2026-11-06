@@ -8,6 +8,7 @@ import {
   firstLine,
   type HerdContext,
   type RunResult,
+  saveTask,
   say,
   type TaskOps,
 } from "./herd-context.ts";
@@ -16,6 +17,7 @@ import { CASE_JOB } from "./memory-store.ts";
 import { onPermission } from "./permission.ts";
 import type { Relay } from "./relay.ts";
 import { REPLY_HINT_CHARS, replyHint } from "./report.ts";
+import type { TranscriptEntry } from "./store.ts";
 import { askSummary, flushReply, sendReport, setReport } from "./task-report.ts";
 import { projectName, taskTitle } from "./tasks.ts";
 import type { CoreTexts } from "./texts.ts";
@@ -23,6 +25,10 @@ import type { CoreTexts } from "./texts.ts";
 export const SESSION_IDLE_MINUTES = 60;
 /** At most this many models are tried for one task before it fails. */
 export const MAX_MODEL_SWITCHES = 3;
+/** Saved tasks loaded when AgentHerd starts (ADR 0039). */
+export const TASKS_RESTORED = 50;
+/** Characters of the earlier conversation given to an agent that could not open its session. */
+export const HISTORY_MAX_CHARS = 8000;
 
 export class TaskRunner {
   private readonly ctx: HerdContext;
@@ -132,18 +138,161 @@ export class TaskRunner {
   /** Sends a prompt to an open task. Queued while a turn runs; settles when its turn ends. */
   promptTask(taskId: string, text: string, images: OwnerImage[] = []): Promise<RunResult> {
     const f = this.ctx.following.get(taskId);
-    if (f === undefined || f.ended) return Promise.reject(new Error(`task ${taskId} is not open`));
-    const done = new Promise<RunResult>((resolve, reject) => {
-      f.queue.push({ text, images, resolve, reject });
-    });
-    void this.pump(f);
-    return done;
+    if (f === undefined) return Promise.reject(new Error(`unknown task ${taskId}`));
+    // An ended task (also one from before a restart) is started again (ADR 0039).
+    if (f.ended && f.reopening === undefined) {
+      f.reopening = this.reopen(f).finally(() => {
+        delete f.reopening;
+      });
+    }
+    const queue = (): Promise<RunResult> => {
+      if (f.ended) return Promise.reject(new Error(`task ${taskId} is not open`));
+      const done = new Promise<RunResult>((resolve, reject) => {
+        f.queue.push({ text, images, resolve, reject });
+      });
+      void this.pump(f);
+      return done;
+    };
+    return f.reopening === undefined ? queue() : f.reopening.then(queue);
+  }
+
+  /** Loads saved tasks as ended tasks, so they show and can be continued (ADR 0039). */
+  restore(limit = TASKS_RESTORED): void {
+    const { ctx } = this;
+    const now = ctx.clock.now().toISOString();
+    for (const saved of ctx.store.tasks(limit).reverse()) {
+      if (ctx.following.has(saved.task.id)) continue;
+      const profile = ctx.opts.profiles.find((p) => p.id === saved.profileId) ?? {
+        id: saved.profileId,
+        name: saved.task.agent,
+        command: [],
+        env: {},
+        exporter: null,
+      };
+      const f: Following = {
+        task: saved.task,
+        profile,
+        cwd: saved.cwd,
+        alarm: false,
+        finished: saved.task.stage === "done",
+        failed: saved.failed,
+        ended: true,
+        endedWhy: saved.endedWhy ?? ctx.texts.agentherdStopped,
+        endedAt: saved.endedAt ?? now,
+        turn: { text: "", toolCalls: 0 },
+        turnsEnded: 1,
+        offs: [],
+        queue: [],
+        busy: false,
+        ...(saved.agentSessionId === undefined ? {} : { agentSessionId: saved.agentSessionId }),
+      };
+      ctx.following.set(saved.task.id, f);
+      if (saved.endedAt !== undefined) continue;
+      // AgentHerd stopped without ending the task (a crash): end it now.
+      if (f.task.stage !== "done" && f.task.stage !== "failed") {
+        f.task.stage = "failed";
+        f.task.lastReport = ctx.texts.agentherdStopped;
+      }
+      ctx.store.audit("task.ended", { taskId: f.task.id, why: f.endedWhy });
+      this.queueCase(f, f.endedWhy ?? "");
+      saveTask(ctx, f);
+    }
+  }
+
+  /** Agents to start an ended task again with: its own, then Pi, then the rest but DSH. */
+  private reopenCandidates(f: Following): AgentProfile[] {
+    const profiles = this.ctx.opts.profiles;
+    const out: AgentProfile[] = [];
+    const add = (p: AgentProfile | undefined) => {
+      if (p !== undefined && !out.some((o) => o.id === p.id)) out.push(p);
+    };
+    add(profiles.find((p) => p.id === f.profile.id));
+    add(profiles.find((p) => p.id === "pi"));
+    for (const p of profiles) if (p.id !== "dsh") add(p);
+    return out;
+  }
+
+  /**
+   * Starts the agent of an ended task again in the same folder and with the same model. The agent
+   * opens its saved session when it can; otherwise the next prompt carries the earlier
+   * conversation. Throws, after telling the owner, when no agent starts.
+   */
+  private async reopen(f: Following): Promise<void> {
+    const { ctx } = this;
+    const taskId = f.task.id;
+    const model = f.task.model;
+    const errors: string[] = [];
+    for (const base of this.reopenCandidates(f)) {
+      try {
+        let profile = base;
+        if (model !== undefined) {
+          if (ctx.opts.agentModels === undefined) throw new Error("no model list to choose from");
+          const env = ctx.opts.agentModels.envFor(base.id, model);
+          profile = { ...base, env: { ...base.env, ...env } };
+        }
+        const connection = await startAgent(profile, { cwd: f.cwd });
+        let sessionId: string | undefined;
+        if (
+          connection.loadsSessions &&
+          f.agentSessionId !== undefined &&
+          base.id === f.profile.id
+        ) {
+          try {
+            await connection.loadSession(f.agentSessionId, f.cwd);
+            sessionId = f.agentSessionId;
+          } catch (error) {
+            ctx.store.audit("task.load-failed", { taskId, message: (error as Error).message });
+          }
+        }
+        const loaded = sessionId !== undefined;
+        if (sessionId === undefined) {
+          try {
+            sessionId = await connection.newSession(f.cwd);
+          } catch (error) {
+            await connection.close().catch(() => {});
+            throw error;
+          }
+        }
+        f.connection = connection;
+        f.agentSessionId = sessionId;
+        f.profile = profile;
+        f.ended = false;
+        delete f.endedWhy;
+        delete f.endedAt;
+        f.failed = false;
+        f.alarm = false;
+        f.finished = false;
+        f.needsHistory = !loaded;
+        // A continued task does not switch models on its first turn: it already did work.
+        f.turnsEnded = Math.max(f.turnsEnded ?? 0, 1);
+        f.task.agent = model === undefined ? profile.name : `${profile.name} · ${model}`;
+        ctx.registry.add(taskId, profile.id, f.cwd);
+        this.listen(f, connection, sessionId);
+        ctx.watchdog.track(taskId);
+        ctx.store.audit("task.reopened", {
+          taskId,
+          profileId: profile.id,
+          loaded,
+          agentSessionId: sessionId,
+        });
+        ctx.store.addTranscript(taskId, "note", ctx.texts.taskReopened(f.task.agent, loaded));
+        ctx.board.changed();
+        return;
+      } catch (error) {
+        errors.push(`${base.name}: ${(error as Error).message}`);
+      }
+    }
+    const message = errors.join("\n") || "no agent is installed";
+    ctx.store.audit("task.reopen-failed", { taskId, message });
+    setReport(ctx, f, ctx.texts.couldNotStart(message));
+    await sendReport(ctx, f, ctx.texts.couldNotStartBody(message), null);
+    throw new Error(message);
   }
 
   /** Cancels the current turn of a task, then sends the text as the next prompt. */
   async interruptTask(taskId: string, text: string, images?: OwnerImage[]): Promise<RunResult> {
     const f = this.ctx.following.get(taskId);
-    if (f === undefined || f.ended) throw new Error(`task ${taskId} is not open`);
+    if (f === undefined) throw new Error(`unknown task ${taskId}`);
     const next = this.ops.promptTask(taskId, text, images);
     if (f.busy && f.connection !== undefined && f.agentSessionId !== undefined) {
       await f.connection.cancel(f.agentSessionId);
@@ -165,32 +314,39 @@ export class TaskRunner {
     const { ctx } = this;
     const f = ctx.following.get(taskId);
     if (f === undefined || f.ended) return;
+    const connection = f.connection;
     f.ended = true;
     f.endedWhy = why;
+    f.endedAt = ctx.clock.now().toISOString();
     f.idleTimer?.cancel();
     ctx.watchdog.untrack(taskId);
     for (const off of f.offs) off();
     f.offs = [];
     for (const queued of f.queue.splice(0)) queued.reject(new Error(`the task ended: ${why}`));
     await ctx.inbox.expireSession(taskId, why);
-    await f.connection?.close();
+    await connection?.close();
+    if (f.connection === connection) delete f.connection;
     ctx.registry.set(taskId, "ended");
     ctx.store.audit("task.ended", { taskId, why });
-    // A case for the Herder's memory is written later from the conversation (ADR 0038).
-    if (ctx.store.transcript(taskId).length >= 2) {
-      ctx.store.memory.enqueueJob(CASE_JOB, {
-        taskId,
-        title: f.task.title,
-        cwd: f.cwd,
-        agent: f.task.agent,
-        failed: f.failed,
-        why,
-      });
-    }
+    this.queueCase(f, why);
     if (this.relay.stored()?.taskId === taskId) {
       await this.relay.end("the task ended");
     }
     await ctx.board.flush();
+  }
+
+  /** A case for the Herder's memory is written later from the conversation (ADR 0038). */
+  private queueCase(f: Following, why: string): void {
+    const taskId = f.task.id;
+    if (this.ctx.store.transcript(taskId).length < 2) return;
+    this.ctx.store.memory.enqueueJob(CASE_JOB, {
+      taskId,
+      title: f.task.title,
+      cwd: f.cwd,
+      agent: f.task.agent,
+      failed: f.failed,
+      why,
+    });
   }
 
   private listen(f: Following, connection: AgentConnection, agentSessionId: string): void {
@@ -344,12 +500,16 @@ export class TaskRunner {
     }
     f.turn = { text: "", toolCalls: 0 };
     f.pending = "";
+    // Read before this prompt is added, so the history holds only the earlier conversation.
+    const history = f.needsHistory === true ? historyText(ctx.store.transcript(sessionId)) : "";
+    f.needsHistory = false;
     ctx.store.addTranscript(sessionId, "prompt", withImagePaths(text, images, ctx.texts));
     f.finished = false;
     f.alarm = false;
     // An agent that takes no images gets where they are saved instead.
     let prompt = connection.acceptsImages ? text : withImagePaths(text, images, ctx.texts);
     // Every prompt carries the length hint (ADR 0036); follow-ups were long without it.
+    if (history !== "") prompt = `${ctx.texts.priorConversation(history)}\n\n${prompt}`;
     prompt = `${replyHint(ctx.opts.replyHintChars ?? REPLY_HINT_CHARS, ctx.texts)}\n\n${prompt}`;
     ctx.registry.set(sessionId, "working");
     ctx.watchdog.turnStarted(sessionId);
@@ -389,6 +549,19 @@ export class TaskRunner {
       throw error;
     }
   }
+}
+
+/**
+ * The earlier prompts and replies of a task, newest kept when long, for an agent that could not
+ * open its old session. Tool calls and notes are left out.
+ */
+export function historyText(entries: readonly TranscriptEntry[], max = HISTORY_MAX_CHARS): string {
+  const lines = entries
+    .filter((e) => e.role === "prompt" || e.role === "agent")
+    .map((e) => `${e.role === "prompt" ? "AgentHerd" : "you"}: ${e.text.trim()}`);
+  let text = lines.join("\n\n");
+  if (text.length > max) text = `…${text.slice(text.length - max)}`;
+  return text;
 }
 
 /** The text with one line per image, naming the file it is saved in. */

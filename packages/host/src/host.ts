@@ -318,13 +318,18 @@ export class Host implements HostApi {
   private buildProfiles(config: CliConfig = this.config()): AgentProfile[] {
     if (this.opts.profiles !== undefined) return this.opts.profiles();
     const pi = piModelEnv(this.settings(), this.opts.secrets, this.opts.env);
-    return availableProfiles({
+    const profiles = availableProfiles({
       script: this.opts.script,
       configured: config.profiles ?? [],
       find: (id) => this.agentList.find(id)?.path,
       agentEnv: (id) => this.agentList.extraEnv(id),
       ...("env" in pi ? { piModelEnv: pi.env } : {}),
     });
+    // Pi keeps its sessions here so an old task can be continued after a restart (ADR 0039).
+    const sessionDir = join(this.opts.home, "pi-sessions");
+    return profiles.map((p) =>
+      p.id === "pi" ? { ...p, env: { ...p.env, AGENTHERD_PI_SESSION_DIR: sessionDir } } : p,
+    );
   }
 
   /** Installed agents minus the ones sitting out after a failed start. */

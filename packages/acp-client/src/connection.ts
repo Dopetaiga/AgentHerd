@@ -84,6 +84,13 @@ export interface AgentConnection {
   readonly authMethods: { id: string; name: string; description?: string }[];
   readonly pid: number | undefined;
   newSession(cwd: string): Promise<string>;
+  /** Whether the agent can open a session it saved earlier (ACP `loadSession`). */
+  readonly loadsSessions: boolean;
+  /**
+   * Opens a session the agent saved earlier (ACP `session/load`), so it keeps its own context.
+   * Only when `loadsSessions` is true.
+   */
+  loadSession(sessionId: string, cwd: string): Promise<void>;
   /** Whether the agent takes image blocks in a prompt (ACP `promptCapabilities.image`). */
   readonly acceptsImages: boolean;
   /** Images go only to an agent that accepts them; others get the text alone. */
@@ -304,6 +311,12 @@ export async function startAgent(
     })),
     pid: child.pid,
     acceptsImages: init.agentCapabilities?.promptCapabilities?.image === true,
+    loadsSessions: init.agentCapabilities?.loadSession === true,
+    async loadSession(sessionId, cwd) {
+      await whileAlive(
+        agent.request(methods.agent.session.load, { sessionId, cwd, mcpServers: [] }),
+      );
+    },
     async newSession(cwd) {
       const res = await whileAlive(
         agent.request(methods.agent.session.new, { cwd, mcpServers: [] }),

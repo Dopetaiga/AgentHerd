@@ -22,8 +22,10 @@ import {
   LATEST_SCHEMA_VERSION,
   SCHEMA_SQL,
   STATE_TABLE_SQL,
+  TASKS_TABLE_SQL,
   TRANSCRIPT_TABLE_SQL,
 } from "./store-schema.ts";
+import type { Task } from "./tasks.ts";
 
 export type { AuditRow, DecisionRow, SessionRow, StoredItem } from "./store-rows.ts";
 
@@ -103,6 +105,10 @@ export class Store {
       if (version < 5) {
         this.db.exec(MEMORY_TABLES_SQL);
         this.db.prepare("UPDATE schema_version SET version = ?").run(5);
+      }
+      if (version < 6) {
+        this.db.exec(TASKS_TABLE_SQL);
+        this.db.prepare("UPDATE schema_version SET version = ?").run(6);
       }
     }
 
@@ -387,6 +393,49 @@ export class Store {
     return rows.map(toHerderTurn);
   }
 
+  /** Saves a task as it is now (secrets redacted). */
+  saveTask(t: StoredTask): void {
+    const r = (v: string) => redact(v, this.secrets);
+    this.db
+      .prepare(
+        `INSERT OR REPLACE INTO tasks(id, title, project, cwd, profile_id, agent, model, stage, last_report,
+          started_at, updated_at, ended_at, ended_why, failed, agent_session_id, automatic_decisions_json)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        t.task.id,
+        r(t.task.title),
+        t.task.project,
+        t.cwd,
+        t.profileId,
+        t.task.agent,
+        t.task.model ?? null,
+        t.task.stage,
+        r(t.task.lastReport),
+        t.task.startedAt,
+        t.task.updatedAt,
+        t.endedAt ?? null,
+        t.endedWhy === undefined ? null : r(t.endedWhy),
+        t.failed ? 1 : 0,
+        t.agentSessionId ?? null,
+        r(JSON.stringify(t.task.automaticDecisions)),
+      );
+  }
+
+  /** The `limit` most recently updated tasks, newest first. */
+  tasks(limit = 50): StoredTask[] {
+    return this.db
+      .prepare("SELECT * FROM tasks ORDER BY updated_at DESC LIMIT ?")
+      .all(limit)
+      .map(toStoredTask);
+  }
+
+  /** One saved task. */
+  task(id: string): StoredTask | undefined {
+    const row = this.db.prepare("SELECT * FROM tasks WHERE id = ?").get(id);
+    return row === undefined ? undefined : toStoredTask(row);
+  }
+
   getState<T>(key: string): T | undefined {
     const row = this.stmtGetState.get(key);
     return row === undefined ? undefined : (JSON.parse(row.value_json as string) as T);
@@ -399,6 +448,43 @@ export class Store {
   deleteState(key: string): void {
     this.stmtDeleteState.run(key);
   }
+}
+
+/** A task as saved in herd.db (ADR 0039). */
+export interface StoredTask {
+  task: Task;
+  cwd: string;
+  profileId: string;
+  failed: boolean;
+  endedAt?: string;
+  endedWhy?: string;
+  /** The agent's own session id, used to load the session again when the agent supports it. */
+  agentSessionId?: string;
+}
+
+function toStoredTask(r: Record<string, unknown>): StoredTask {
+  const task: Task = {
+    id: String(r.id),
+    title: String(r.title),
+    project: String(r.project),
+    agent: String(r.agent),
+    stage: r.stage as Task["stage"],
+    lastReport: String(r.last_report),
+    startedAt: String(r.started_at),
+    updatedAt: String(r.updated_at),
+    automaticDecisions: JSON.parse(String(r.automatic_decisions_json)) as string[],
+  };
+  if (typeof r.model === "string") task.model = r.model;
+  const t: StoredTask = {
+    task,
+    cwd: String(r.cwd),
+    profileId: String(r.profile_id),
+    failed: r.failed === 1 || r.failed === 1n,
+  };
+  if (typeof r.ended_at === "string") t.endedAt = r.ended_at;
+  if (typeof r.ended_why === "string") t.endedWhy = r.ended_why;
+  if (typeof r.agent_session_id === "string") t.agentSessionId = r.agent_session_id;
+  return t;
 }
 
 /** A line of the Herder's conversation with the owner. */

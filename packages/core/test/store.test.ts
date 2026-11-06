@@ -375,6 +375,58 @@ describe("Store (transcript)", () => {
   });
 });
 
+describe("Store (tasks, ADR 0039)", () => {
+  const task = {
+    id: "t1",
+    title: "Fix the build",
+    project: "app",
+    agent: "Pi · deepseek/deepseek-flash",
+    model: "deepseek/deepseek-flash",
+    stage: "done" as const,
+    lastReport: "Fixed",
+    startedAt: "2026-11-06T10:00:00.000Z",
+    updatedAt: "2026-11-06T10:05:00.000Z",
+    automaticDecisions: ["Allowed by rule r1: npm test"],
+  };
+
+  it("saves and reads tasks, newest first", () => {
+    const store = Store.open(":memory:");
+    store.saveTask({ task, cwd: "/p/app", profileId: "pi", failed: false, agentSessionId: "pi-1" });
+    store.saveTask({
+      task: { ...task, id: "t2", updatedAt: "2026-11-06T11:00:00.000Z", model: undefined as never },
+      cwd: "/p/app",
+      profileId: "dsh",
+      failed: true,
+      endedAt: "2026-11-06T11:00:00.000Z",
+      endedWhy: "AgentHerd stopped",
+    });
+    expect(store.tasks().map((t) => t.task.id)).toEqual(["t2", "t1"]);
+    expect(store.task("t1")).toEqual({
+      task,
+      cwd: "/p/app",
+      profileId: "pi",
+      failed: false,
+      agentSessionId: "pi-1",
+    });
+    expect(store.task("t2")).toMatchObject({ failed: true, endedWhy: "AgentHerd stopped" });
+    store.close();
+  });
+
+  it("adds the tasks table to a version-5 database", () => {
+    const dir = mkdtempSync(join(tmpdir(), "agentherd-core-"));
+    const dbPath = join(dir, "herd.db");
+    Store.open(dbPath).close();
+    const raw = new DatabaseSync(dbPath);
+    raw.exec("DROP TABLE tasks");
+    raw.exec("UPDATE schema_version SET version = 5");
+    raw.close();
+    const migrated = Store.open(dbPath);
+    migrated.saveTask({ task, cwd: "/p", profileId: "pi", failed: false });
+    expect(migrated.tasks()).toHaveLength(1);
+    migrated.close();
+  });
+});
+
 describe("Store (herder_turns)", () => {
   it("keeps the Herder's conversation and finds Chinese words in it", () => {
     const store = Store.open(":memory:");

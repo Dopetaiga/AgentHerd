@@ -7,8 +7,10 @@ import {
   encodeQuestion,
   LineSplitter,
   MAX_ARG_CHARS,
+  piArgsFor,
   piCommand,
   runsWithoutAsking,
+  SESSION_DIR_ENV,
   toolCallOf,
 } from "../src/index.ts";
 
@@ -33,6 +35,20 @@ describe("gate", () => {
     expect(decodeQuestion(encodeQuestion(q))).toEqual(q);
     expect(decodeQuestion("Allow dangerous command?")).toBeUndefined();
     expect(decodeQuestion("agentherd-gate:{bad")).toBeUndefined();
+  });
+});
+
+describe("piArgsFor", () => {
+  it("keeps sessions only when AgentHerd gives a folder for them (ADR 0039)", () => {
+    expect(piArgsFor([], {}, "pi-1").slice(0, 3)).toEqual(["--mode", "rpc", "--no-session"]);
+    expect(piArgsFor([], { [SESSION_DIR_ENV]: "/h/pi-sessions" }, "pi-1").slice(0, 6)).toEqual([
+      "--mode",
+      "rpc",
+      "--session-dir",
+      "/h/pi-sessions",
+      "--session-id",
+      "pi-1",
+    ]);
   });
 });
 

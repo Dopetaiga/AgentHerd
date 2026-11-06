@@ -39,7 +39,28 @@ CREATE TRIGGER IF NOT EXISTS herder_turns_ad AFTER DELETE ON herder_turns BEGIN
   INSERT INTO herder_turns_fts(herder_turns_fts, rowid, text) VALUES ('delete', old.id, old.text);
 END;`;
 
-export const LATEST_SCHEMA_VERSION = 5;
+/** Tasks the owner started, kept across restarts so they can be seen and continued (ADR 0039). */
+export const TASKS_TABLE_SQL = `CREATE TABLE IF NOT EXISTS tasks(
+  id TEXT PRIMARY KEY,
+  title TEXT NOT NULL,
+  project TEXT NOT NULL,
+  cwd TEXT NOT NULL,
+  profile_id TEXT NOT NULL,
+  agent TEXT NOT NULL,
+  model TEXT,
+  stage TEXT NOT NULL,
+  last_report TEXT NOT NULL,
+  started_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  ended_at TEXT,
+  ended_why TEXT,
+  failed INTEGER NOT NULL DEFAULT 0,
+  agent_session_id TEXT,
+  automatic_decisions_json TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS tasks_updated ON tasks(updated_at);`;
+
+export const LATEST_SCHEMA_VERSION = 6;
 
 export const SCHEMA_SQL = `
 CREATE TABLE sessions(
@@ -95,4 +116,5 @@ ${STATE_TABLE_SQL}
 ${TRANSCRIPT_TABLE_SQL}
 ${HERDER_TURNS_TABLE_SQL}
 ${MEMORY_TABLES_SQL}
+${TASKS_TABLE_SQL}
 `;
