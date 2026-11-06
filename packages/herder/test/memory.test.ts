@@ -8,7 +8,16 @@ import {
 } from "@earendil-works/pi-ai/compat";
 import { afterEach, describe, expect, it } from "vitest";
 import { Herder, MEMORY_REFRESH_MS, REVIEW_EVERY_TURNS } from "../src/herder.ts";
-import { memorySnapshot, memoryTools, opProblem, recallBlock } from "../src/memory.ts";
+import {
+  dateNote,
+  lessonsText,
+  memorySnapshot,
+  memoryTools,
+  opProblem,
+  ownerPrefsText,
+  recallBlock,
+} from "../src/memory.ts";
+import { nowLine } from "../src/prompt.ts";
 import type { TurnContext } from "../src/tools.ts";
 import { fakeHost } from "./helpers.ts";
 
@@ -206,6 +215,29 @@ describe("memory tools", () => {
   });
 });
 
+describe("dates (ADR 0038)", () => {
+  it("every entry the Herder or an agent sees says when it was written", () => {
+    const store = Store.open(":memory:");
+    store.memory.write(
+      [{ op: "add", kind: "owner", abstract: "报告用中文", until: "2026-12-31" }],
+      {
+        actor: "herder",
+        source: "said",
+      },
+    );
+    const [row] = store.memory.list({ kinds: ["owner"] });
+    if (row === undefined) throw new Error("no row");
+    expect(dateNote(row)).toMatch(/^记于 \d{4}-\d{2}-\d{2}，到 2026-12-31$/);
+    expect(ownerPrefsText(store.memory)).toMatch(/报告用中文 \(记于 /);
+    expect(lessonsText([{ ...row, kind: "case" }])).toMatch(/\[案例\] 报告用中文 \(记于 /);
+  });
+
+  it("the time line names the local day, hour and weekday", () => {
+    const ms = new Date(2026, 10, 6, 18, 5).getTime();
+    expect(nowLine(ms)).toBe("[Now: 2026-11-06 18:05, Friday]");
+  });
+});
+
 describe("snapshot and recall", () => {
   it("the snapshot shows owner entries and notes with how full they are", () => {
     const store = Store.open(":memory:");
@@ -219,7 +251,7 @@ describe("snapshot and recall", () => {
     );
     const snap = memorySnapshot(store.memory);
     expect(snap).toContain("用量 5/1375 字");
-    expect(snap).toContain("报告用中文");
+    expect(snap).toMatch(/报告用中文 \(记于 \d{4}-\d{2}-\d{2}\)/);
     expect(snap).not.toContain("小王");
   });
 
@@ -234,7 +266,7 @@ describe("snapshot and recall", () => {
     );
     const block = await recallBlock(store.memory, "让小王看看 pi-desktop");
     expect(block).toContain("[记忆召回");
-    expect(block).toContain("小王负责");
+    expect(block).toMatch(/小王负责 pi-desktop 前端 \(记于 \d{4}-\d{2}-\d{2}\)/);
     expect(block).not.toContain("报告用中文");
     expect(await recallBlock(store.memory, "天气")).toBe("");
   });
@@ -307,6 +339,7 @@ describe("Herder with memory", () => {
     await herder.idle();
     expect(systems[0]).toContain("主人希望报告三行以内");
     expect(lasts[0]).toContain("小王负责前端");
+    expect(lasts[0]).toContain(nowLine(1_000_000).slice(0, 12)); // every message carries the time
     expect(store.memory.list({ kinds: ["owner"] }).map((r) => r.abstract)).toContain(
       "主人默认用 kimi",
     );
