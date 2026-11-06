@@ -33,6 +33,11 @@ export interface HerdOptions {
   mode: Mode;
   profiles: AgentProfile[];
   clock?: Clock;
+  /**
+   * On start, end tasks an earlier run left running and tell the owner (docs/spec/03-agents.md
+   * "Restarts"). Default true; false for a one-off run that may share herd.db with a host.
+   */
+  closeStaleTasks?: boolean;
   remindMinutes?: number;
   extraGuards?: ExtraGuard[];
   /** Values to redact everywhere (secrets from env). */

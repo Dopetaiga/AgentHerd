@@ -120,8 +120,10 @@ export class Herd {
       if (f !== undefined) restage(this.ctx, f);
     });
     // Tasks from before a restart stay on the board and can be continued (ADR 0039).
-    const crashed = this.runner.restore();
-    const stopped = this.store.getState<string[]>(INTERRUPTED_STATE) ?? [];
+    // `agentherd run` beside a running host must not end or ask about that host's tasks.
+    const closeStale = opts.closeStaleTasks !== false;
+    const crashed = this.runner.restore(undefined, closeStale);
+    const stopped = closeStale ? (this.store.getState<string[]>(INTERRUPTED_STATE) ?? []) : [];
     this.interrupted = [...new Set([...stopped, ...crashed])].filter((id) =>
       this.ctx.following.has(id),
     );
@@ -231,10 +233,20 @@ export class Herd {
     if (this.started) return;
     this.started = true;
     // Agents are not running after a restart, so an old relay points at nothing.
+    const relay = this.relays.stored();
     this.relays.reset();
     await this.opts.channel.start(this.opts.binding, (inbound) => this.handle(inbound));
     this.store.audit("herd.started", { mode: this.mode, channel: this.opts.channel.id });
+    await this.endOldRelay(relay?.taskId);
     await this.askToResume();
+  }
+
+  /** A relay the last run left open points at an agent that is gone: show it ended. */
+  private async endOldRelay(taskId: string | undefined): Promise<void> {
+    if (taskId === undefined || !this.interrupted.includes(taskId)) return;
+    const task = this.ctx.following.get(taskId)?.task;
+    if (task === undefined) return;
+    await send(this.ctx, { kind: "relay", taskId, taskLabel: task.title, active: false });
   }
 
   /**
@@ -245,14 +257,19 @@ export class Herd {
   private async askToResume(): Promise<void> {
     const ids = this.interrupted;
     this.interrupted = [];
+    if (ids.length === 0) return;
     this.store.setState(INTERRUPTED_STATE, []);
-    if (ids.length === 0 || this.herder === undefined) return;
     const tasks = ids
       .map((id) => this.ctx.following.get(id)?.task)
       .filter((t): t is Task => t !== undefined)
       .slice(0, RESUME_ASK_MAX);
     if (tasks.length === 0) return;
     const t = this.texts;
+    if (this.herder === undefined) {
+      // Nobody could act on an answer, but the owner still learns what was cut off.
+      await say(this.ctx, t.interruptedTasks(tasks.map((task) => task.title)));
+      return;
+    }
     const options =
       tasks.length === 1
         ? [t.resumeYes, t.resumeNo]
@@ -328,6 +345,10 @@ export class Herd {
     const cut = [...this.ctx.following.values()]
       .filter((f) => !f.ended && unfinished(f))
       .map((f) => f.task.id);
+    if (cut.length > 0 && this.started) {
+      const titles = cut.map((id) => this.ctx.following.get(id)?.task.title ?? id);
+      await say(this.ctx, this.texts.stoppingTasks(titles));
+    }
     for (const f of this.ctx.following.values()) {
       if (!f.ended) await this.endTask(f.task.id, this.texts.agentherdStopped);
     }

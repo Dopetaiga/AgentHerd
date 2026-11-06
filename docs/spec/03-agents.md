@@ -134,9 +134,20 @@ the turn) is open **(verify, Q03)**.
 
 ### Restarts
 
-Agent processes are children of the core. If the core stops, its agent sessions stop. On the
-next start, sessions whose agent supports `session/load` or `resume` can be reopened; the
-others are marked `ended`.
+Agent processes are children of the core. If the core stops, its agent sessions stop.
+
+- **Stopping** (quit, restart, `SIGINT`/`SIGTERM`; the desktop app asks its host to stop
+  instead of killing it): before the agents are closed the owner gets one message listing the
+  unfinished tasks; they end with "AgentHerd 已停止".
+- **Next start**: every task and session still open in `herd.db` (left by a crash or a hard
+  kill) is marked ended, and a relay that pointed at one is shown as ended. The Herder asks
+  whether to continue the tasks the stop or crash cut off
+  ([ADR 0040](../adr/0040-ask-before-continuing-cut-off-tasks.md)); without a Herder the owner
+  gets one message listing them instead.
+- The tasks stay on the board and `session_prompt` continues them
+  ([ADR 0039](../adr/0039-tasks-kept-and-continued.md)).
+- `agentherd run` beside a running host neither ends nor asks about anything: the open tasks
+  may be that host's.
 
 ## 2. Rule export
 
