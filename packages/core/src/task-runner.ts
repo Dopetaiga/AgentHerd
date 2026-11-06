@@ -157,8 +157,10 @@ export class TaskRunner {
   }
 
   /** Loads saved tasks as ended tasks, so they show and can be continued (ADR 0039). */
-  restore(limit = TASKS_RESTORED): void {
+  /** @returns ids of tasks that were still working when AgentHerd went away without stopping. */
+  restore(limit = TASKS_RESTORED): string[] {
     const { ctx } = this;
+    const crashed: string[] = [];
     const now = ctx.clock.now().toISOString();
     for (const saved of ctx.store.tasks(limit).reverse()) {
       if (ctx.following.has(saved.task.id)) continue;
@@ -189,7 +191,8 @@ export class TaskRunner {
       ctx.following.set(saved.task.id, f);
       if (saved.endedAt !== undefined) continue;
       // AgentHerd stopped without ending the task (a crash): end it now.
-      if (f.task.stage !== "done" && f.task.stage !== "failed") {
+      if (unfinished(f)) {
+        crashed.push(f.task.id);
         f.task.stage = "failed";
         f.task.lastReport = ctx.texts.agentherdStopped;
       }
@@ -197,6 +200,7 @@ export class TaskRunner {
       this.queueCase(f, f.endedWhy ?? "");
       saveTask(ctx, f);
     }
+    return crashed;
   }
 
   /** Agents to start an ended task again with: its own, then Pi, then the rest but DSH. */
@@ -549,6 +553,11 @@ export class TaskRunner {
       throw error;
     }
   }
+}
+
+/** A task that was in the middle of work: running a turn, waiting, or not yet reported done. */
+export function unfinished(f: Following): boolean {
+  return f.busy || f.queue.length > 0 || (f.task.stage !== "done" && f.task.stage !== "failed");
 }
 
 /**

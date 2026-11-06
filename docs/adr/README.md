@@ -43,3 +43,4 @@ Format and rules: [ADR 0001](0001-record-architecture-decisions.md).
 | [0037](0037-herder-retries-and-never-drops.md) | The Herder retries, switches model, and never drops an owner message | Accepted |
 | [0038](0038-herder-memory.md) | The Herder has a long-term memory (six kinds) in herd.db with code-checked writes | Accepted |
 | [0039](0039-tasks-kept-and-continued.md) | Tasks are kept in herd.db across restarts; an ended task can be continued (Pi reopens its own session) | Accepted |
+| [0040](0040-ask-before-continuing-cut-off-tasks.md) | After a restart the Herder asks whether to continue tasks the stop cut off | Accepted |

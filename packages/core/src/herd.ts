@@ -32,7 +32,7 @@ import { Registry } from "./registry.ts";
 import { Relay, type RelayState } from "./relay.ts";
 import { Store, type TranscriptEntry } from "./store.ts";
 import { onAlarm, restage } from "./task-report.ts";
-import { TaskRunner } from "./task-runner.ts";
+import { TaskRunner, unfinished } from "./task-runner.ts";
 import type { Task } from "./tasks.ts";
 import { type CoreTexts, coreTexts } from "./texts.ts";
 import { Watchdog } from "./watchdog.ts";
@@ -40,6 +40,11 @@ import { Watchdog } from "./watchdog.ts";
 export type { AgentModels, HerdOptions, RunResult } from "./herd-context.ts";
 export { RELAY_IDLE_MINUTES, RELAY_KEY, type RelayState } from "./relay.ts";
 export { SESSION_IDLE_MINUTES } from "./task-runner.ts";
+
+/** State key: ids of tasks the last stop cut off (ADR 0040). */
+export const INTERRUPTED_STATE = "tasks.interrupted";
+/** Tasks named in the "continue?" question after a restart. */
+export const RESUME_ASK_MAX = 5;
 
 export class Herd {
   readonly store: Store;
@@ -53,6 +58,8 @@ export class Herd {
   private readonly texts: CoreTexts;
   private started = false;
   private herder: HerderPort | undefined;
+  /** Tasks cut off by the last stop or crash, asked about once the channel is up. */
+  private interrupted: string[] = [];
   private mode: Mode;
 
   private readonly opts: HerdOptions;
@@ -113,7 +120,11 @@ export class Herd {
       if (f !== undefined) restage(this.ctx, f);
     });
     // Tasks from before a restart stay on the board and can be continued (ADR 0039).
-    this.runner.restore();
+    const crashed = this.runner.restore();
+    const stopped = this.store.getState<string[]>(INTERRUPTED_STATE) ?? [];
+    this.interrupted = [...new Set([...stopped, ...crashed])].filter((id) =>
+      this.ctx.following.has(id),
+    );
     this.herder = opts.herder?.(this.herderHost());
   }
 
@@ -223,6 +234,32 @@ export class Herd {
     this.relays.reset();
     await this.opts.channel.start(this.opts.binding, (inbound) => this.handle(inbound));
     this.store.audit("herd.started", { mode: this.mode, channel: this.opts.channel.id });
+    await this.askToResume();
+  }
+
+  /**
+   * Tasks cut off by the last stop or crash: the Herder asks the owner whether to continue them,
+   * with buttons. Its answer goes to the Herder, which continues them with session_prompt. Never
+   * restarted on their own. Without a Herder nobody could act on the answer, so nothing is asked.
+   */
+  private async askToResume(): Promise<void> {
+    const ids = this.interrupted;
+    this.interrupted = [];
+    this.store.setState(INTERRUPTED_STATE, []);
+    if (ids.length === 0 || this.herder === undefined) return;
+    const tasks = ids
+      .map((id) => this.ctx.following.get(id)?.task)
+      .filter((t): t is Task => t !== undefined)
+      .slice(0, RESUME_ASK_MAX);
+    if (tasks.length === 0) return;
+    const t = this.texts;
+    const options =
+      tasks.length === 1
+        ? [t.resumeYes, t.resumeNo]
+        : [t.resumeAll, t.resumeNo, ...tasks.slice(0, 2).map((task) => t.resumeOnly(task.title))];
+    const lines = tasks.map((task) => `- ${task.title}（${task.project} · ${task.agent}）`);
+    await this.owner.ask(t.resumeQuestion(lines.join("\n")), [...options, t.otherOption]);
+    this.store.audit("tasks.resume-asked", { taskIds: tasks.map((task) => task.id) });
   }
 
   /** Inbound from the channel. Errors are recorded, never thrown back into the channel. */
@@ -287,9 +324,14 @@ export class Herd {
     this.board.stop();
     this.ctx.watchdog.stop();
     this.relays.stop();
+    // Remember what was cut off, so the next start can ask whether to continue it.
+    const cut = [...this.ctx.following.values()]
+      .filter((f) => !f.ended && unfinished(f))
+      .map((f) => f.task.id);
     for (const f of this.ctx.following.values()) {
       if (!f.ended) await this.endTask(f.task.id, this.texts.agentherdStopped);
     }
+    if (cut.length > 0) this.store.setState(INTERRUPTED_STATE, cut);
     await this.ctx.inbox.stop();
     if (this.started) await this.opts.channel.stop();
     this.store.audit("herd.stopped", {});
