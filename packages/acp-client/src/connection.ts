@@ -6,6 +6,7 @@ import { type ChildProcess, spawn } from "node:child_process";
 import { Readable, Writable } from "node:stream";
 import {
   type ClientConnection,
+  type ContentBlock,
   client,
   methods,
   ndJsonStream,
@@ -60,6 +61,12 @@ export interface ExitEvent {
   stderr: string[];
 }
 
+/** An image for a prompt; `data` is base64. */
+export interface PromptImage {
+  data: string;
+  mimeType: string;
+}
+
 interface Events {
   update: SessionUpdateEvent;
   permission: PermissionRequest;
@@ -77,7 +84,14 @@ export interface AgentConnection {
   readonly authMethods: { id: string; name: string; description?: string }[];
   readonly pid: number | undefined;
   newSession(cwd: string): Promise<string>;
-  prompt(sessionId: string, text: string): Promise<{ stopReason: StopReason }>;
+  /** Whether the agent takes image blocks in a prompt (ACP `promptCapabilities.image`). */
+  readonly acceptsImages: boolean;
+  /** Images go only to an agent that accepts them; others get the text alone. */
+  prompt(
+    sessionId: string,
+    text: string,
+    images?: PromptImage[],
+  ): Promise<{ stopReason: StopReason }>;
   /** Sends `session/cancel` and answers the session's open permission requests `cancelled`. */
   cancel(sessionId: string): Promise<void>;
   on<K extends keyof Events>(event: K, listener: Listener<Events[K]>): () => void;
@@ -289,18 +303,19 @@ export async function startAgent(
       ...(m.description ? { description: m.description } : {}),
     })),
     pid: child.pid,
+    acceptsImages: init.agentCapabilities?.promptCapabilities?.image === true,
     async newSession(cwd) {
       const res = await whileAlive(
         agent.request(methods.agent.session.new, { cwd, mcpServers: [] }),
       );
       return res.sessionId;
     },
-    async prompt(sessionId, text) {
+    async prompt(sessionId, text, images = []) {
+      const accepted = init.agentCapabilities?.promptCapabilities?.image === true ? images : [];
+      const prompt: ContentBlock[] = [{ type: "text", text }];
+      for (const i of accepted) prompt.push({ type: "image", data: i.data, mimeType: i.mimeType });
       const res = await whileAlive(
-        agent.request(methods.agent.session.prompt, {
-          sessionId,
-          prompt: [{ type: "text", text }],
-        }),
+        agent.request(methods.agent.session.prompt, { sessionId, prompt }),
       );
       return { stopReason: res.stopReason };
     },

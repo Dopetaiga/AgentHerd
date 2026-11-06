@@ -25,8 +25,26 @@ type View = ItemView | BoardView | ReportView | RelayView | TextView;
 
 type Inbound =
   | { kind: "action"; target: string; action: string; text?: string; from: string }
-  | { kind: "message"; text: string; from: string; replyTo?: MessageRef };
+  | {
+      kind: "message";
+      text: string;               // may be empty when the owner sent only images
+      from: string;
+      replyTo?: MessageRef;
+      images?: { mimeType: string; data: Uint8Array }[];
+    };
 ```
+
+Images the owner sends are saved under `<home>/attachments/` (`<date>-<uuid>.<ext>`, logged as
+`owner.image`) and go where the text goes:
+
+- To the Herder: when its model reads images (`input` includes `image`) it sees them with the
+  message; it always gets a line with where each image is saved. Image data is not kept in the
+  saved conversation, only the path. A task it starts or messages for that owner message gets
+  the images too.
+- To an agent (relay, `/run`, or through the Herder): as ACP `image` content blocks when the
+  agent advertises `promptCapabilities.image`; otherwise the prompt gets a line with the saved
+  path. The transcript always shows the path line. The Pi bridge advertises image support and
+  passes the images to Pi's `prompt` command.
 
 The core renders channel-neutral views: `ItemView` (title, body, risk, options, reason),
 `BoardView` (task rows), `ReportView` (completion report), `RelayView` (active relay),
@@ -92,6 +110,15 @@ ID, App Secret and the owner's `open_id`, and no separate publish step is needed
 The Feishu long connection (WebSocket, `WSClient` with an `EventDispatcher`) receives both
 messages and card callbacks. No public IP and no webhook URL are needed. The prototype
 confirmed that `card.action.trigger` arrives over the long connection.
+
+### Inbound messages
+
+`text` messages are passed as they are. `image` messages and `post` (rich text) messages are
+supported too: a post becomes plain text (title, paragraphs; links as `label (url)`, mentions as
+`@name`, code blocks as text) and its embedded images are downloaded. Images are downloaded with
+`im.v1.messageResource.get` (`type: image`); the `im:message` scope covers it. A download that
+fails becomes a note in the text (`[图片没能下载：…]`) instead of dropping the message. Files,
+audio, stickers and other types are ignored.
 
 ### Cards
 

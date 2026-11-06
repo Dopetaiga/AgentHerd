@@ -1,7 +1,7 @@
 // The Herder's prompts (docs/spec/04-herder.md §1). Agent output is untrusted: it is quoted,
 // never followed.
 
-import type { HerderEvent } from "@agentherd/core";
+import type { CoreTexts, HerderEvent, OwnerImage } from "@agentherd/core";
 import type { Locale } from "@agentherd/protocol";
 
 export const OWNER_LABEL = "[Owner's message]";
@@ -51,8 +51,14 @@ export function quoteAgent(text: string): string {
   return `<<<agent\n${text.replaceAll("agent>>>", "agent> >>")}\nagent>>>`;
 }
 
-export function ownerMessagePrompt(text: string): string {
-  return `${OWNER_LABEL}\n${text}`;
+/** The owner's message; each image adds a line with where it is saved. */
+export function ownerMessagePrompt(
+  text: string,
+  images: OwnerImage[] = [],
+  texts?: CoreTexts,
+): string {
+  const lines = texts === undefined ? [] : images.map((i) => texts.imageAttached(i.path));
+  return [`${OWNER_LABEL}\n${text}`.trimEnd(), ...lines].join("\n");
 }
 
 export function ownerAnswerPrompt(question: string, answer: string): string {

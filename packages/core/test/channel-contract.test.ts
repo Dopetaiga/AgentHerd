@@ -42,6 +42,9 @@ class RecordingApi implements FeishuApi {
   async pin(messageId: string) {
     this.pinned.push(messageId);
   }
+  async downloadImage() {
+    return { data: new Uint8Array() };
+  }
 }
 
 channelContract("feishu (recorded API)", async () => {

@@ -6,6 +6,8 @@ import type { Locale, ReportResult } from "@agentherd/protocol";
 export interface CoreTexts {
   help: string;
   noHerder: string;
+  /** A line for an image the owner sent, for whoever cannot see images. */
+  imageAttached(path: string): string;
   runAccepted: (title: string) => string;
   herderFailed: (message: string) => string;
   herderGuardHit: (path: string, reason: string) => string;
@@ -88,6 +90,7 @@ const zh: CoreTexts = {
   noMatch: (q) => `没有找到和"${q}"匹配的进行中任务。`,
   manyMatches: (q, list) => `有多个任务和"${q}"匹配：\n${list}`,
   noRelay: "现在没有在转接。",
+  imageAttached: (path) => `[主人发来一张图片，已保存在 ${path}]`,
   queued: "已排队：Agent 这一轮结束后会收到这条消息。",
   unknownAgent: (a, known) => `没有叫"${a}"的 Agent。可用的有：${known}。`,
   notDirectory: (p) => `不是一个目录：${p}`,
@@ -147,6 +150,7 @@ const en: CoreTexts = {
   noMatch: (q) => `No open task matches "${q}".`,
   manyMatches: (q, list) => `More than one task matches "${q}":\n${list}`,
   noRelay: "No relay is active.",
+  imageAttached: (path) => `[The owner sent an image, saved at ${path}]`,
   queued: "Queued: the agent gets this when its turn ends.",
   unknownAgent: (a, known) => `Unknown agent "${a}". Known: ${known}.`,
   notDirectory: (p) => `Not a directory: ${p}`,

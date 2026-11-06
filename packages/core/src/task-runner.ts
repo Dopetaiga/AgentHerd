@@ -11,11 +11,13 @@ import {
   say,
   type TaskOps,
 } from "./herd-context.ts";
+import type { OwnerImage } from "./herder-port.ts";
 import { onPermission } from "./permission.ts";
 import type { Relay } from "./relay.ts";
 import { REPLY_HINT_CHARS, replyHint } from "./report.ts";
 import { askSummary, flushReply, sendReport, setReport } from "./task-report.ts";
 import { projectName, taskTitle } from "./tasks.ts";
+import type { CoreTexts } from "./texts.ts";
 
 export const SESSION_IDLE_MINUTES = 60;
 /** At most this many models are tried for one task before it fails. */
@@ -42,6 +44,7 @@ export class TaskRunner {
     ownerText: string,
     prompt: string = ownerText,
     model?: string,
+    images: OwnerImage[] = [],
   ): Promise<{ taskId: string; turn: Promise<RunResult> }> {
     const { ctx } = this;
     const found = ctx.opts.profiles.find((p) => p.id === profileId);
@@ -93,7 +96,7 @@ export class TaskRunner {
       delete f.connection;
       if (await this.switchModel(f, message)) {
         this.started(f, model);
-        return { taskId: sessionId, turn: this.ops.promptTask(sessionId, prompt) };
+        return { taskId: sessionId, turn: this.ops.promptTask(sessionId, prompt, images) };
       }
       setReport(ctx, f, ctx.texts.couldNotStart(message));
       ctx.registry.set(sessionId, "error");
@@ -103,7 +106,7 @@ export class TaskRunner {
     }
     this.listen(f, f.connection, f.agentSessionId);
     this.started(f, model);
-    return { taskId: sessionId, turn: this.ops.promptTask(sessionId, prompt) };
+    return { taskId: sessionId, turn: this.ops.promptTask(sessionId, prompt, images) };
   }
 
   private started(f: Following, asked: string | undefined): void {
@@ -127,21 +130,21 @@ export class TaskRunner {
   }
 
   /** Sends a prompt to an open task. Queued while a turn runs; settles when its turn ends. */
-  promptTask(taskId: string, text: string): Promise<RunResult> {
+  promptTask(taskId: string, text: string, images: OwnerImage[] = []): Promise<RunResult> {
     const f = this.ctx.following.get(taskId);
     if (f === undefined || f.ended) return Promise.reject(new Error(`task ${taskId} is not open`));
     const done = new Promise<RunResult>((resolve, reject) => {
-      f.queue.push({ text, resolve, reject });
+      f.queue.push({ text, images, resolve, reject });
     });
     void this.pump(f);
     return done;
   }
 
   /** Cancels the current turn of a task, then sends the text as the next prompt. */
-  async interruptTask(taskId: string, text: string): Promise<RunResult> {
+  async interruptTask(taskId: string, text: string, images?: OwnerImage[]): Promise<RunResult> {
     const f = this.ctx.following.get(taskId);
     if (f === undefined || f.ended) throw new Error(`task ${taskId} is not open`);
-    const next = this.ops.promptTask(taskId, text);
+    const next = this.ops.promptTask(taskId, text, images);
     if (f.busy && f.connection !== undefined && f.agentSessionId !== undefined) {
       await f.connection.cancel(f.agentSessionId);
     }
@@ -235,7 +238,7 @@ export class TaskRunner {
     f.busy = true;
     f.idleTimer?.cancel();
     try {
-      next.resolve(await this.runTurn(f, next.text));
+      next.resolve(await this.runTurn(f, next.text, next.images));
     } catch (error) {
       next.reject(error as Error);
     } finally {
@@ -322,7 +325,7 @@ export class TaskRunner {
     return true;
   }
 
-  private async runTurn(f: Following, text: string): Promise<RunResult> {
+  private async runTurn(f: Following, text: string, images: OwnerImage[]): Promise<RunResult> {
     const { ctx } = this;
     const sessionId = f.task.id;
     const { connection, agentSessionId } = f;
@@ -331,18 +334,23 @@ export class TaskRunner {
     }
     f.turn = { text: "", toolCalls: 0 };
     f.pending = "";
-    ctx.store.addTranscript(sessionId, "prompt", text);
+    ctx.store.addTranscript(sessionId, "prompt", withImagePaths(text, images, ctx.texts));
     f.finished = false;
     f.alarm = false;
-    let prompt = text;
+    // An agent that takes no images gets where they are saved instead.
+    let prompt = connection.acceptsImages ? text : withImagePaths(text, images, ctx.texts);
     if (!f.hinted) {
       f.hinted = true;
-      prompt = `${replyHint(ctx.opts.replyHintChars ?? REPLY_HINT_CHARS, ctx.texts)}\n\n${text}`;
+      prompt = `${replyHint(ctx.opts.replyHintChars ?? REPLY_HINT_CHARS, ctx.texts)}\n\n${prompt}`;
     }
     ctx.registry.set(sessionId, "working");
     ctx.watchdog.turnStarted(sessionId);
     try {
-      const { stopReason } = await connection.prompt(agentSessionId, prompt);
+      const { stopReason } = await connection.prompt(
+        agentSessionId,
+        prompt,
+        images.map((i) => ({ data: i.data, mimeType: i.mimeType })),
+      );
       ctx.watchdog.turnEnded(sessionId);
       f.finished = stopReason === "end_turn";
       f.turnsEnded = (f.turnsEnded ?? 0) + 1;
@@ -366,11 +374,18 @@ export class TaskRunner {
       ctx.watchdog.turnEnded(sessionId);
       flushReply(ctx, f);
       ctx.store.addTranscript(sessionId, "note", message);
-      if (await this.switchModel(f, message)) return this.runTurn(f, text);
+      if (await this.switchModel(f, message)) return this.runTurn(f, text, images);
       if (ctx.registry.get(sessionId)?.state !== "ended") ctx.registry.set(sessionId, "error");
       await sendReport(ctx, f, ctx.texts.failedBody(message), null);
       await this.ops.endTask(sessionId, ctx.texts.turnFailed);
       throw error;
     }
   }
+}
+
+/** The text with one line per image, naming the file it is saved in. */
+export function withImagePaths(text: string, images: OwnerImage[], texts: CoreTexts): string {
+  if (images.length === 0) return text;
+  const lines = images.map((i) => texts.imageAttached(i.path));
+  return [text, ...lines].filter((l) => l !== "").join("\n");
 }

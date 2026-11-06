@@ -12,7 +12,7 @@ import type {
 import type { ExtraGuard } from "@agentherd/rules";
 import type { Board } from "./board.ts";
 import type { Clock, Timer } from "./clock.ts";
-import type { HerderFactory, HerderPort } from "./herder-port.ts";
+import type { HerderFactory, HerderPort, OwnerImage } from "./herder-port.ts";
 import type { Inbox } from "./inbox.ts";
 import type { Registry } from "./registry.ts";
 import type { Store } from "./store.ts";
@@ -106,6 +106,7 @@ export interface Following {
 
 export interface QueuedPrompt {
   text: string;
+  images: OwnerImage[];
   resolve: (result: RunResult) => void;
   reject: (error: Error) => void;
 }
@@ -143,9 +144,10 @@ export interface TaskOps {
     ownerText: string,
     prompt?: string,
     model?: string,
+    images?: OwnerImage[],
   ): Promise<{ taskId: string; turn: Promise<RunResult> }>;
-  promptTask(taskId: string, text: string): Promise<RunResult>;
-  interruptTask(taskId: string, text: string): Promise<RunResult>;
+  promptTask(taskId: string, text: string, images?: OwnerImage[]): Promise<RunResult>;
+  interruptTask(taskId: string, text: string, images?: OwnerImage[]): Promise<RunResult>;
   endTask(taskId: string, why: string): Promise<void>;
 }
 

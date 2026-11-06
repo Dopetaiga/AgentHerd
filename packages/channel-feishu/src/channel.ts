@@ -5,6 +5,8 @@ import type {
   Channel,
   ChannelBinding,
   ChannelCapability,
+  Inbound,
+  InboundImage,
   InboundSink,
   Locale,
   MessageRef,
@@ -21,7 +23,7 @@ import {
   verifyCredentials,
 } from "./api.ts";
 import { renderCard } from "./card.ts";
-import { parseCardAction, parseMessage } from "./inbound.ts";
+import { type FeishuMessage, parseCardAction, parseFeishuMessage } from "./inbound.ts";
 import { CARD_TEXTS } from "./texts.ts";
 
 export const CHANNEL_ID = "feishu";
@@ -126,7 +128,7 @@ export class FeishuChannel implements Channel {
     const appSecret = await this.opts.getSecret(appId);
     this.ownerId = binding.ownerId;
     const api = (this.opts.createApi ?? sdkApi)({ appId, appSecret, brand });
-    const deliver = async (inbound: ReturnType<typeof parseMessage>) => {
+    const deliver = async (inbound: Inbound | null) => {
       if (inbound === null) return;
       try {
         await sink(inbound);
@@ -135,7 +137,10 @@ export class FeishuChannel implements Channel {
       }
     };
     await api.connect({
-      onMessage: async (payload) => deliver(parseMessage(payload)),
+      onMessage: async (payload) => {
+        const message = parseFeishuMessage(payload);
+        if (message !== null) await deliver(await this.withImages(api, message));
+      },
       onCardAction: async (payload) => this.onCardAction(payload, deliver),
     });
     this.api = api;
@@ -163,9 +168,31 @@ export class FeishuChannel implements Channel {
     await this.requireApi().patchCard(ref.id, renderCard(view, this.locale));
   }
 
+  /** Downloads the images of a message. One that fails becomes a note in the text. */
+  private async withImages(api: FeishuApi, m: FeishuMessage): Promise<Inbound> {
+    const images: InboundImage[] = [];
+    const notes: string[] = [];
+    for (const key of m.imageKeys) {
+      try {
+        const file = await api.downloadImage(m.messageId, key);
+        images.push({ mimeType: imageType(file.data, file.contentType), data: file.data });
+      } catch (error) {
+        notes.push(CARD_TEXTS[this.locale].imageFailed((error as Error).message));
+      }
+    }
+    const text = [m.text, ...notes].filter((t) => t !== "").join("\n");
+    return {
+      kind: "message",
+      text,
+      from: m.from,
+      ...(m.replyTo === undefined ? {} : { replyTo: m.replyTo }),
+      ...(images.length === 0 ? {} : { images }),
+    };
+  }
+
   private async onCardAction(
     payload: unknown,
-    deliver: (inbound: ReturnType<typeof parseCardAction>) => Promise<void>,
+    deliver: (inbound: Inbound | null) => Promise<void>,
   ): Promise<Record<string, unknown>> {
     const toast = { type: "info", content: CARD_TEXTS[this.locale].toast };
     const messageId = openMessageId(payload);
@@ -194,4 +221,16 @@ export class FeishuChannel implements Channel {
     if (this.api === null) throw new Error("feishu channel is not started");
     return this.api;
   }
+}
+
+/** The image type from its first bytes; Feishu may answer with a generic content type. */
+export function imageType(data: Uint8Array, contentType?: string): string {
+  const starts = (...bytes: number[]) => bytes.every((b, i) => data[i] === b);
+  if (starts(0x89, 0x50, 0x4e, 0x47)) return "image/png";
+  if (starts(0xff, 0xd8, 0xff)) return "image/jpeg";
+  if (starts(0x47, 0x49, 0x46, 0x38)) return "image/gif";
+  if (starts(0x52, 0x49, 0x46, 0x46) && data[8] === 0x57 && data[9] === 0x45) return "image/webp";
+  if (starts(0x42, 0x4d)) return "image/bmp";
+  const type = contentType?.split(";")[0]?.trim();
+  return type?.startsWith("image/") === true ? type : "image/png";
 }

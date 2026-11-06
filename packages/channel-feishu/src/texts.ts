@@ -22,6 +22,8 @@ export interface CardTexts {
   backToHerder: string;
   askAnswered: (answer: string) => string;
   toast: string;
+  /** Put in the message text in place of an image that could not be downloaded. */
+  imageFailed: (why: string) => string;
   appName: string;
   appDesc: string;
 }
@@ -58,6 +60,7 @@ export const CARD_TEXTS: Record<Locale, CardTexts> = {
     backToHerder: "已回到主管",
     askAnswered: (answer) => `你选了：**${answer}**`,
     toast: "已收到",
+    imageFailed: (why) => `[图片没能下载：${why}]`,
     appName: "AgentHerd",
     appDesc: "只在你的 Agent 需要你时才打扰你",
   },
@@ -92,6 +95,7 @@ export const CARD_TEXTS: Record<Locale, CardTexts> = {
     backToHerder: "Back to the Herder",
     askAnswered: (answer) => `You chose: **${answer}**`,
     toast: "Received",
+    imageFailed: (why) => `[could not download an image: ${why}]`,
     appName: "AgentHerd",
     appDesc: "Only pings you when your agents need you",
   },

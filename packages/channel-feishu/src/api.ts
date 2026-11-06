@@ -24,6 +24,14 @@ export interface FeishuApi {
   sendCard(openId: string, card: Record<string, unknown>): Promise<string>;
   patchCard(messageId: string, card: Record<string, unknown>): Promise<void>;
   pin(messageId: string): Promise<void>;
+  /** Downloads an image of a received message (`im:message` covers it). */
+  downloadImage(messageId: string, imageKey: string): Promise<DownloadedFile>;
+}
+
+export interface DownloadedFile {
+  data: Uint8Array;
+  /** From the response, when Feishu sends one. */
+  contentType?: string;
 }
 
 export function openApiBase(brand: Brand): string {
@@ -86,6 +94,19 @@ export function sdkApi(creds: FeishuCredentials): FeishuApi {
     async pin(messageId) {
       const res = await client.im.v1.pin.create({ data: { message_id: messageId } });
       check("pin", res);
+    },
+    async downloadImage(messageId, imageKey) {
+      const res = await client.im.v1.messageResource.get({
+        params: { type: "image" },
+        path: { message_id: messageId, file_key: imageKey },
+      });
+      const chunks: Buffer[] = [];
+      for await (const chunk of res.getReadableStream()) chunks.push(Buffer.from(chunk));
+      const type = (res.headers as Record<string, unknown> | undefined)?.["content-type"];
+      return {
+        data: new Uint8Array(Buffer.concat(chunks)),
+        ...(typeof type === "string" ? { contentType: type } : {}),
+      };
     },
   };
 }
