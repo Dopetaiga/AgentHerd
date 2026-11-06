@@ -5,7 +5,7 @@ import { REVIEW_JOB } from "@agentherd/core";
 import { Agent, type AgentMessage, type StreamFn } from "@agentherd/herder-loop";
 import { guardCheck } from "@agentherd/rules";
 import type { Api, Model } from "@earendil-works/pi-ai";
-import { errorKind, HELD_RETRY_MS, RETRY_DELAYS_MS } from "./errors.ts";
+import { errorKind, HELD_RETRY_MS, RETRY_DELAYS_MS, shortError } from "./errors.ts";
 import { memorySnapshot, memoryTools, recallBlock } from "./memory.ts";
 import type { TierPlacement } from "./model-guide.ts";
 import { eventsPrompt, ownerAnswerPrompt, ownerMessagePrompt, systemPrompt } from "./prompt.ts";
@@ -293,7 +293,14 @@ export class Herder implements HerderPort {
         result = await this.attempt(prompt, images);
         if (result.ok) {
           this.host.audit("herder.model-switched", { from: from.ref, to: next.ref, why: first });
-          await this.host.alert(this.host.texts.herderSwitched(next.ref, first), false);
+          await this.host.alert(
+            this.host.texts.herderSwitched(
+              next.ref,
+              shortError(first),
+              errorKind(first) === "fatal",
+            ),
+            false,
+          );
           return true;
         }
         if (result.acted) break;
@@ -305,13 +312,13 @@ export class Herder implements HerderPort {
     this.host.audit("herder.error", { kind: job.kind, message: result.message });
     if (this.stopped) return false;
     if (result.acted || errorKind(result.message) === "fatal") {
-      await this.host.alert(this.host.texts.herderFailed(result.message), false);
+      await this.host.alert(this.host.texts.herderFailed(shortError(result.message)), false);
       return false;
     }
     this.held = job;
     this.heldTimer = setTimeout(() => this.retry(), this.heldRetryMs);
     this.heldTimer.unref?.();
-    await this.host.alert(this.host.texts.herderHeld(result.message), true);
+    await this.host.alert(this.host.texts.herderHeld(shortError(result.message)), true);
     return false;
   }
 

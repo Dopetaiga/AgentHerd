@@ -12,7 +12,8 @@ export interface CoreTexts {
   runAccepted: (title: string) => string;
   herderFailed: (message: string) => string;
   /** The Herder now runs on another model (ADR 0037). */
-  herderSwitched: (to: string, why: string) => string;
+  /** `fix`: the old model failed on its key, balance or request, which the owner must fix. */
+  herderSwitched: (to: string, why: string, fix: boolean) => string;
   /** Every model failed; the message waits. */
   herderHeld: (message: string) => string;
   /** The button that runs a held message again. */
@@ -61,6 +62,7 @@ export interface CoreTexts {
   massDelete: string;
   guardHit: (reason: string) => string;
   runFinished: string;
+  endedByOwner: string;
   agentCouldNotStart: string;
   agentExited: string;
   turnFailed: string;
@@ -107,7 +109,8 @@ const zh: CoreTexts = {
   runAccepted: (title) => `已收到，正在启动：${title}`,
   herderFailed: (message) =>
     `主管这次没能回答：${message}\n重试也没用，请到模型页检查密钥、余额，或给主管换一个模型。固定命令仍然可用，发 /help 查看。`,
-  herderSwitched: (to, why) => `主管换成了 ${to}，原因：${why}`,
+  herderSwitched: (to, why, fix) =>
+    `主管换成了 ${to}，原因：${why}${fix ? "\n原来的模型要你处理：到模型页检查密钥和余额，或给主管换个模型。" : ""}`,
   herderHeld: (message) =>
     `所有模型都没能回答（${message}）。你的消息还在，网络恢复后会自动接着处理，也可以点「重试」。`,
   retry: "重试",
@@ -152,6 +155,7 @@ const zh: CoreTexts = {
   massDelete: "一次删除大量文件，需要你确认",
   guardHit: (reason) => `碰到保护名单：${reason}`,
   runFinished: "任务已运行结束",
+  endedByOwner: "你说这个任务结束了",
   agentCouldNotStart: "Agent 启动失败",
   agentExited: "Agent 已退出",
   turnFailed: "这一轮执行失败",
@@ -190,7 +194,8 @@ const en: CoreTexts = {
   runAccepted: (title) => `Received, starting: ${title}`,
   herderFailed: (message) =>
     `The Herder could not answer: ${message}\nRetrying will not help; check the key or balance on the Models page, or give the Herder another model. Commands still work; send /help.`,
-  herderSwitched: (to, why) => `The Herder switched to ${to} because: ${why}`,
+  herderSwitched: (to, why, fix) =>
+    `The Herder switched to ${to} because: ${why}${fix ? "\nThe old model needs you: check its key and balance on the Models page, or pick another model for the Herder." : ""}`,
   herderHeld: (message) =>
     `No model could answer (${message}). Your message is kept and runs when a model works again; or tap Retry.`,
   retry: "Retry",
@@ -235,6 +240,7 @@ const en: CoreTexts = {
   massDelete: "deletes a lot at once; needs your confirmation",
   guardHit: (reason) => `guard list: ${reason}`,
   runFinished: "the run finished",
+  endedByOwner: "the owner said it is finished",
   agentCouldNotStart: "the agent could not start",
   agentExited: "the agent exited",
   turnFailed: "the turn failed",

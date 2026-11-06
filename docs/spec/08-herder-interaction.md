@@ -160,3 +160,10 @@ The owner's message is never dropped silently: it is handled, or the owner is to
 5. Task-end cases and experiences, FTS recall.
 6. Local vectors, hybrid search, rerank.
 7. Review job, 「记忆」 page, Feishu commands.
+
+## Found in live testing (2026-11-06)
+
+- The owner could not close a task from chat, so its case waited for the 60-minute idle end. The Herder now has `session_end`.
+- The owner's lasting requests (kind 关于你) now go into every new task's prompt too: the agent writes the report the owner reads.
+- An agent that fails to start a task (Codex killed on this Mac) sits out new tasks for 30 minutes, so each task does not post another 「换成 Pi」 card.
+- Herder error cards show the API's own message (status code + message, at most 160 characters), not the JSON body; a key or balance error also says what to fix.

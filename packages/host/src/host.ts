@@ -73,6 +73,12 @@ export const HOST_VERSION = "0.0.0";
 /** Deleted memory entries the 记忆 page offers to restore. */
 const MEMORY_DELETED_SHOWN = 20;
 
+/**
+ * An agent that could not start a task (Codex killed on this Mac) sits out new tasks this long, so
+ * each new task does not try it again and post another 「换成 Pi」 card.
+ */
+export const AGENT_DOWN_MS = 30 * 60_000;
+
 export interface HostOptions {
   home: string;
   /**
@@ -127,6 +133,8 @@ export class Host implements HostApi {
   private setup: SetupState = { phase: "idle" };
   private setupRun = 0;
   private profileList: AgentProfile[] = [];
+  /** Agents sitting out new tasks after failing to start one, until this time. */
+  private readonly agentDownUntil = new Map<string, number>();
   private stopped = false;
 
   private readonly agentList: Agents;
@@ -239,7 +247,7 @@ export class Host implements HostApi {
       binding: config.channel,
       mode: config.mode ?? "assist",
       locale,
-      profiles: this.profileList,
+      profiles: this.herdProfiles(),
       ...(herder === undefined ? {} : { herder }),
       agentModels: {
         list: () =>
@@ -319,10 +327,25 @@ export class Host implements HostApi {
     });
   }
 
+  /** Installed agents minus the ones sitting out after a failed start. */
+  private herdProfiles(): AgentProfile[] {
+    const now = Date.now();
+    return this.profileList.filter((p) => (this.agentDownUntil.get(p.id) ?? 0) <= now);
+  }
+
+  private agentDown(id: string): void {
+    this.agentDownUntil.set(id, Date.now() + AGENT_DOWN_MS);
+    this.log(
+      `[agents] ${id} could not start a task; new tasks skip it for ${AGENT_DOWN_MS / 60_000} min`,
+    );
+    this.herd?.setProfiles(this.herdProfiles());
+    setTimeout(() => this.herd?.setProfiles(this.herdProfiles()), AGENT_DOWN_MS + 1000).unref();
+  }
+
   private agentsChanged(): void {
     const before = this.profileList.map((p) => p.id).join(",");
     this.profileList = this.buildProfiles();
-    this.herd?.setProfiles(this.profileList);
+    this.herd?.setProfiles(this.herdProfiles());
     this.emit({ topic: "agents", data: this.agents() });
     if (this.profileList.map((p) => p.id).join(",") !== before) this.emitStatus();
   }
@@ -390,7 +413,7 @@ export class Host implements HostApi {
       await this.herd.setHerder(this.herderFactory());
     }
     this.profileList = this.buildProfiles();
-    this.herd?.setProfiles(this.profileList);
+    this.herd?.setProfiles(this.herdProfiles());
     this.log(`[herder] ${this.herderRef ?? `off: ${this.herderReason}`}`);
     this.emit({ topic: "models", data: this.models() });
     this.emit({ topic: "agents", data: this.agents() });
@@ -709,7 +732,10 @@ export class Host implements HostApi {
     tried: readonly string[],
   ): Promise<{ profileId: string; model: string } | undefined> {
     const ids = this.profileList.map((p) => p.id);
-    if (profileId === "codex" && ids.includes("pi")) return { profileId: "pi", model: failed };
+    if (profileId === "codex" && ids.includes("pi")) {
+      this.agentDown("codex");
+      return { profileId: "pi", model: failed };
+    }
     this.modelChecks.set(failed, {
       result: { ok: false, message: "failed in a task" },
       until: Date.now() + 120_000,

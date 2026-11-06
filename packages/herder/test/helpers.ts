@@ -17,6 +17,7 @@ export interface Recorded {
   prompted: { taskId: string; text: string; images?: string[] }[];
   renamed: { taskId: string; name: string }[];
   cancelled: string[];
+  ended: string[];
   relays: string[];
   audits: { type: string; data: Record<string, unknown> }[];
   turns: { role: string; text: string }[];
@@ -58,6 +59,7 @@ export function fakeHost(
     prompted: [],
     renamed: [],
     cancelled: [],
+    ended: [],
     relays: [],
     audits: [],
     turns: [],
@@ -96,6 +98,7 @@ export function fakeHost(
       }),
     renameTask: (taskId, name) => void rec.renamed.push({ taskId, name }),
     cancelTurn: async (taskId) => void rec.cancelled.push(taskId),
+    endTask: async (taskId) => void rec.ended.push(taskId),
     startRelay: async (taskId) => void rec.relays.push(taskId),
     endRelay: async () => void rec.relays.push("end"),
     say: async (text) => void rec.said.push(text),

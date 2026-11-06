@@ -28,7 +28,7 @@ afterEach(async () => {
   for (const c of cleanups.splice(0)) await c();
 });
 
-function makeHost(bound = false) {
+function makeHost(bound = false, profileIds: string[] = []) {
   // Short path: Unix socket paths are limited to about 104 bytes on macOS.
   const home = mkdtempSync(join(tmpdir(), "ah-"));
   if (bound) writeConfig(home, { channel: { channelId: "fake", ownerId: "owner", data: {} } });
@@ -40,7 +40,8 @@ function makeHost(bound = false) {
     userHome: home,
     secrets,
     env: {},
-    profiles: () => [],
+    profiles: () =>
+      profileIds.map((id) => ({ id, name: id, command: [id], env: {}, exporter: null })),
     createChannel: () => {
       const c = new FakeChannel();
       channels.push(c);
@@ -161,6 +162,21 @@ describe("Host", () => {
     });
     expect(readConfig(t.home)).toMatchObject({ mode: "observe", keepAwake: true });
     expect(() => t.host.updateSettings({ mode: "auto" })).toThrow(/observe or assist/);
+  });
+
+  it("keeps Codex out of new tasks after it fails to start one", async () => {
+    const t = makeHost(true, ["pi", "codex"]);
+    await t.host.start();
+    const internals = t.host as unknown as {
+      nextModel(p: string, failed: string, tried: string[]): Promise<unknown>;
+      herdProfiles(): { id: string }[];
+    };
+    expect(internals.herdProfiles().map((p) => p.id)).toEqual(["pi", "codex"]);
+    expect(await internals.nextModel("codex", "gw/gpt-6-luna", [])).toEqual({
+      profileId: "pi",
+      model: "gw/gpt-6-luna",
+    });
+    expect(internals.herdProfiles().map((p) => p.id)).toEqual(["pi"]);
   });
 
   it("needs Codex only when a GPT model is in the list (ADR 0031)", async () => {
