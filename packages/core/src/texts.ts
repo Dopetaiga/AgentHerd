@@ -58,6 +58,10 @@ export interface CoreTexts {
   turnEnded: string;
   agentStoppedWaiting: string;
   agentherdStopped: string;
+  /** Sent when AgentHerd stops while tasks are still working. */
+  stoppingTasks(titles: string[]): string;
+  /** Sent on start, when there is no Herder to ask, for tasks the last stop or crash cut off. */
+  interruptedTasks(titles: string[]): string;
   noRuleMatched: string;
   massDelete: string;
   guardHit: (reason: string) => string;
@@ -161,6 +165,10 @@ const zh: CoreTexts = {
   turnEnded: "Agent 这一轮已结束",
   agentStoppedWaiting: "Agent 不再等待",
   agentherdStopped: "AgentHerd 已停止",
+  stoppingTasks: (t) =>
+    `AgentHerd 正在停止，下面的任务还没做完，会被中断：\n${t.map((x) => `· ${x}`).join("\n")}`,
+  interruptedTasks: (t) =>
+    `AgentHerd 上次停止时，下面的任务还没做完，已经中断：\n${t.map((x) => `· ${x}`).join("\n")}`,
   noRuleMatched: "没有规则自动处理这个请求",
   massDelete: "一次删除大量文件，需要你确认",
   guardHit: (reason) => `碰到保护名单：${reason}`,
@@ -258,6 +266,10 @@ const en: CoreTexts = {
   turnEnded: "the agent's turn ended",
   agentStoppedWaiting: "the agent stopped waiting",
   agentherdStopped: "AgentHerd stopped",
+  stoppingTasks: (t) =>
+    `AgentHerd is stopping. These tasks are not finished and will be interrupted:\n${t.map((x) => `- ${x}`).join("\n")}`,
+  interruptedTasks: (t) =>
+    `These tasks were still working when AgentHerd last stopped and were interrupted:\n${t.map((x) => `- ${x}`).join("\n")}`,
   noRuleMatched: "no rule matched",
   massDelete: "deletes a lot at once; needs your confirmation",
   guardHit: (reason) => `guard list: ${reason}`,

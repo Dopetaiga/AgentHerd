@@ -156,9 +156,12 @@ export class TaskRunner {
     return f.reopening === undefined ? queue() : f.reopening.then(queue);
   }
 
-  /** Loads saved tasks as ended tasks, so they show and can be continued (ADR 0039). */
-  /** @returns ids of tasks that were still working when AgentHerd went away without stopping. */
-  restore(limit = TASKS_RESTORED): string[] {
+  /**
+   * Loads saved tasks as ended tasks, so they show and can be continued (ADR 0039). With
+   * `closeStale`, tasks and sessions an earlier run left open are ended now.
+   * @returns ids of tasks that were still working when AgentHerd went away without stopping.
+   */
+  restore(limit = TASKS_RESTORED, closeStale = true): string[] {
     const { ctx } = this;
     const crashed: string[] = [];
     const now = ctx.clock.now().toISOString();
@@ -189,8 +192,12 @@ export class TaskRunner {
         ...(saved.agentSessionId === undefined ? {} : { agentSessionId: saved.agentSessionId }),
       };
       ctx.following.set(saved.task.id, f);
-      if (saved.endedAt !== undefined) continue;
-      // AgentHerd stopped without ending the task (a crash): end it now.
+      if (saved.endedAt !== undefined || !closeStale) continue;
+      // AgentHerd stopped without ending the task (a crash or a kill): end it now.
+      const session = ctx.store.getSession(f.task.id);
+      if (session !== undefined && session.state !== "ended") {
+        ctx.store.upsertSession({ ...session, state: "ended", updatedAt: now });
+      }
       if (unfinished(f)) {
         crashed.push(f.task.id);
         f.task.stage = "failed";
