@@ -188,6 +188,10 @@ CREATE TABLE IF NOT EXISTS memory_jobs(
 );
 `;
 
+/** Job kinds: a case from an ended task; a review of the Herder's recent conversation. */
+export const CASE_JOB = "case";
+export const REVIEW_JOB = "review";
+
 /** Waits before a failed job runs again: 1 min, 10 min, 1 h; then it stays failed. */
 export const JOB_RETRY_MS = [60_000, 600_000, 3_600_000];
 
@@ -477,6 +481,13 @@ export class MemoryStore {
     return batchId;
   }
 
+  /** Widens where an entry applies, e.g. a lesson seen in a second project becomes global. */
+  setScope(id: string, scope: string): void {
+    this.db
+      .prepare("UPDATE memories SET scope = ?, updated_at = ? WHERE id = ?")
+      .run(scope, this.now().toISOString(), id);
+  }
+
   /** Puts every row a batch changed back the way it was. */
   undo(batchId: string): number {
     const revs = this.revisions({ batchId });
@@ -651,10 +662,17 @@ export class MemoryStore {
       .run(this.now().toISOString(), kind, redact(clip(text, 4000), this.secrets), ref ?? null);
   }
 
-  logs(limit = 100): MemoryLogRow[] {
+  /** The newest log line of a kind. */
+  lastLog(kind: string): MemoryLogRow | undefined {
+    return this.logs(1, kind)[0];
+  }
+
+  logs(limit = 100, kind?: string): MemoryLogRow[] {
     return this.db
-      .prepare("SELECT id, at, kind, text, ref FROM memory_log ORDER BY id DESC LIMIT ?")
-      .all(limit)
+      .prepare(
+        `SELECT id, at, kind, text, ref FROM memory_log ${kind === undefined ? "" : "WHERE kind = ?"} ORDER BY id DESC LIMIT ?`,
+      )
+      .all(...(kind === undefined ? [] : [kind]), limit)
       .map((r) => {
         const row: MemoryLogRow = {
           id: Number(r.id),

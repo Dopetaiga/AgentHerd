@@ -20,6 +20,7 @@ export { BODY_MAX_LINES, DEFAULT_REMIND_MINUTES, Inbox, itemBody, itemView } fro
 export {
   ABSTRACT_MAX_CHARS,
   BODY_MAX_CHARS,
+  CASE_JOB,
   JOB_RETRY_MS,
   MEMORY_KINDS,
   MEMORY_TABLES_SQL,
@@ -36,6 +37,7 @@ export {
   MemoryStore,
   RESIDENT_CAPS,
   RESIDENT_KINDS,
+  REVIEW_JOB,
   type WriteMeta,
 } from "./memory-store.ts";
 export {
