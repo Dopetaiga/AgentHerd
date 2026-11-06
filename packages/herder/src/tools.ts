@@ -2,12 +2,13 @@
 // or writes a file.
 
 import { statSync } from "node:fs";
-import { basename, isAbsolute, join, resolve } from "node:path";
+import { isAbsolute, join, resolve } from "node:path";
 import type { HerderHost, OwnerImage, Task } from "@agentherd/core";
 import type { AgentTool, AgentToolResult } from "@agentherd/herder-loop";
 import { arr, obj, opt, str } from "@earendil-works/pi-schema";
 import { agentForModel } from "./agent-models.ts";
 import { TIERS, type TierPlacement, tiersText } from "./model-guide.ts";
+import { findProjects, foundText } from "./project-find.ts";
 import { composeTaskPrompt, HERDER_LABEL } from "./prompt.ts";
 
 /** What the current Herder turn is about. */
@@ -19,6 +20,31 @@ export interface TurnContext {
   images: OwnerImage[];
   asked: boolean;
   notified: boolean;
+  /**
+   * Folders the owner typed or picked with a button this turn. session_start runs only in one of
+   * them (ADR 0035): a folder from earlier turns or the Herder's own guess is never used.
+   */
+  pickedDirs: string[];
+}
+
+/** The answer that lets the owner type their own (ADR 0035). */
+export function otherOption(locale: string): string {
+  return locale === "en" ? "Other" : "其他";
+}
+
+const PATH_RE = /(?:^|[\s"'`(（「:：])((?:~|\/)[^\s"'`)）」，。；;,!?！？]*)/g;
+
+/** Absolute and `~/` paths in the owner's words, resolved. */
+export function pathsIn(text: string, home: string): string[] {
+  const out: string[] = [];
+  for (const m of text.matchAll(PATH_RE)) {
+    const raw = (m[1] ?? "").replace(/[.:：]+$/, "");
+    if (raw === "" || raw === "/") continue;
+    const dir =
+      raw === "~" || raw.startsWith("~/") ? resolve(join(home, raw.slice(1))) : resolve(raw);
+    if (!out.includes(dir)) out.push(dir);
+  }
+  return out;
 }
 
 function ok(text: string): AgentToolResult<undefined> {
@@ -44,16 +70,14 @@ export function findTasks(tasks: Task[], query: string): Task[] {
   return tasks.filter((t) => words.every((w) => t.title.toLowerCase().includes(w)));
 }
 
-/** A directory from a path, `~/path`, or the name of a recent project. */
+/** A directory from an absolute path or `~/path`. Names go through project_find and the owner. */
 export function resolveProject(host: HerderHost, project: string): string {
   const p = project.trim();
   if (p === "~" || p.startsWith("~/")) return resolve(join(host.userHome, p.slice(1)));
   if (isAbsolute(p)) return resolve(p);
-  const recent = host.recentProjects().filter((dir) => basename(dir) === p);
-  if (recent.length === 1 && recent[0] !== undefined) return recent[0];
-  if (recent.length > 1)
-    throw new Error(`several recent projects are named ${p}: ${recent.join(", ")}`);
-  throw new Error(`unknown project "${p}"; use an absolute path or ask the owner`);
+  throw new Error(
+    `"${p}" is not a path; call project_find with the name and ask the owner to pick the folder`,
+  );
 }
 
 function isDirectory(path: string): boolean {
@@ -79,7 +103,8 @@ function taskLine(t: Task): string {
 
 const sessionStartSchema = obj({
   project: str({
-    description: "Project directory: absolute path, ~/path, or a recent project name",
+    description:
+      "Project folder: an absolute or ~/ path the owner typed or picked this turn (find it with project_find and ask)",
   }),
   profile: opt(
     str({
@@ -115,6 +140,9 @@ const askSchema = obj({
   options: arr(str(), { minItems: 1, maxItems: 4 }),
 });
 const notifySchema = obj({ text: str() });
+const findSchema = obj({
+  name: str({ description: "The project's name as the owner said it, e.g. pi-desktop" }),
+});
 const emptySchema = obj({});
 
 export function herderTools(
@@ -126,7 +154,7 @@ export function herderTools(
     {
       name: "session_list",
       label: "List tasks",
-      description: "Tasks (open and ended), agent profiles, recent projects and the active relay.",
+      description: "Tasks (open and ended), agent profiles, models and the active relay.",
       parameters: emptySchema,
       execute: async () => {
         const tasks = host.tasks();
@@ -142,7 +170,6 @@ export function herderTools(
             .join(", ")}`,
           "Models (name: services offering it, in order of preference):",
           ...modelLines(host, modelTiers),
-          `Recent projects: ${host.recentProjects().join(", ") || "(none)"}`,
           `Relay: ${host.relayTaskId()?.slice(0, 8) ?? "none"}`,
         ];
         return ok(lines.join("\n"));
@@ -193,6 +220,11 @@ export function herderTools(
         const model = picked?.ref;
         const profile = named ?? agentForModel(model, ids);
         const cwd = resolveProject(host, args.project);
+        if (!t.pickedDirs.includes(cwd)) {
+          throw new Error(
+            `the owner did not pick ${cwd} in this message; call project_find and ask the owner to pick the folder`,
+          );
+        }
         if (!isDirectory(cwd)) throw new Error(`${cwd} is not a directory`);
         const prompt = composeTaskPrompt(args.ownerText.trim(), args.addedContext);
         const title = args.name.trim() || args.ownerText.trim();
@@ -268,13 +300,27 @@ export function herderTools(
       },
     },
     {
+      name: "project_find",
+      label: "Find a project",
+      description:
+        "Finds project folders (git repositories under the owner's home) by name. Then ask the owner to pick one; never pick yourself.",
+      parameters: findSchema,
+      execute: async (_id: string, args: { name: string }) => {
+        return ok(foundText(args.name, findProjects(host.userHome, args.name)));
+      },
+    },
+    {
       name: "ask",
       label: "Ask the owner",
       description:
-        "Asks the owner one question with suggested answers as buttons. End your turn after it.",
+        "Asks the owner one question with suggested answers as buttons; AgentHerd adds an 「其他」 button for typing their own. End your turn after it.",
       parameters: askSchema,
       execute: async (_id: string, args: { question: string; options: string[] }) => {
-        await host.ask(args.question, args.options);
+        const other = otherOption(host.locale);
+        const options = args.options.map((o) => o.trim()).filter((o) => o !== "" && o !== other);
+        const all = [...options.slice(0, 4), other];
+        host.recordTurn("ask", `${args.question}\n${all.map((o) => `- ${o}`).join("\n")}`);
+        await host.ask(args.question, all);
         turn().asked = true;
         return ok("asked; the answer comes as a new message");
       },

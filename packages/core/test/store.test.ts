@@ -272,10 +272,10 @@ describe("Store (file-backed)", () => {
     first.close();
 
     const raw = new DatabaseSync(dbPath);
-    raw.exec("UPDATE schema_version SET version = 4");
+    raw.exec("UPDATE schema_version SET version = 99");
     raw.close();
 
-    expect(() => Store.open(dbPath)).toThrow("unsupported herd.db schema version 4");
+    expect(() => Store.open(dbPath)).toThrow("unsupported herd.db schema version 99");
   });
 });
 
@@ -372,5 +372,20 @@ describe("Store (transcript)", () => {
     migrated.addTranscript("t1", "note", "hello");
     expect(migrated.transcript("t1")).toHaveLength(1);
     migrated.close();
+  });
+});
+
+describe("Store (herder_turns)", () => {
+  it("keeps the Herder's conversation and finds Chinese words in it", () => {
+    const store = Store.open(":memory:");
+    store.addHerderTurn("owner", "以后报告都用中文，三行以内");
+    store.addHerderTurn("answer", "/tmp/demo");
+    store.addHerderTurn("herder", "好的");
+    expect(store.herderTurns().map((t) => t.role)).toEqual(["owner", "answer", "herder"]);
+    expect(store.searchHerderTurns("报告用中文").map((t) => t.text)).toEqual([
+      "以后报告都用中文，三行以内",
+    ]);
+    expect(store.searchHerderTurns("好")).toEqual([]);
+    store.close();
   });
 });

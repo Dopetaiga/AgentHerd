@@ -23,6 +23,7 @@ function tools(
     images: [],
     asked: false,
     notified: false,
+    pickedDirs: [tmpdir(), "/does/not/exist"],
     ...turn,
   };
   const byName = new Map(herderTools(host, () => ctx, modelTiers).map((t) => [t.name, t]));
@@ -65,12 +66,11 @@ describe("findTasks and resolveProject", () => {
     expect(findTasks(tasks, "NOTES").map((t) => t.id)).toEqual(["bbbb2222"]);
   });
 
-  it("resolves ~, absolute paths and recent project names", () => {
-    const { host } = fakeHost({ projects: ["/work/app", "/work/site"] });
+  it("resolves ~ and absolute paths; a bare name must go through project_find", () => {
+    const { host } = fakeHost({});
     expect(resolveProject(host, "~/code")).toBe("/Users/me/code");
     expect(resolveProject(host, "/tmp/x/")).toBe("/tmp/x");
-    expect(resolveProject(host, "site")).toBe("/work/site");
-    expect(() => resolveProject(host, "nope")).toThrow(/unknown project/);
+    expect(() => resolveProject(host, "site")).toThrow(/project_find/);
   });
 });
 
@@ -81,6 +81,7 @@ describe("tools", () => {
       "ask",
       "decisions_list",
       "notify",
+      "project_find",
       "relay_end",
       "relay_start",
       "session_cancel",
@@ -323,8 +324,26 @@ describe("tools", () => {
     const { call, rec, ctx } = tools({});
     await call("ask", { question: "哪个项目？", options: ["app", "site"] });
     await call("notify", { text: "测试挂了" });
-    expect(rec.asked).toEqual([{ text: "哪个项目？", options: ["app", "site"] }]);
+    expect(rec.asked).toEqual([{ text: "哪个项目？", options: ["app", "site", "其他"] }]);
     expect(rec.said).toEqual(["测试挂了"]);
     expect(ctx.asked && ctx.notified).toBe(true);
+  });
+});
+
+describe("session_start folder check (ADR 0035)", () => {
+  it("refuses a folder the owner did not type or pick this turn", async () => {
+    const dir = tmpdir();
+    const { call, rec } = tools({ ownerText: "看看 issue", pickedDirs: [] });
+    await expect(
+      call("session_start", { name: "看 issue", project: dir, ownerText: "看看 issue" }),
+    ).rejects.toThrow(/did not pick/);
+    expect(rec.started).toEqual([]);
+  });
+
+  it("ask always ends with 其他 and records the question", async () => {
+    const { call, rec } = tools({});
+    await call("ask", { question: "哪个？", options: ["/a", "其他"] });
+    expect(rec.asked[0]?.options).toEqual(["/a", "其他"]);
+    expect(rec.turns.at(-1)?.role).toBe("ask");
   });
 });

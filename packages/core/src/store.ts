@@ -4,6 +4,7 @@ import type { StatementSync } from "node:sqlite";
 import { DatabaseSync } from "node:sqlite";
 import type { Decision, Item, MessageRef, Rule } from "@agentherd/protocol";
 import { redact } from "@agentherd/rules";
+import type { HerderTurnRole } from "./herder-port.ts";
 import {
   type AuditRow,
   type DecisionRow,
@@ -16,6 +17,7 @@ import {
   toStoredItem,
 } from "./store-rows.ts";
 import {
+  HERDER_TURNS_TABLE_SQL,
   LATEST_SCHEMA_VERSION,
   SCHEMA_SQL,
   STATE_TABLE_SQL,
@@ -90,6 +92,10 @@ export class Store {
       if (version < 3) {
         this.db.exec(TRANSCRIPT_TABLE_SQL);
         this.db.prepare("UPDATE schema_version SET version = ?").run(3);
+      }
+      if (version < 4) {
+        this.db.exec(HERDER_TURNS_TABLE_SQL);
+        this.db.prepare("UPDATE schema_version SET version = ?").run(4);
       }
     }
 
@@ -344,6 +350,35 @@ export class Store {
     });
   }
 
+  /** Adds a line of the Herder's conversation with the owner (secrets redacted). */
+  addHerderTurn(role: HerderTurnRole, text: string, taskId?: string): void {
+    const cut =
+      text.length > TRANSCRIPT_MAX_CHARS ? `${text.slice(0, TRANSCRIPT_MAX_CHARS)}…` : text;
+    this.db
+      .prepare("INSERT INTO herder_turns(at, role, text, task_id) VALUES (?, ?, ?, ?)")
+      .run(new Date().toISOString(), role, redact(cut, this.secrets), taskId ?? null);
+  }
+
+  /** The last `limit` lines of the Herder's conversation, oldest first. */
+  herderTurns(limit = 100): HerderTurn[] {
+    const rows = this.db
+      .prepare("SELECT id, at, role, text, task_id FROM herder_turns ORDER BY id DESC LIMIT ?")
+      .all(limit);
+    return rows.reverse().map(toHerderTurn);
+  }
+
+  /** Lines of the Herder's conversation that contain the words of `query`, newest first. */
+  searchHerderTurns(query: string, limit = 10): HerderTurn[] {
+    const match = ftsQuery(query);
+    if (match === "") return [];
+    const rows = this.db
+      .prepare(
+        "SELECT t.id, t.at, t.role, t.text, t.task_id FROM herder_turns_fts f JOIN herder_turns t ON t.id = f.rowid WHERE herder_turns_fts MATCH ? ORDER BY bm25(herder_turns_fts) LIMIT ?",
+      )
+      .all(match, limit);
+    return rows.map(toHerderTurn);
+  }
+
   getState<T>(key: string): T | undefined {
     const row = this.stmtGetState.get(key);
     return row === undefined ? undefined : (JSON.parse(row.value_json as string) as T);
@@ -356,4 +391,42 @@ export class Store {
   deleteState(key: string): void {
     this.stmtDeleteState.run(key);
   }
+}
+
+/** A line of the Herder's conversation with the owner. */
+export interface HerderTurn {
+  id: number;
+  at: string;
+  role: HerderTurnRole;
+  text: string;
+  taskId?: string;
+}
+
+function toHerderTurn(r: Record<string, unknown>): HerderTurn {
+  const t: HerderTurn = {
+    id: Number(r.id),
+    at: String(r.at),
+    role: r.role as HerderTurnRole,
+    text: String(r.text),
+  };
+  if (typeof r.task_id === "string") t.taskId = r.task_id;
+  return t;
+}
+
+/**
+ * An FTS5 trigram query: each word of 3+ characters quoted, joined by OR; Chinese runs are split
+ * into overlapping 3-character pieces. Empty when nothing is long enough.
+ */
+export function ftsQuery(text: string): string {
+  const pieces = new Set<string>();
+  for (const word of text.toLowerCase().split(/[\s\p{P}\p{S}]+/u)) {
+    const chars = [...word];
+    if (chars.length < 3) continue;
+    if (/\p{Script=Han}/u.test(word)) {
+      for (let i = 0; i + 3 <= chars.length; i++) pieces.add(chars.slice(i, i + 3).join(""));
+    } else {
+      pieces.add(word);
+    }
+  }
+  return [...pieces].map((p) => `"${p.replaceAll('"', '""')}"`).join(" OR ");
 }

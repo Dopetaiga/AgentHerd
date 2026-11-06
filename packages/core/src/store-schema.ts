@@ -19,7 +19,25 @@ export const TRANSCRIPT_TABLE_SQL = `CREATE TABLE IF NOT EXISTS transcript(
 );
 CREATE INDEX IF NOT EXISTS transcript_task ON transcript(task_id, id);`;
 
-export const LATEST_SCHEMA_VERSION = 3;
+/** The Herder's conversation with the owner, searchable (docs/spec/08-herder-interaction.md §2). */
+export const HERDER_TURNS_TABLE_SQL = `CREATE TABLE IF NOT EXISTS herder_turns(
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  at TEXT NOT NULL,
+  role TEXT NOT NULL,
+  text TEXT NOT NULL,
+  task_id TEXT
+);
+CREATE VIRTUAL TABLE IF NOT EXISTS herder_turns_fts USING fts5(
+  text, content='herder_turns', content_rowid='id', tokenize='trigram'
+);
+CREATE TRIGGER IF NOT EXISTS herder_turns_ai AFTER INSERT ON herder_turns BEGIN
+  INSERT INTO herder_turns_fts(rowid, text) VALUES (new.id, new.text);
+END;
+CREATE TRIGGER IF NOT EXISTS herder_turns_ad AFTER DELETE ON herder_turns BEGIN
+  INSERT INTO herder_turns_fts(herder_turns_fts, rowid, text) VALUES ('delete', old.id, old.text);
+END;`;
+
+export const LATEST_SCHEMA_VERSION = 4;
 
 export const SCHEMA_SQL = `
 CREATE TABLE sessions(
@@ -73,4 +91,5 @@ CREATE TABLE audit(
 );
 ${STATE_TABLE_SQL}
 ${TRANSCRIPT_TABLE_SQL}
+${HERDER_TURNS_TABLE_SQL}
 `;

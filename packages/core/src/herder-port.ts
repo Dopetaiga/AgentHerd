@@ -15,6 +15,9 @@ export interface OwnerImage {
   path: string;
 }
 
+/** Who said a line of the Herder's conversation: `owner` typed, `answer` is a button pick. */
+export type HerderTurnRole = "owner" | "answer" | "herder" | "ask" | "event";
+
 export interface HerderEvent {
   kind: "task-reported" | "watchdog";
   taskId: string;
@@ -31,7 +34,6 @@ export interface HerderHost {
   profiles(): { id: string; name: string }[];
   tasks(): Task[];
   openTasks(): Task[];
-  recentProjects(): string[];
   relayTaskId(): string | undefined;
   decisions(limit: number): DecisionRow[];
   /** Models in the owner's list ("service/model") and the profile ids that can run each. */
@@ -59,6 +61,8 @@ export interface HerderHost {
   say(text: string): Promise<void>;
   ask(text: string, options: string[]): Promise<void>;
   audit(type: string, data: Record<string, unknown>): void;
+  /** Keeps a line of the Herder's conversation with the owner (`herder_turns`). */
+  recordTurn(role: HerderTurnRole, text: string, taskId?: string): void;
   getState<T>(key: string): T | undefined;
   setState(key: string, value: unknown): void;
 }

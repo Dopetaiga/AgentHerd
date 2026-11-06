@@ -55,7 +55,6 @@ describe("Herder", () => {
         );
       },
       (context) => {
-        console.log("DBG", JSON.stringify(context.messages.at(-1)).slice(0, 600));
         return fauxAssistantMessage("开始了。");
       },
       (context) => {
@@ -67,7 +66,7 @@ describe("Herder", () => {
         return fauxAssistantMessage("好。");
       },
     ]);
-    herder.ownerMessage("按这张图改", [image]);
+    herder.ownerMessage(`在 ${tmpdir()} 按这张图改`, [image]);
     await herder.idle();
     expect(seen[0]).toBe("text,image");
     expect(rec.started[0]?.images).toEqual(["/h/attachments/a.png"]);
@@ -99,7 +98,7 @@ describe("Herder", () => {
     ]);
     herder.ownerMessage("修一下构建");
     await herder.idle();
-    expect(rec.asked).toEqual([{ text: "哪个项目？", options: ["app", "site"] }]);
+    expect(rec.asked).toEqual([{ text: "哪个项目？", options: ["app", "site", "其他"] }]);
     expect(rec.said).toEqual([]);
     herder.ownerAnswer("哪个项目？", "app");
     await herder.idle();

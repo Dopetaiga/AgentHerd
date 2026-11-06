@@ -11,6 +11,7 @@ export type {
   HerderFactory,
   HerderHost,
   HerderPort,
+  HerderTurnRole,
   OwnerImage,
 } from "./herder-port.ts";
 export type { Answerable, InboxOptions, OwnerAnswer } from "./inbox.ts";
@@ -55,7 +56,13 @@ export type {
   StoreOptions,
   TranscriptEntry,
 } from "./store.ts";
-export { Store, TRANSCRIPT_MAX_CHARS, TRANSCRIPT_MAX_ENTRIES } from "./store.ts";
+export {
+  ftsQuery,
+  type HerderTurn,
+  Store,
+  TRANSCRIPT_MAX_CHARS,
+  TRANSCRIPT_MAX_ENTRIES,
+} from "./store.ts";
 export type { StageInput, Task } from "./tasks.ts";
 export { projectName, sortForBoard, stageOf, TITLE_MAX_CHARS, taskTitle } from "./tasks.ts";
 export { CORE_TEXTS, type CoreTexts, coreTexts } from "./texts.ts";

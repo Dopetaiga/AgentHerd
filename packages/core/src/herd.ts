@@ -140,7 +140,6 @@ export class Herd {
       profiles: () => this.opts.profiles.map((p) => ({ id: p.id, name: p.name })),
       tasks: () => this.tasks(),
       openTasks: () => this.openTasks(),
-      recentProjects: () => [...new Set(this.store.recentSessions(50).map((s) => s.cwd))],
       relayTaskId: () => this.relay()?.taskId,
       decisions: (limit) => this.store.recentDecisions(limit),
       models: () => this.opts.agentModels?.list() ?? [],
@@ -159,6 +158,7 @@ export class Herd {
       say: (text) => say(this.ctx, text),
       ask: (text, options) => this.owner.ask(text, options),
       audit: (type, data) => this.store.audit(type, data),
+      recordTurn: (role, text, taskId) => this.store.addHerderTurn(role, text, taskId),
       getState: (key) => this.store.getState(key),
       setState: (key, value) => this.store.setState(key, value),
     };
