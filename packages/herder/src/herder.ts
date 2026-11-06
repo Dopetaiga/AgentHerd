@@ -219,8 +219,18 @@ export class Herder implements HerderPort {
   }
 }
 
+/** Seen once; without this note the model later reads only the path and thinks it never saw it. */
+export const IMAGE_SEEN_NOTE =
+  "[You saw the image(s) of this message when it arrived; they are no longer attached. Each is still saved at the path above. Ask the owner to send it again if you need to look again.]";
+
 function withoutImages(m: AgentMessage): AgentMessage {
   if (m.role !== "user" || typeof m.content === "string") return m;
   if (!m.content.some((c) => c.type === "image")) return m;
-  return { ...m, content: m.content.filter((c) => c.type !== "image") };
+  return {
+    ...m,
+    content: [
+      ...m.content.filter((c) => c.type !== "image"),
+      { type: "text", text: IMAGE_SEEN_NOTE },
+    ],
+  };
 }

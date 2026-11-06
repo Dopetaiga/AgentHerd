@@ -8,7 +8,7 @@ import {
   streamSimple,
 } from "@earendil-works/pi-ai/compat";
 import { afterEach, describe, expect, it } from "vitest";
-import { HERDER_STATE_KEY, Herder } from "../src/herder.ts";
+import { HERDER_STATE_KEY, Herder, IMAGE_SEEN_NOTE } from "../src/herder.ts";
 import { fakeHost, task } from "./helpers.ts";
 
 let faux: FauxProviderRegistration[] = [];
@@ -63,6 +63,7 @@ describe("Herder", () => {
           typeof m.content === "string" ? [] : m.content.filter((c) => c.type === "image"),
         );
         seen.push(`later:${images.length}`);
+        seen.push(JSON.stringify(context.messages));
         return fauxAssistantMessage("好。");
       },
     ]);
@@ -73,6 +74,7 @@ describe("Herder", () => {
     herder.ownerMessage("还有吗");
     await herder.idle();
     expect(seen[1]).toBe("later:0");
+    expect(seen[2]).toContain(IMAGE_SEEN_NOTE.slice(0, 30));
     expect(JSON.stringify(rec.state.get(HERDER_STATE_KEY))).not.toContain("iVBORw0K");
   });
 
