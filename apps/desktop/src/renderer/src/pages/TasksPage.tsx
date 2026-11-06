@@ -7,6 +7,7 @@ import { hhmm, RISK_LABEL, STAGE_LABEL, STAGE_ORDER } from "../components/labels
 import { TaskTranscript } from "../components/TaskTranscript";
 import { Badge, Dot, EmptyState, Group, Section, Segmented, type Tone } from "../components/ui";
 import { devOpen } from "../dev-bridge";
+import { plainText } from "../markdown";
 import { type ItemSummary, type Task, useApp } from "../store";
 
 type Filter = "all" | "owner" | "active";
@@ -128,7 +129,7 @@ function TaskRow({
       title={task.title}
       badge={badge}
       time={task.updatedAt}
-      details={[task.project, task.agent, task.lastReport]}
+      details={[task.project, task.agent, plainText(task.lastReport)]}
       items={items}
       onOpen={() => onOpen(task)}
     />

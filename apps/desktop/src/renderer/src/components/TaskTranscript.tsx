@@ -5,6 +5,7 @@ import { Check, Loader2, Terminal, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { host, type Task, type TranscriptView } from "../store";
 import { hhmm, STAGE_LABEL } from "./labels";
+import { Markdown } from "./Markdown";
 import { Modal } from "./Modal";
 import { Badge } from "./ui";
 
@@ -29,11 +30,7 @@ function Entry({ entry }: { entry: TranscriptView["entries"][number] }) {
         </div>
       );
     case "agent":
-      return (
-        <div className="selectable whitespace-pre-wrap break-words text-ink text-md leading-relaxed">
-          {entry.text}
-        </div>
-      );
+      return <Markdown text={entry.text} className="text-ink text-md leading-relaxed" />;
     case "tool":
       return (
         <div className="flex items-center gap-2 rounded-md bg-inset px-2.5 py-1.5">
@@ -120,8 +117,8 @@ export function TaskTranscript({ task, onClose }: { task: Task; onClose: () => v
           <Entry key={e.id} entry={e} />
         ))}
         {live !== "" && (
-          <div className="selectable whitespace-pre-wrap break-words text-ink text-md leading-relaxed">
-            {live}
+          <div>
+            <Markdown text={live} className="text-ink text-md leading-relaxed" />
             <span className="ml-0.5 inline-block h-3.5 w-1.5 animate-pulse bg-ink-muted align-middle" />
           </div>
         )}
