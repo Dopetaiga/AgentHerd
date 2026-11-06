@@ -1,6 +1,6 @@
 import { mkdirSync, mkdtempSync, utimesSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import {
   clearFindCache,
@@ -9,7 +9,7 @@ import {
   listRepos,
   nameKey,
 } from "../src/project-find.ts";
-import { pathsIn } from "../src/tools.ts";
+import { pathsIn, pathsInAnswer, samePath } from "../src/tools.ts";
 
 function repo(root: string, path: string, ageSeconds = 0): string {
   const dir = join(root, path);
@@ -71,5 +71,29 @@ describe("pathsIn", () => {
       "/tmp/x",
     ]);
     expect(pathsIn("看看 pi-desktop 的 issue", "/Users/me")).toEqual([]);
+  });
+
+  it.runIf(process.platform === "win32")("takes Windows drive paths", () => {
+    expect(
+      pathsIn("代码在 C:\\Users\\me\\gmail-monitor。还有 D:/work/app", "C:\\Users\\me"),
+    ).toEqual(["C:\\Users\\me\\gmail-monitor", "D:\\work\\app"]);
+    expect(pathsIn("看 ~\\proj", "C:\\Users\\me")).toEqual(["C:\\Users\\me\\proj"]);
+  });
+});
+
+describe("pathsInAnswer", () => {
+  it("takes a picked button that is one path, spaces included", () => {
+    const dir = join(tmpdir(), "项目 2");
+    expect(pathsInAnswer(dir, "/home/me")[0]).toBe(resolve(dir));
+    expect(pathsInAnswer("用 /tmp/a 吧", "/home/me")).toEqual([resolve("/tmp/a")]);
+    expect(pathsInAnswer("其他", "/home/me")).toEqual([]);
+  });
+});
+
+describe("samePath", () => {
+  it("ignores case on Windows and macOS only", () => {
+    expect(samePath("C:\\Users\\Me\\项目", "c:\\users\\me\\项目", "win32")).toBe(true);
+    expect(samePath("/Users/Me/x", "/users/me/x", "darwin")).toBe(true);
+    expect(samePath("/home/Me/x", "/home/me/x", "linux")).toBe(false);
   });
 });

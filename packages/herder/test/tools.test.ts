@@ -369,6 +369,16 @@ describe("session_start folder check (ADR 0035)", () => {
     expect(rec.started).toEqual([]);
   });
 
+  it.runIf(process.platform === "win32")(
+    "accepts a picked folder in another case on Windows",
+    async () => {
+      const dir = tmpdir();
+      const { call, rec } = tools({ ownerText: "看看 issue", pickedDirs: [dir.toUpperCase()] });
+      await call("session_start", { name: "看 issue", project: dir, ownerText: "看看 issue" });
+      expect(rec.started).toHaveLength(1);
+    },
+  );
+
   it("ask always ends with 其他 and records the question", async () => {
     const { call, rec } = tools({});
     await call("ask", { question: "哪个？", options: ["/a", "其他"] });
