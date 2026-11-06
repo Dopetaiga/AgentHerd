@@ -65,6 +65,12 @@ export interface CoreTexts {
   endedByOwner: string;
   /** Transcript note when an ended task is started again (ADR 0039). */
   taskReopened(agent: string, loaded: boolean): string;
+  resumeQuestion(tasks: string): string;
+  resumeYes: string;
+  resumeAll: string;
+  resumeNo: string;
+  resumeOnly(title: string): string;
+  otherOption: string;
   /** Put before the next prompt when the agent could not open its old session. */
   priorConversation(history: string): string;
   agentCouldNotStart: string;
@@ -160,6 +166,12 @@ const zh: CoreTexts = {
   guardHit: (reason) => `碰到保护名单：${reason}`,
   runFinished: "任务已运行结束",
   endedByOwner: "你说这个任务结束了",
+  resumeQuestion: (tasks) => `AgentHerd 重启前，这些任务还没做完：\n${tasks}\n要接着做吗？`,
+  resumeYes: "接着做",
+  resumeAll: "全部接着做",
+  resumeNo: "不用了",
+  resumeOnly: (title) => `只接着做：${title}`,
+  otherOption: "其他",
   taskReopened: (agent, loaded) =>
     loaded
       ? `接着做：重新启动了 ${agent}，恢复了它之前的会话`
@@ -251,6 +263,13 @@ const en: CoreTexts = {
   guardHit: (reason) => `guard list: ${reason}`,
   runFinished: "the run finished",
   endedByOwner: "the owner said it is finished",
+  resumeQuestion: (tasks) =>
+    `These tasks were not finished when AgentHerd restarted:\n${tasks}\nContinue them?`,
+  resumeYes: "Continue",
+  resumeAll: "Continue all",
+  resumeNo: "No",
+  resumeOnly: (title) => `Only: ${title}`,
+  otherOption: "Other",
   taskReopened: (agent, loaded) =>
     loaded
       ? `Continuing: restarted ${agent} with its earlier session`

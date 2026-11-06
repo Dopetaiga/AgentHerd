@@ -123,6 +123,8 @@ it knows what happened without repeating it.
 - Tasks are saved in `herd.db` and come back after a restart as ended tasks. `session_prompt` to an
   ended task starts its agent again in the same folder with the same model; Pi reopens its own
   session, other agents get the earlier conversation as text ([ADR 0039](../adr/0039-tasks-kept-and-continued.md)).
+- Tasks cut off by a stop or crash are not restarted on their own: after the restart the Herder
+  asks the owner with buttons whether to continue them ([ADR 0040](../adr/0040-ask-before-continuing-cut-off-tasks.md)).
 - Agent output is untrusted data. It is quoted, and it cannot change rules, mode or the
   Herder's instructions ([06-security.md](06-security.md)).
 - If the Herder fails (model error, invalid output), the owner gets a plain message and the

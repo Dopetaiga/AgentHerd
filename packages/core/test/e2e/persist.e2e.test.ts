@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { FakeChannel } from "@agentherd/channel-fake";
-import type { AgentProfile } from "@agentherd/protocol";
+import type { AgentProfile, AskView } from "@agentherd/protocol";
 import { afterEach, describe, expect, it } from "vitest";
 import { Herd } from "../../src/herd.ts";
 import { Store } from "../../src/store.ts";
@@ -36,12 +36,25 @@ function profile(dir: string, script: string): AgentProfile {
 }
 
 /** A Herd on `<dir>/herd.db`, as after an AgentHerd start. */
-async function boot(dir: string, script: string) {
+async function boot(dir: string, script: string, answers?: [string, string][]) {
   const store = Store.open(join(dir, "herd.db"));
+  const channel = new FakeChannel("owner");
   const herd = new Herd({
+    ...(answers === undefined
+      ? {}
+      : {
+          herder: () => ({
+            ownerMessage: () => {},
+            ownerAnswer: (q: string, a: string) => {
+              answers.push([q, a]);
+            },
+            event: () => {},
+            stop: async () => {},
+          }),
+        }),
     home: dir,
     userHome: "/Users/me",
-    channel: new FakeChannel("owner"),
+    channel,
     binding: { channelId: "fake", ownerId: "owner", data: {} },
     mode: "assist",
     locale: "en",
@@ -49,7 +62,7 @@ async function boot(dir: string, script: string) {
     store,
     boardDebounceMs: 10,
   });
-  const o = { herd, store };
+  const o = { herd, store, channel };
   open.push(o);
   await herd.start();
   return o;
@@ -156,6 +169,52 @@ describe("E2E-TASKS-KEPT (ADR 0039)", () => {
     expect(second.herd.tasks()[0]).toMatchObject({ id: "t-crash", stage: "failed" });
     expect(second.store.task("t-crash")?.endedAt).toBeDefined();
     expect(second.store.memory.jobs().map((j) => j.payload.taskId)).toEqual(["t-crash"]);
+  });
+});
+
+describe("E2E-RESUME-ASK (ADR 0040)", () => {
+  it("asks the owner about a task the stop cut off, and passes the answer to the Herder", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "agentherd-persist-"));
+    const first = await boot(dir, "turns:\n  - - sleep: 5000\n    - message: late\n");
+    const { taskId, turn } = await first.herd.startTask("mock", dir, "Long refactor");
+    const cut = turn.catch(() => undefined); // the stop ends this turn
+    await new Promise((r) => setTimeout(r, 300));
+    await first.herd.stop();
+    await cut;
+    await shutDown(first);
+
+    const answers: [string, string][] = [];
+    const second = await boot(dir, FIRST, answers);
+    const asks = second.channel.ofKind("ask").map((m) => m.view as AskView);
+    expect(asks).toHaveLength(1);
+    const ask = asks[0] as AskView;
+    expect(ask.text).toContain("Long refactor");
+    expect(ask.options.map((o) => o.label)).toEqual(["Continue", "No", "Other"]);
+    expect(second.store.auditRows("tasks.resume-asked").at(-1)?.data).toMatchObject({
+      taskIds: [taskId],
+    });
+    await second.herd.handle({
+      kind: "action",
+      from: "owner",
+      target: ask.askId,
+      action: "0",
+    } as never);
+    expect(answers).toEqual([[ask.text, "Continue"]]);
+    await shutDown(second);
+
+    // Asked once: the next start has nothing to ask.
+    const third = await boot(dir, FIRST, []);
+    expect(third.channel.ofKind("ask")).toEqual([]);
+  });
+
+  it("does not ask about tasks that had finished, or without a Herder", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "agentherd-persist-"));
+    const first = await boot(dir, FIRST);
+    const { turn } = await first.herd.startTask("mock", dir, "Quick fix");
+    await turn;
+    await shutDown(first);
+    const second = await boot(dir, FIRST, []);
+    expect(second.channel.ofKind("ask")).toEqual([]);
   });
 });
 
