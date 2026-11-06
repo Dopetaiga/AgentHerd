@@ -4,6 +4,7 @@
 
 import type {
   CustomApi,
+  MemoryRow,
   ModelRef,
   ModelRole,
   ModelService,
@@ -108,6 +109,18 @@ export interface TranscriptView {
   live: string;
 }
 
+/** The Herder's long-term memory for the 记忆 page (ADR 0038). */
+export interface MemoryView {
+  /** Active entries, newest first, and the last deleted ones (to restore). */
+  entries: MemoryRow[];
+  deleted: MemoryRow[];
+  /** Characters used and allowed of the kinds kept in the Herder's prompt. */
+  used: { owner: number; note: number };
+  caps: { owner: number; note: number };
+  /** False while AgentHerd is not following tasks (no herd): nothing to show or change. */
+  ready: boolean;
+}
+
 export interface ServiceView extends ModelService {
   hasKey: boolean;
 }
@@ -189,6 +202,11 @@ export interface HostApi {
   tasks(): TasksView;
   /** The conversation of one task: prompts, replies and tool calls. */
   transcript(taskId: string): TranscriptView;
+  memories(): MemoryView;
+  /** Changes an entry's text; the old text stays in its history. */
+  editMemory(id: string, text: string): MemoryView;
+  forgetMemory(id: string): MemoryView;
+  restoreMemory(id: string): MemoryView;
   providers(): ProviderView[];
   models(): ModelsView;
   /** Adds or replaces a service. `key`: undefined keeps the saved key, "" removes it. */
@@ -226,6 +244,10 @@ export const HOST_METHODS: readonly HostMethod[] = [
   "status",
   "tasks",
   "transcript",
+  "memories",
+  "editMemory",
+  "forgetMemory",
+  "restoreMemory",
   "providers",
   "models",
   "putService",

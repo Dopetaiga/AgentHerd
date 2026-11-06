@@ -68,6 +68,15 @@ export interface CoreTexts {
   // Prompts to the agent, labeled as from AgentHerd.
   replyHint(chars: number): string;
   summaryPrompt(chars: number): string;
+  // Memory commands (/记忆 /忘掉 /恢复), ADR 0038.
+  memoryKinds: Record<"owner" | "person" | "project" | "note" | "case" | "experience", string>;
+  memoryEmpty: string;
+  memoryHeader(shown: number, total: number): string;
+  memoryFooter: string;
+  memoryNoMatch(query: string): string;
+  memoryMany(list: string): string;
+  forgot(text: string): string;
+  restored(text: string): string;
 }
 
 const HELP_ZH = `status — 查看任务看板
@@ -76,6 +85,9 @@ const HELP_ZH = `status — 查看任务看板
 /end — 结束转接
 /interrupt <内容> — 打断当前这一轮，再发送内容
 /herder <内容> — 转接期间和主管说话
+/记忆 [关键词] — 看主管记住了什么
+/忘掉 <编号> — 删掉一条记忆
+/恢复 <编号> — 找回删掉的记忆
 /help — 显示这个列表`;
 
 const HELP_EN = `status — show the task board
@@ -84,6 +96,9 @@ const HELP_EN = `status — show the task board
 /end — end the relay
 /interrupt <text> — stop the current turn and send text
 /herder <text> — talk to the Herder during a relay
+/memory [words] — what the Herder remembers
+/forget <id> — delete a memory
+/restore <id> — bring a deleted memory back
 /help — this list`;
 
 const zh: CoreTexts = {
@@ -149,6 +164,24 @@ const zh: CoreTexts = {
       "改了什么、验证了什么、产出（文件、提交、PR）、风险或没做完的部分。",
       "不要调用工具。",
     ].join("\n"),
+  memoryKinds: {
+    owner: "关于你",
+    person: "人",
+    project: "项目",
+    note: "主管笔记",
+    case: "案例",
+    experience: "经验",
+  },
+  memoryEmpty: "主管还没有记住任何东西。",
+  memoryHeader: (shown, total) =>
+    shown === total
+      ? `主管记得这些（${total} 条）：`
+      : `主管记得这些（显示 ${shown} / ${total} 条）：`,
+  memoryFooter: "发 /忘掉 <编号> 删掉一条，/恢复 <编号> 找回；/记忆 <关键词> 搜索。",
+  memoryNoMatch: (q) => `没有找到和「${q}」有关的记忆。`,
+  memoryMany: (list) => `有几条都对得上，请用编号：\n${list}`,
+  forgot: (t) => `忘掉了：${t}\n发 /恢复 可以找回。`,
+  restored: (t) => `找回了：${t}`,
 };
 
 const en: CoreTexts = {
@@ -219,6 +252,25 @@ const en: CoreTexts = {
       "what changed, what you verified, outputs (files, commits, PR), risks or open parts.",
       "Do not call tools.",
     ].join("\n"),
+  memoryKinds: {
+    owner: "About you",
+    person: "People",
+    project: "Projects",
+    note: "Herder notes",
+    case: "Cases",
+    experience: "Experience",
+  },
+  memoryEmpty: "The Herder remembers nothing yet.",
+  memoryHeader: (shown, total) =>
+    shown === total
+      ? `The Herder remembers (${total}):`
+      : `The Herder remembers (${shown} of ${total}):`,
+  memoryFooter:
+    "Send /forget <id> to delete one, /restore <id> to bring it back; /memory <words> to search.",
+  memoryNoMatch: (q) => `Nothing remembered about "${q}".`,
+  memoryMany: (list) => `Several match; use the id:\n${list}`,
+  forgot: (t) => `Forgot: ${t}\nSend /restore to bring it back.`,
+  restored: (t) => `Restored: ${t}`,
 };
 
 export const CORE_TEXTS: Record<Locale, CoreTexts> = { "zh-CN": zh, en };

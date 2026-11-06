@@ -13,6 +13,7 @@ import {
   type ModelSettings,
   modelKeyAccount,
   putService,
+  RESIDENT_CAPS,
   removeService,
   type SecretStore,
 } from "@agentherd/core";
@@ -46,6 +47,7 @@ import type {
   HostEvent,
   HostStatus,
   ItemSummary,
+  MemoryView,
   ModelProbe,
   ModelsView,
   ModelTest,
@@ -67,6 +69,9 @@ import { RuntimeStore } from "./runtimes.ts";
 import { type VerifyOptions, verifyProfile } from "./verify.ts";
 
 export const HOST_VERSION = "0.0.0";
+
+/** Deleted memory entries the 记忆 page offers to restore. */
+const MEMORY_DELETED_SHOWN = 20;
 
 export interface HostOptions {
   home: string;
@@ -447,6 +452,54 @@ export class Host implements HostApi {
 
   transcript(taskId: string): TranscriptView {
     return this.herd?.transcript(taskId) ?? { entries: [], live: "" };
+  }
+
+  memories(): MemoryView {
+    const memory = this.herd?.store.memory;
+    if (memory === undefined) {
+      return {
+        entries: [],
+        deleted: [],
+        used: { owner: 0, note: 0 },
+        caps: { ...RESIDENT_CAPS },
+        ready: false,
+      };
+    }
+    return {
+      entries: memory.list(),
+      deleted: memory.list({ status: "deleted" }).slice(0, MEMORY_DELETED_SHOWN),
+      used: { owner: memory.used("owner"), note: memory.used("note") },
+      caps: { ...RESIDENT_CAPS },
+      ready: true,
+    };
+  }
+
+  editMemory(id: string, text: string): MemoryView {
+    const memory = this.ownMemory();
+    const abstract = text.trim();
+    if (abstract === "") throw new Error("the text is empty");
+    memory.write([{ op: "replace", id, abstract }], { actor: "owner", source: "owner_edit" });
+    return this.memories();
+  }
+
+  forgetMemory(id: string): MemoryView {
+    const memory = this.ownMemory();
+    memory.setStatus(id, "deleted");
+    memory.log("owner.forgot", memory.get(id)?.abstract ?? "", id);
+    return this.memories();
+  }
+
+  restoreMemory(id: string): MemoryView {
+    const memory = this.ownMemory();
+    memory.setStatus(id, "active");
+    memory.log("owner.restored", memory.get(id)?.abstract ?? "", id);
+    return this.memories();
+  }
+
+  private ownMemory() {
+    const memory = this.herd?.store.memory;
+    if (memory === undefined) throw new Error("AgentHerd is not running; connect Feishu first");
+    return memory;
   }
 
   providers(): ProviderView[] {

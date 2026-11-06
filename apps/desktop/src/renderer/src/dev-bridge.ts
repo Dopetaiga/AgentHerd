@@ -20,6 +20,7 @@ import type {
   AgentView,
   HostEvent,
   HostStatus,
+  MemoryView,
   ModelsView,
   ModelTiersView,
   RemoteHost,
@@ -30,6 +31,7 @@ import type { Bridge } from "../../shared/bridge";
 import {
   PLACEHOLDER_QR,
   providers,
+  sampleMemory,
   sampleServices,
   sampleTasks,
   sampleTranscript,
@@ -94,6 +96,7 @@ function installFakeBridge(): void {
   };
 
   let setup: SetupState = { phase: "idle" };
+  let memory: MemoryView = sampleMemory();
 
   const emit = (event: HostEvent): void => {
     for (const l of eventListeners) l(event);
@@ -273,6 +276,36 @@ function installFakeBridge(): void {
     },
     tasks: () => delay(tasks),
     transcript: (taskId) => delay(sampleTranscript(taskId)),
+    memories: () => delay(memory),
+    editMemory: (id, text) => {
+      memory = {
+        ...memory,
+        entries: memory.entries.map((e) =>
+          e.id === id ? { ...e, abstract: text, source: "owner_edit" as const, rev: e.rev + 1 } : e,
+        ),
+      };
+      return delay(memory);
+    },
+    forgetMemory: (id) => {
+      const gone = memory.entries.find((e) => e.id === id);
+      memory = {
+        ...memory,
+        entries: memory.entries.filter((e) => e.id !== id),
+        deleted:
+          gone === undefined ? memory.deleted : [{ ...gone, status: "deleted" }, ...memory.deleted],
+      };
+      return delay(memory);
+    },
+    restoreMemory: (id) => {
+      const back = memory.deleted.find((e) => e.id === id);
+      memory = {
+        ...memory,
+        deleted: memory.deleted.filter((e) => e.id !== id),
+        entries:
+          back === undefined ? memory.entries : [{ ...back, status: "active" }, ...memory.entries],
+      };
+      return delay(memory);
+    },
     providers: () => delay(providers),
     models: () => delay(models),
     putService: (service, key) => {

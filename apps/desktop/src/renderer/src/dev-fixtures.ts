@@ -1,7 +1,13 @@
 // Sample data for the in-memory dev bridge (dev-bridge.ts): a placeholder QR code,
 // tasks, model services and the provider catalog.
 
-import type { ModelsView, ProviderView, TasksView, TranscriptView } from "@agentherd/host/api";
+import type {
+  MemoryView,
+  ModelsView,
+  ProviderView,
+  TasksView,
+  TranscriptView,
+} from "@agentherd/host/api";
 
 export const PLACEHOLDER_QR = `data:image/svg+xml;utf8,${encodeURIComponent(
   `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 21 21" shape-rendering="crispEdges">
@@ -201,3 +207,64 @@ export const providers: ProviderView[] = [
     models: OPENROUTER_MODELS.map(([id, name]) => ({ id, name })),
   },
 ];
+
+type MemoryEntry = MemoryView["entries"][number];
+
+function mem(
+  id: string,
+  kind: MemoryEntry["kind"],
+  abstract: string,
+  extra: Partial<MemoryEntry> = {},
+): MemoryEntry {
+  return {
+    id,
+    kind,
+    scope: "global",
+    abstract,
+    body: "",
+    source: "said",
+    status: "active",
+    accessCount: 0,
+    rev: 1,
+    createdAt: "2026-11-05T10:00:00.000Z",
+    updatedAt: "2026-11-05T10:00:00.000Z",
+    ...extra,
+  };
+}
+
+/** What the 记忆 page shows in the browser preview. */
+export function sampleMemory(): MemoryView {
+  return {
+    ready: true,
+    used: { owner: 31, note: 18 },
+    caps: { owner: 1375, note: 2200 },
+    entries: [
+      mem("m1", "owner", "回复用中文，先说结论，别太长", {
+        evidence: "以后都用中文回复，先说结论",
+        accessCount: 12,
+      }),
+      mem("m2", "owner", "提交 PR 前先跑测试", { evidence: "每次提 PR 前都要先跑测试" }),
+      mem("m3", "note", "这台 Mac 上 Codex 启动会被杀掉，用 Pi", {
+        source: "noticed",
+        until: "2026-12-31",
+      }),
+      mem("m4", "person", "小王负责 pi-desktop 的打包和发布", {
+        evidence: "小王管 pi-desktop 打包",
+      }),
+      mem("m5", "project", "pi-desktop 是 Pi 的桌面版，Electron + React", {
+        scope: "project:/Users/me/learn-agent/pi-desktop",
+      }),
+      mem("m6", "experience", "梳理开源仓库 issue 时先按标签和最近更新筛，再看能不能复现", {
+        source: "task",
+        body: "适用于「看看有哪些 issue 可以做」一类任务。\n来自案例 c1a2b3c4",
+        accessCount: 2,
+      }),
+      mem("m7", "case", "pi-desktop：梳理可做的 issue，挑出 5 个，已写进 issues.md", {
+        source: "task",
+        scope: "project:/Users/me/learn-agent/pi-desktop",
+        body: "结果：done（issues.md 已提交）\n做法：gh issue list --label good-first-issue\n教训：先确认项目目录，别写到临时目录",
+      }),
+    ],
+    deleted: [mem("m8", "owner", "用英文写提交信息", { status: "deleted" })],
+  };
+}
