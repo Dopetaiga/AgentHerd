@@ -54,7 +54,7 @@ The desktop app ships built-in profiles for these and lets the user add any ACP 
 | End of `session/prompt` with a stop reason | `turn.stopped`; without a `herd_report`, the last message is the fallback report |
 | `session/cancel` | Interrupt |
 | Follow-up `session/prompt` | A relayed owner message, or a Herder prompt |
-| `session/load` / `resume` (if supported) | Reopen after an AgentHerd restart |
+| `session/load` (if supported) | Continue an ended task, also after a restart (ADR 0039); Pi supports it through pi-acp |
 
 Permission requests may carry a partial tool call: ACP sends a tool call once and later only
 changed fields, and DSH's `request_permission` carries only the `toolCallId`. The ACP client

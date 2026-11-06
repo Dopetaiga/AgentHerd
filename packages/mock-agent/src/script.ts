@@ -34,6 +34,8 @@ export type Expectation = "allow" | "deny" | "cancelled";
 
 export type Step =
   | { type: "message"; text: string }
+  /** Replies with the prompt text it got (tests check what AgentHerd sent). */
+  | { type: "echo_prompt" }
   | { type: "stderr"; text: string }
   | { type: "tool_call"; toolCall: ScriptToolCall; status: "pending" | "completed" | "failed" }
   | {
@@ -50,6 +52,8 @@ export type Step =
 export interface Script {
   name: string;
   turns: Step[][];
+  /** Offer `session/load`; a loaded session plays the turns from the start. */
+  loadSession?: boolean;
 }
 
 export class ScriptError extends Error {
@@ -142,6 +146,8 @@ function step(v: unknown, where: string): Step {
       return { type: "message", text: str(body, w) };
     case "stderr":
       return { type: "stderr", text: str(body, w) };
+    case "echo_prompt":
+      return { type: "echo_prompt" };
     case "tool_call": {
       const status = isObj(body) && body.status !== undefined ? body.status : "completed";
       return {
@@ -197,7 +203,11 @@ export function parseScript(text: string): Script {
   }
   if (!isObj(doc)) throw new ScriptError("script: expected a mapping");
   if (!Array.isArray(doc.turns)) throw new ScriptError("turns: expected a list");
+  if (doc.load_session !== undefined && typeof doc.load_session !== "boolean") {
+    throw new ScriptError("load_session: expected true or false");
+  }
   return {
+    ...(doc.load_session === true ? { loadSession: true } : {}),
     name: doc.name === undefined ? "mock-agent" : str(doc.name, "name"),
     turns: doc.turns.map((turn, t) => {
       if (!Array.isArray(turn)) throw new ScriptError(`turns[${t}]: expected a list of steps`);

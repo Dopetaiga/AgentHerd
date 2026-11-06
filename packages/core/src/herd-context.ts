@@ -90,6 +90,15 @@ export interface Following {
   ended: boolean;
   /** Why the task ended, once it has. */
   endedWhy?: string;
+  /** When the task ended, once it has. */
+  endedAt?: string;
+  /**
+   * The agent was restarted on a new session for an old task (ADR 0039); the next prompt carries
+   * the earlier conversation.
+   */
+  needsHistory?: boolean;
+  /** Set while an ended task is being started again. */
+  reopening?: Promise<void>;
   /** Text and tool calls of the current turn. */
   turn: { text: string; toolCalls: number };
   /** Reply text since the last tool call, not yet in the transcript. */
@@ -162,6 +171,23 @@ export function allTasks(ctx: HerdContext): Task[] {
     ...f.task,
     automaticDecisions: [...f.task.automaticDecisions],
   }));
+}
+
+/** Saves a task to herd.db so it outlives a restart (ADR 0039). A failure is audited. */
+export function saveTask(ctx: HerdContext, f: Following): void {
+  try {
+    ctx.store.saveTask({
+      task: f.task,
+      cwd: f.cwd,
+      profileId: f.profile.id,
+      failed: f.failed,
+      ...(f.endedAt === undefined ? {} : { endedAt: f.endedAt }),
+      ...(f.endedWhy === undefined ? {} : { endedWhy: f.endedWhy }),
+      ...(f.agentSessionId === undefined ? {} : { agentSessionId: f.agentSessionId }),
+    });
+  } catch (error) {
+    ctx.store.audit("task.save-error", { taskId: f.task.id, message: (error as Error).message });
+  }
 }
 
 /** Tasks whose agent is still running. */

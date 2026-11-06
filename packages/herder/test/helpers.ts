@@ -42,6 +42,8 @@ export function task(id: string, title: string): Task {
 export function fakeHost(
   opts: {
     tasks?: Task[];
+    /** Ids of tasks that ended; the rest are open. */
+    ended?: string[];
 
     models?: { ref: string; agents: string[] }[];
     failing?: string[];
@@ -73,7 +75,7 @@ export function fakeHost(
     userHome: "/Users/me",
     profiles: () => opts.profiles ?? [{ id: "mock", name: "Mock" }],
     tasks: () => tasks,
-    openTasks: () => tasks,
+    openTasks: () => tasks.filter((t) => !(opts.ended ?? []).includes(t.id)),
     relayTaskId: () => undefined,
     decisions: () => [],
     models: () => opts.models ?? [],

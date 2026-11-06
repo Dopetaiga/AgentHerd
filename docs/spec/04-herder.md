@@ -120,6 +120,9 @@ it knows what happened without repeating it.
   `herd.db` with the read tools; after a compaction the Herder must re-read it.
 - Compaction keeps unresolved owner instructions verbatim.
 - The session is saved and reloaded across restarts.
+- Tasks are saved in `herd.db` and come back after a restart as ended tasks. `session_prompt` to an
+  ended task starts its agent again in the same folder with the same model; Pi reopens its own
+  session, other agents get the earlier conversation as text ([ADR 0039](../adr/0039-tasks-kept-and-continued.md)).
 - Agent output is untrusted data. It is quoted, and it cannot change rules, mode or the
   Herder's instructions ([06-security.md](06-security.md)).
 - If the Herder fails (model error, invalid output), the owner gets a plain message and the

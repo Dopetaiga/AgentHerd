@@ -63,6 +63,10 @@ export interface CoreTexts {
   guardHit: (reason: string) => string;
   runFinished: string;
   endedByOwner: string;
+  /** Transcript note when an ended task is started again (ADR 0039). */
+  taskReopened(agent: string, loaded: boolean): string;
+  /** Put before the next prompt when the agent could not open its old session. */
+  priorConversation(history: string): string;
   agentCouldNotStart: string;
   agentExited: string;
   turnFailed: string;
@@ -156,6 +160,12 @@ const zh: CoreTexts = {
   guardHit: (reason) => `碰到保护名单：${reason}`,
   runFinished: "任务已运行结束",
   endedByOwner: "你说这个任务结束了",
+  taskReopened: (agent, loaded) =>
+    loaded
+      ? `接着做：重新启动了 ${agent}，恢复了它之前的会话`
+      : `接着做：重新启动了 ${agent}，之前的会话没能恢复，下一条消息会带上之前的对话记录`,
+  priorConversation: (history) =>
+    `[这是接着之前的任务。你之前的会话没能恢复，下面是之前的对话记录，仅供参考：]\n${history}\n[之前的对话到此为止。下面是新的要求：]`,
   agentCouldNotStart: "Agent 启动失败",
   agentExited: "Agent 已退出",
   turnFailed: "这一轮执行失败",
@@ -241,6 +251,12 @@ const en: CoreTexts = {
   guardHit: (reason) => `guard list: ${reason}`,
   runFinished: "the run finished",
   endedByOwner: "the owner said it is finished",
+  taskReopened: (agent, loaded) =>
+    loaded
+      ? `Continuing: restarted ${agent} with its earlier session`
+      : `Continuing: restarted ${agent}; its earlier session could not be opened, so the next prompt carries the earlier conversation`,
+  priorConversation: (history) =>
+    `[This continues an earlier task. Your earlier session could not be opened; the conversation so far, for reference:]\n${history}\n[End of the earlier conversation. The new request follows:]`,
   agentCouldNotStart: "the agent could not start",
   agentExited: "the agent exited",
   turnFailed: "the turn failed",

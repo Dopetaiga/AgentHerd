@@ -81,6 +81,7 @@ export type {
   DecisionRow,
   SessionRow,
   StoredItem,
+  StoredTask,
   StoreOptions,
   TranscriptEntry,
 } from "./store.ts";

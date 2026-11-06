@@ -103,6 +103,28 @@ function oneTask(host: HerderHost, query: string): Task {
   );
 }
 
+/** Ended tasks listed by session_list, newest first. */
+export const ENDED_TASKS_LISTED = 15;
+
+/** An open task, or else an ended one (session_prompt starts it again, ADR 0039). */
+function anyTask(host: HerderHost, query: string): Task {
+  const open = findTasks(host.openTasks(), query);
+  if (open.length === 1 && open[0] !== undefined) return open[0];
+  if (open.length > 1) return oneTask(host, query);
+  const ended = findTasks(
+    [...host.tasks()].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
+    query,
+  );
+  if (ended.length === 1 && ended[0] !== undefined) return ended[0];
+  if (ended.length === 0) throw new Error(`no task matches "${query}"`);
+  throw new Error(
+    `several tasks match "${query}": ${ended
+      .slice(0, 5)
+      .map((t) => `${t.id.slice(0, 8)} "${t.title}"`)
+      .join(", ")}`,
+  );
+}
+
 function taskLine(t: Task): string {
   return `- ${t.id.slice(0, 8)} [${t.stage}] "${t.title}" project=${t.project} agent=${t.agent} last="${t.lastReport}" updated=${t.updatedAt}`;
 }
@@ -163,14 +185,18 @@ export function herderTools(
       description: "Tasks (open and ended), agent profiles, models and the active relay.",
       parameters: emptySchema,
       execute: async () => {
-        const tasks = host.tasks();
-        const open = new Set(host.openTasks().map((t) => t.id));
+        const open = host.openTasks();
+        const openIds = new Set(open.map((t) => t.id));
+        const ended = host
+          .tasks()
+          .filter((t) => !openIds.has(t.id))
+          .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+          .slice(0, ENDED_TASKS_LISTED);
         const lines = [
-          "Tasks:",
-          ...(tasks.length === 0
-            ? ["(none)"]
-            : tasks.map((t) => `${taskLine(t)}${open.has(t.id) ? "" : " (ended)"}`)),
-          "(Only tasks since AgentHerd last started. Earlier ones ended when it stopped; what they found is kept as cases in memory (memory_search).)",
+          "Open tasks:",
+          ...(open.length === 0 ? ["(none)"] : open.map(taskLine)),
+          "Ended tasks, newest first (kept across restarts; session_prompt continues one in the same folder and model):",
+          ...(ended.length === 0 ? ["(none)"] : ended.map(taskLine)),
           `Agents: AgentHerd picks one from the model (GPT models run in Codex, the rest in Pi). Installed: ${host
             .profiles()
             .map((p) => `${p.id} (${p.name})`)
@@ -273,12 +299,12 @@ export function herderTools(
       name: "session_prompt",
       label: "Message a task",
       description:
-        "Sends text to a running task. The owner's words go unchanged; other text is labeled as yours.",
+        "Sends text to a task. The owner's words go unchanged; other text is labeled as yours. An ended task (also one from before a restart) is started again in its folder with its model, then gets the text.",
       parameters: promptSchema,
       execute: async (_id: string, args: { task: string; text: string; name?: string }) => {
         const t = turn();
         if (t.kind === "event") throw new Error("only the owner can message tasks; use notify");
-        const task = oneTask(host, args.task);
+        const task = anyTask(host, args.task);
         const verbatim = isVerbatim(args.text, t.ownerText);
         const name = args.name?.trim();
         if (name !== undefined && name !== "") host.renameTask(task.id, name);
@@ -287,8 +313,11 @@ export function herderTools(
           : `${HERDER_LABEL}\n${args.text.trim()}`;
         if (t.images.length === 0) host.promptTask(task.id, text);
         else host.promptTask(task.id, text, t.images);
+        const reopened = host.openTasks().some((o) => o.id === task.id)
+          ? ""
+          : " (it had ended; AgentHerd starts its agent again first)";
         return ok(
-          `sent to ${task.id.slice(0, 8)}${verbatim ? "" : " (labeled as from the Herder)"}`,
+          `sent to ${task.id.slice(0, 8)}${verbatim ? "" : " (labeled as from the Herder)"}${reopened}`,
         );
       },
     },
@@ -308,7 +337,7 @@ export function herderTools(
       name: "session_end",
       label: "End a task",
       description:
-        'Closes a task for good when the owner says it is finished or no longer wanted ("可以结束了", "不用了"). The agent stops and the task leaves the board. To stop only what it is doing now, use session_cancel.',
+        'Closes a task for good when the owner says it is finished or no longer wanted ("可以结束了", "不用了"). The agent stops; the task stays in the list as ended and can be continued later with session_prompt. To stop only what it is doing now, use session_cancel.',
       parameters: taskSchema,
       execute: async (_id: string, args: { task: string }) => {
         if (turn().kind === "event") throw new Error("only the owner can end a task");

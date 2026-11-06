@@ -318,6 +318,22 @@ describe("tools", () => {
     expect(rec.cancelled).toEqual([]);
   });
 
+  it("session_prompt continues an ended task, and session_list shows it (ADR 0039)", async () => {
+    const opts = {
+      tasks: [task("aaaa1111", "修构建"), task("bbbb2222", "看 issue")],
+      ended: ["bbbb2222"],
+    };
+    const { call, rec } = tools({ ownerText: "issue 那个再看看第二页" }, opts);
+    const list = String(await call("session_list", {}));
+    expect(list).toMatch(/Open tasks:\n- aaaa1111/);
+    expect(list).toMatch(/Ended tasks[^\n]*\n- bbbb2222/);
+    expect(String(await call("session_prompt", { task: "issue", text: "再看看第二页" }))).toContain(
+      "it had ended",
+    );
+    expect(rec.prompted.map((p) => p.taskId)).toEqual(["bbbb2222"]);
+    await expect(call("session_cancel", { task: "issue" })).rejects.toThrow(/no open task/);
+  });
+
   it("session_prompt with a name renames the task", async () => {
     const { call, rec } = tools(
       { ownerText: "再查一下 lint" },

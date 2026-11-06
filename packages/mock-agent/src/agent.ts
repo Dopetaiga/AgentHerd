@@ -79,6 +79,7 @@ export function createMockAgent(script: Script, options: MockAgentOptions = {}):
     sessionId: string,
     steps: Step[],
     signal: AbortSignal,
+    promptText = "",
   ): Promise<StopReason> {
     for (const step of steps) {
       if (signal.aborted) throw new Cancelled();
@@ -89,6 +90,15 @@ export function createMockAgent(script: Script, options: MockAgentOptions = {}):
             update: {
               sessionUpdate: "agent_message_chunk",
               content: { type: "text", text: step.text },
+            },
+          });
+          break;
+        case "echo_prompt":
+          await client.notify(methods.client.session.update, {
+            sessionId,
+            update: {
+              sessionUpdate: "agent_message_chunk",
+              content: { type: "text", text: promptText },
             },
           });
           break;
@@ -146,7 +156,7 @@ export function createMockAgent(script: Script, options: MockAgentOptions = {}):
   return agent({ name: script.name })
     .onRequest(methods.agent.initialize, () => ({
       protocolVersion: PROTOCOL_VERSION,
-      agentCapabilities: { loadSession: false },
+      agentCapabilities: { loadSession: script.loadSession === true },
       agentInfo: { name: script.name, version: "0.0.0" },
       authMethods: [],
     }))
@@ -154,6 +164,12 @@ export function createMockAgent(script: Script, options: MockAgentOptions = {}):
       const sessionId = `mock-${nextSession++}`;
       sessions.set(sessionId, { turn: 0, abort: null });
       return { sessionId };
+    })
+    .onRequest(methods.agent.session.load, ({ params }) => {
+      if (script.loadSession !== true) throw new Error("session/load is not supported");
+      log(`load ${params.sessionId}`);
+      sessions.set(params.sessionId, { turn: 0, abort: null });
+      return {};
     })
     .onRequest(methods.agent.session.prompt, async ({ params, client }) => {
       const state = sessions.get(params.sessionId);
@@ -173,7 +189,8 @@ export function createMockAgent(script: Script, options: MockAgentOptions = {}):
           );
           return { stopReason: "end_turn" };
         }
-        return { stopReason: await play(client, params.sessionId, steps, abort.signal) };
+        const text = params.prompt.map((b) => (b.type === "text" ? b.text : "")).join("\n");
+        return { stopReason: await play(client, params.sessionId, steps, abort.signal, text) };
       } catch (error) {
         if (error instanceof Cancelled || abort.signal.aborted) return { stopReason: "cancelled" };
         throw error;

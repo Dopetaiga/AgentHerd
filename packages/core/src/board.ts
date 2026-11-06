@@ -19,6 +19,8 @@ export interface BoardOptions {
   /** Current tasks, read when an update is sent. */
   tasks: () => Task[];
   debounceMs?: number;
+  /** Called on every change, before the debounce (the Herd saves its tasks here). */
+  onChange?: () => void;
 }
 
 /**
@@ -54,6 +56,7 @@ export class Board {
 
   /** Schedules an update. */
   changed(): void {
+    this.opts.onChange?.();
     if (this.timer !== undefined) return;
     this.timer = this.opts.clock.after(this.opts.debounceMs ?? BOARD_DEBOUNCE_MS, () => {
       this.timer = undefined;
@@ -66,6 +69,7 @@ export class Board {
    * `resend`, sends a new message and pins it (the owner's `status` command).
    */
   flush(resend = false): Promise<void> {
+    this.opts.onChange?.();
     this.timer?.cancel();
     this.timer = undefined;
     this.running = this.running.then(() => this.send(resend));

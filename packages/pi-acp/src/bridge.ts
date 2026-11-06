@@ -23,6 +23,11 @@ import { type PiRecord, PiRpc } from "./rpc.ts";
 export const GATE_PATH = fileURLToPath(new URL("../extension/gate.ts", import.meta.url));
 export const MODEL_PATH = fileURLToPath(new URL("../extension/model.ts", import.meta.url));
 export const BRIDGE_NAME = "pi-acp (AgentHerd)";
+/**
+ * Where Pi saves its sessions. When set, sessions are kept and can be opened again with
+ * `session/load` (ADR 0039); otherwise Pi runs with `--no-session`.
+ */
+export const SESSION_DIR_ENV = "AGENTHERD_PI_SESSION_DIR";
 
 export interface BridgeOptions {
   /** Pi's command line, for example `["pi"]` or `[node, ".../cli.js"]`. */
@@ -56,9 +61,21 @@ interface Session {
   turn: Turn | null;
 }
 
-/** Pi's arguments: RPC mode, no saved session, the gate, and the owner's model if one is set. */
-export function piArgsFor(piArgs: readonly string[], env: NodeJS.ProcessEnv): string[] {
-  const args = ["--mode", "rpc", "--no-session", "-e", GATE_PATH];
+/**
+ * Pi's arguments: RPC mode, the session (saved under {@link SESSION_DIR_ENV} with the ACP session
+ * id, or none), the gate, and the owner's model if one is set.
+ */
+export function piArgsFor(
+  piArgs: readonly string[],
+  env: NodeJS.ProcessEnv,
+  sessionId?: string,
+): string[] {
+  const dir = env[SESSION_DIR_ENV];
+  const session =
+    dir !== undefined && dir !== "" && sessionId !== undefined
+      ? ["--session-dir", dir, "--session-id", sessionId]
+      : ["--no-session"];
+  const args = ["--mode", "rpc", ...session, "-e", GATE_PATH];
   const model = modelFromEnv(env);
   if (model !== undefined)
     args.push("-e", MODEL_PATH, "--provider", PI_PROVIDER, "--model", model.id);
@@ -156,13 +173,20 @@ export function createPiBridge(opts: BridgeOptions): AgentApp & { closeAll(): Pr
     }
   }
 
-  async function startPi(cwd: string): Promise<Session> {
-    const s: Session = { id: `pi-${randomUUID()}`, cwd, turn: null, pi: undefined as never };
+  const baseEnv = (): NodeJS.ProcessEnv => ({ ...process.env, ...opts.env });
+  const savesSessions = (): boolean => (baseEnv()[SESSION_DIR_ENV] ?? "") !== "";
+
+  /**
+   * Starts Pi for a session. With `load`, the session must exist in Pi's saved sessions.
+   * @returns The session, after Pi answered `get_state`.
+   */
+  async function startPi(cwd: string, id = `pi-${randomUUID()}`, load = false): Promise<Session> {
+    const s: Session = { id, cwd, turn: null, pi: undefined as never };
     const stderr: string[] = [];
-    const env = { ...process.env, ...opts.env };
+    const env = baseEnv();
     s.pi = new PiRpc({
       command: opts.pi,
-      args: piArgsFor(opts.piArgs ?? [], env),
+      args: piArgsFor(opts.piArgs ?? [], env, id),
       cwd,
       env,
       stderr: (chunk) => {
@@ -183,13 +207,20 @@ export function createPiBridge(opts: BridgeOptions): AgentApp & { closeAll(): Pr
       await s.pi.close();
       throw new Error(`Pi did not start: ${state.error ?? "no answer"}\n${stderr.join("")}`);
     }
+    if (
+      load &&
+      Number((state.data as { messageCount?: number } | undefined)?.messageCount ?? 0) === 0
+    ) {
+      await s.pi.close();
+      throw new Error(`no saved Pi session ${id}`);
+    }
     return s;
   }
 
   const app = agent({ name: BRIDGE_NAME })
     .onRequest(methods.agent.initialize, () => ({
       protocolVersion: PROTOCOL_VERSION,
-      agentCapabilities: { loadSession: false, promptCapabilities: { image: true } },
+      agentCapabilities: { loadSession: savesSessions(), promptCapabilities: { image: true } },
       agentInfo: { name: BRIDGE_NAME, version: "0.0.0" },
       authMethods: [],
     }))
@@ -197,6 +228,13 @@ export function createPiBridge(opts: BridgeOptions): AgentApp & { closeAll(): Pr
       const s = await startPi(params.cwd).catch(fail);
       sessions.set(s.id, s);
       return { sessionId: s.id };
+    })
+    .onRequest(methods.agent.session.load, async ({ params }) => {
+      if (!savesSessions()) fail(new Error("this Pi bridge does not save sessions"));
+      sessions.get(params.sessionId)?.pi.close();
+      const s = await startPi(params.cwd, params.sessionId, true).catch(fail);
+      sessions.set(s.id, s);
+      return {};
     })
     .onRequest(methods.agent.session.prompt, async ({ params, client }) => {
       const s = sessions.get(params.sessionId);
