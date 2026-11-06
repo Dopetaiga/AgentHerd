@@ -8,6 +8,7 @@ export interface CoreTexts {
   noHerder: string;
   /** A line for an image the owner sent, for whoever cannot see images. */
   imageAttached(path: string): string;
+  fileAttached(name: string, path: string): string;
   runAccepted: (title: string) => string;
   herderFailed: (message: string) => string;
   herderGuardHit: (path: string, reason: string) => string;
@@ -91,6 +92,7 @@ const zh: CoreTexts = {
   manyMatches: (q, list) => `有多个任务和"${q}"匹配：\n${list}`,
   noRelay: "现在没有在转接。",
   imageAttached: (path) => `[主人发来一张图片，已保存在 ${path}]`,
+  fileAttached: (name, path) => `[主人发来一个文件「${name}」，已保存在 ${path}]`,
   queued: "已排队：Agent 这一轮结束后会收到这条消息。",
   unknownAgent: (a, known) => `没有叫"${a}"的 Agent。可用的有：${known}。`,
   notDirectory: (p) => `不是一个目录：${p}`,
@@ -151,6 +153,7 @@ const en: CoreTexts = {
   manyMatches: (q, list) => `More than one task matches "${q}":\n${list}`,
   noRelay: "No relay is active.",
   imageAttached: (path) => `[The owner sent an image, saved at ${path}]`,
+  fileAttached: (name, path) => `[The owner sent a file "${name}", saved at ${path}]`,
   queued: "Queued: the agent gets this when its turn ends.",
   unknownAgent: (a, known) => `Unknown agent "${a}". Known: ${known}.`,
   notDirectory: (p) => `Not a directory: ${p}`,

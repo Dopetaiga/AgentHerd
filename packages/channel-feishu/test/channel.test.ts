@@ -121,6 +121,7 @@ describe("FeishuChannel.start", () => {
       patchCard: async () => {},
       pin: async () => {},
       downloadImage: async () => ({ data: new Uint8Array() }),
+      downloadFile: async () => ({ data: new Uint8Array() }),
     };
     const channel = new FeishuChannel({
       getSecret: async (appId) => `secret-for-${appId}`,
@@ -172,6 +173,7 @@ describe("FeishuChannel card callback", () => {
       },
       pin: async () => {},
       downloadImage: async () => ({ data: new Uint8Array() }),
+      downloadFile: async () => ({ data: new Uint8Array() }),
     };
     const channel = new FeishuChannel({
       getSecret: async () => "s",
@@ -223,6 +225,7 @@ describe("FeishuChannel locale", () => {
       patchCard: async () => {},
       pin: async () => {},
       downloadImage: async () => ({ data: new Uint8Array() }),
+      downloadFile: async () => ({ data: new Uint8Array() }),
     };
     const channel = new FeishuChannel({
       getSecret: async () => "s",
@@ -271,7 +274,11 @@ describe("FeishuChannel locale", () => {
 describe("FeishuChannel images", () => {
   const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 1, 2]);
 
-  async function receive(payload: unknown, download: FeishuApi["downloadImage"]) {
+  async function receive(
+    payload: unknown,
+    download: FeishuApi["downloadImage"],
+    downloadFile: FeishuApi["downloadFile"] = async () => ({ data: new Uint8Array() }),
+  ) {
     let onMessage: ((p: unknown) => Promise<void>) | null = null;
     const got: Inbound[] = [];
     const channel = new FeishuChannel({
@@ -286,6 +293,7 @@ describe("FeishuChannel images", () => {
         patchCard: async () => {},
         pin: async () => {},
         downloadImage: download,
+        downloadFile,
       }),
     });
     await channel.start(
@@ -330,6 +338,52 @@ describe("FeishuChannel images", () => {
       throw new Error("234043");
     });
     expect(got).toEqual([{ kind: "message", text: "[图片没能下载：234043]", from: "ou_owner" }]);
+  });
+
+  const file = (type: string, content: object) => ({
+    sender: { sender_id: { open_id: "ou_owner" }, sender_type: "user" },
+    message: {
+      message_id: "om_7",
+      chat_type: "p2p",
+      message_type: type,
+      content: JSON.stringify(content),
+    },
+  });
+
+  it("downloads a file message and passes it on with its name", async () => {
+    const asked: string[] = [];
+    const data = new Uint8Array([1, 2, 3]);
+    const got = await receive(
+      file("file", { file_key: "file_7", file_name: "报告.pdf" }),
+      async () => ({ data: PNG }),
+      async (id, key) => {
+        asked.push(`${id}/${key}`);
+        return { data };
+      },
+    );
+    expect(asked).toEqual(["om_7/file_7"]);
+    expect(got).toEqual([
+      { kind: "message", text: "", from: "ou_owner", files: [{ name: "报告.pdf", data }] },
+    ]);
+  });
+
+  it("names a voice message after its key and notes a failed file download", async () => {
+    const voice = await receive(
+      file("audio", { file_key: "file_v", duration: 3000 }),
+      async () => ({ data: PNG }),
+      async () => ({ data: PNG }),
+    );
+    expect(voice[0]).toMatchObject({ files: [{ name: "file_v.opus" }] });
+    const failed = await receive(
+      file("media", { file_key: "file_m", file_name: "a.mp4", image_key: "img_m" }),
+      async () => ({ data: PNG }),
+      async () => {
+        throw new Error("too big");
+      },
+    );
+    expect(failed).toEqual([
+      { kind: "message", text: "[文件 a.mp4 没能下载：too big]", from: "ou_owner" },
+    ]);
   });
 
   it("tells image types by their first bytes", () => {

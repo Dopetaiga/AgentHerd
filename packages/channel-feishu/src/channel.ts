@@ -6,6 +6,7 @@ import type {
   ChannelBinding,
   ChannelCapability,
   Inbound,
+  InboundFile,
   InboundImage,
   InboundSink,
   Locale,
@@ -180,6 +181,15 @@ export class FeishuChannel implements Channel {
         notes.push(CARD_TEXTS[this.locale].imageFailed((error as Error).message));
       }
     }
+    const files: InboundFile[] = [];
+    for (const f of m.files) {
+      try {
+        const file = await api.downloadFile(m.messageId, f.key);
+        files.push({ name: f.name, data: file.data });
+      } catch (error) {
+        notes.push(CARD_TEXTS[this.locale].fileFailed(f.name, (error as Error).message));
+      }
+    }
     const text = [m.text, ...notes].filter((t) => t !== "").join("\n");
     return {
       kind: "message",
@@ -187,6 +197,7 @@ export class FeishuChannel implements Channel {
       from: m.from,
       ...(m.replyTo === undefined ? {} : { replyTo: m.replyTo }),
       ...(images.length === 0 ? {} : { images }),
+      ...(files.length === 0 ? {} : { files }),
     };
   }
 

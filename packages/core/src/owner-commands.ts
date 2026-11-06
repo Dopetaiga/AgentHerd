@@ -3,7 +3,7 @@
 import { randomUUID } from "node:crypto";
 import { mkdirSync, statSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import type { AskView, Inbound, InboundImage, MessageRef } from "@agentherd/protocol";
+import type { AskView, Inbound, InboundFile, InboundImage, MessageRef } from "@agentherd/protocol";
 import { parseCommand } from "./commands.ts";
 import { type HerdContext, openTasks, say, type TaskOps } from "./herd-context.ts";
 import type { OwnerImage } from "./herder-port.ts";
@@ -42,7 +42,10 @@ export class OwnerCommands {
         await ctx.inbox.handle(inbound);
         return;
       }
-      await this.onOwnerMessage(inbound.text, this.saveImages(inbound.images ?? []));
+      const text = [inbound.text, ...this.saveFiles(inbound.files ?? [])]
+        .filter((t) => t !== "")
+        .join("\n");
+      await this.onOwnerMessage(text, this.saveImages(inbound.images ?? []));
     } catch (error) {
       ctx.store.audit("inbound.error", { message: (error as Error).message });
     }
@@ -72,6 +75,26 @@ export class OwnerCommands {
       writeFileSync(path, image.data);
       this.ctx.store.audit("owner.image", { path, bytes: image.data.byteLength });
       return { mimeType: image.mimeType, data: Buffer.from(image.data).toString("base64"), path };
+    });
+  }
+
+  /**
+   * Saves the owner's files under `<home>/attachments` with their own names; the text the
+   * Herder or agent gets carries one line per file with where it is.
+   */
+  private saveFiles(files: InboundFile[]): string[] {
+    if (files.length === 0) return [];
+    const dir = join(this.ctx.opts.home, "attachments");
+    mkdirSync(dir, { recursive: true });
+    return files.map((file) => {
+      const id = randomUUID().slice(0, 8);
+      const path = join(
+        dir,
+        `${new Date().toISOString().slice(0, 10)}-${id}-${safeName(file.name)}`,
+      );
+      writeFileSync(path, file.data);
+      this.ctx.store.audit("owner.file", { path, bytes: file.data.byteLength });
+      return this.ctx.texts.fileAttached(file.name, path);
     });
   }
 
@@ -200,4 +223,17 @@ function isDirectory(path: string): boolean {
   } catch {
     return false;
   }
+}
+
+/** A file name that is safe on every OS: no separators, no reserved characters, not too long. */
+export function safeName(name: string): string {
+  const base = [...name]
+    .map((c) => (c.charCodeAt(0) < 0x20 || '\\/:*?"<>|'.includes(c) ? "_" : c))
+    .join("")
+    .replace(/^[.\s]+|[.\s]+$/g, "");
+  if (base === "") return "file";
+  if (base.length <= 120) return base;
+  const dot = base.lastIndexOf(".");
+  const ext = dot > 0 && base.length - dot <= 10 ? base.slice(dot) : "";
+  return base.slice(0, 120 - ext.length) + ext;
 }

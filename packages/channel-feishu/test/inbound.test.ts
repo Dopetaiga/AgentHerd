@@ -141,6 +141,7 @@ describe("parseFeishuMessage", () => {
       text: "",
       from: "ou_owner000",
       imageKeys: ["img_000"],
+      files: [],
     });
   });
 
@@ -165,6 +166,7 @@ describe("parseFeishuMessage", () => {
       text: "Bug\nthe page here (https://example.com) breaks\n@Ann look",
       from: "ou_owner000",
       imageKeys: ["img_1"],
+      files: [],
     });
   });
 
@@ -174,7 +176,8 @@ describe("parseFeishuMessage", () => {
   });
 
   it("returns null for message types it does not read", () => {
-    expect(parseFeishuMessage(p2p("file", { file_key: "f" }))).toBeNull();
+    expect(parseFeishuMessage(p2p("sticker", { file_key: "f" }))).toBeNull();
+    expect(parseFeishuMessage(p2p("file", { file_name: "no key" }))).toBeNull();
     expect(parseFeishuMessage(p2p("post", { title: "", content: [] }))).toBeNull();
   });
 

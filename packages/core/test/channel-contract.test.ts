@@ -45,6 +45,9 @@ class RecordingApi implements FeishuApi {
   async downloadImage() {
     return { data: new Uint8Array() };
   }
+  async downloadFile() {
+    return { data: new Uint8Array() };
+  }
 }
 
 channelContract("feishu (recorded API)", async () => {

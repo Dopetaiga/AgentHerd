@@ -31,8 +31,14 @@ type Inbound =
       from: string;
       replyTo?: MessageRef;
       images?: { mimeType: string; data: Uint8Array }[];
+      files?: { name: string; data: Uint8Array }[];   // documents, audio, video
     };
 ```
+
+Files the owner sends are saved under `<home>/attachments/` as `<date>-<id>-<name>` (the name
+made safe for every OS, logged as `owner.file`). The message text gets one line per file with
+its name and path (`[主人发来一个文件「…」，已保存在 …]`), so the Herder, a relayed agent or
+`/run` reads it like any text and can open the file.
 
 Images the owner sends are saved under `<home>/attachments/` (`<date>-<uuid>.<ext>`, logged as
 `owner.image`) and go where the text goes:
@@ -117,8 +123,10 @@ confirmed that `card.action.trigger` arrives over the long connection.
 supported too: a post becomes plain text (title, paragraphs; links as `label (url)`, mentions as
 `@name`, code blocks as text) and its embedded images are downloaded. Images are downloaded with
 `im.v1.messageResource.get` (`type: image`); the `im:message` scope covers it. A download that
-fails becomes a note in the text (`[图片没能下载：…]`) instead of dropping the message. Files,
-audio, stickers and other types are ignored.
+fails becomes a note in the text (`[图片没能下载：…]`) instead of dropping the message. `file`,
+`audio` and `media` (video) messages are downloaded the same way (`type: file`) and passed as
+files; a voice message without a name is saved as `<file_key>.opus`. A failed file download
+also becomes a note. Stickers and other types are ignored.
 
 ### Cards
 

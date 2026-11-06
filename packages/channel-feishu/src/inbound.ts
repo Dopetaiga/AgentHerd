@@ -51,11 +51,13 @@ export interface FeishuMessage {
   from: string;
   replyTo?: { channelId: "feishu"; id: string };
   imageKeys: string[];
+  /** File, audio and video messages: the key to download and the name to save it under. */
+  files: { key: string; name: string }[];
 }
 
 /**
- * Parse a Feishu `im.message.receive_v1` payload: `text`, `image` and rich text (`post`, its
- * text and images). Returns null for non-p2p chats, other message types, non-user senders, bad
+ * Parse a Feishu `im.message.receive_v1` payload: `text`, `image`, rich text (`post`, its
+ * text and images), and `file`, `audio` and `media` (video) messages as files. Returns null for non-p2p chats, other message types, non-user senders, bad
  * JSON, or a message with neither text nor images.
  */
 export function parseFeishuMessage(payload: unknown): FeishuMessage | null {
@@ -84,6 +86,7 @@ export function parseFeishuMessage(payload: unknown): FeishuMessage | null {
 
   let text = "";
   const imageKeys: string[] = [];
+  const files: { key: string; name: string }[] = [];
   switch (message.message_type) {
     case "text":
       text = typeof content.text === "string" ? content.text.trim() : "";
@@ -96,13 +99,23 @@ export function parseFeishuMessage(payload: unknown): FeishuMessage | null {
     case "post":
       text = postText(postBody(content), imageKeys);
       break;
+    case "file":
+    case "audio":
+    case "media": {
+      const key = content.file_key;
+      if (typeof key !== "string" || key === "") break;
+      const given = typeof content.file_name === "string" ? content.file_name : "";
+      const fallback = message.message_type === "audio" ? `${key}.opus` : key;
+      files.push({ key, name: given === "" ? fallback : given });
+      break;
+    }
     default:
       return null;
   }
-  if (text === "" && imageKeys.length === 0) return null;
+  if (text === "" && imageKeys.length === 0 && files.length === 0) return null;
 
   const messageId = typeof message.message_id === "string" ? message.message_id : "";
-  const parsed: FeishuMessage = { messageId, text, from: openId, imageKeys };
+  const parsed: FeishuMessage = { messageId, text, from: openId, imageKeys, files };
   const parentId = typeof message.parent_id === "string" ? message.parent_id : null;
   if (parentId !== null && parentId !== "") parsed.replyTo = { channelId: "feishu", id: parentId };
   return parsed;

@@ -167,6 +167,31 @@ describe("E2E-RELAY", () => {
     expect(new Uint8Array(readFileSync(path))).toEqual(png);
   });
 
+  it("a file the owner sends is saved under its name and its path goes to the agent", async () => {
+    const { channel, herd } = await setup(THREE_TURNS);
+    await channel.say(`/run mock ${dir} task`);
+    await until(() => reports(channel).length === 1);
+    const id = herd.tasks()[0]?.id ?? "";
+    await channel.say(`/relay ${id.slice(0, 8)}`);
+    const data = new Uint8Array([1, 2, 3]);
+    await herd.handle({
+      kind: "message",
+      text: "看看这个",
+      from: "owner",
+      files: [{ name: "a/b:报告.pdf", data }],
+    });
+    await until(() => texts(channel).includes("second done"));
+    const prompt = herd
+      .transcript(id)
+      .entries.filter((e) => e.role === "prompt")
+      .at(-1)?.text;
+    expect(prompt?.startsWith("看看这个\n[主人发来一个文件「a/b:报告.pdf」，已保存在 ")).toBe(true);
+    const path = /已保存在 (.+)\]/.exec(prompt ?? "")?.[1] ?? "";
+    expect(path.startsWith(join(dir, "attachments"))).toBe(true);
+    expect(path.endsWith("-a_b_报告.pdf")).toBe(true);
+    expect(new Uint8Array(readFileSync(path))).toEqual(data);
+  });
+
   it("the relay ends after relayIdleMinutes with no owner message", async () => {
     const clock = new FakeClock("2026-11-04T06:00:00.000Z");
     const { channel } = await setup(THREE_TURNS, clock);

@@ -24,6 +24,7 @@ export interface CardTexts {
   toast: string;
   /** Put in the message text in place of an image that could not be downloaded. */
   imageFailed: (why: string) => string;
+  fileFailed: (name: string, why: string) => string;
   appName: string;
   appDesc: string;
 }
@@ -61,6 +62,7 @@ export const CARD_TEXTS: Record<Locale, CardTexts> = {
     askAnswered: (answer) => `你选了：**${answer}**`,
     toast: "已收到",
     imageFailed: (why) => `[图片没能下载：${why}]`,
+    fileFailed: (name, why) => `[文件 ${name} 没能下载：${why}]`,
     appName: "AgentHerd",
     appDesc: "只在你的 Agent 需要你时才打扰你",
   },
@@ -96,6 +98,7 @@ export const CARD_TEXTS: Record<Locale, CardTexts> = {
     askAnswered: (answer) => `You chose: **${answer}**`,
     toast: "Received",
     imageFailed: (why) => `[could not download an image: ${why}]`,
+    fileFailed: (name, why) => `[could not download the file ${name}: ${why}]`,
     appName: "AgentHerd",
     appDesc: "Only pings you when your agents need you",
   },

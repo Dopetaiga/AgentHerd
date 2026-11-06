@@ -26,6 +26,8 @@ export interface FeishuApi {
   pin(messageId: string): Promise<void>;
   /** Downloads an image of a received message (`im:message` covers it). */
   downloadImage(messageId: string, imageKey: string): Promise<DownloadedFile>;
+  /** A file, audio or video message's resource. */
+  downloadFile(messageId: string, fileKey: string): Promise<DownloadedFile>;
 }
 
 export interface DownloadedFile {
@@ -95,20 +97,27 @@ export function sdkApi(creds: FeishuCredentials): FeishuApi {
       const res = await client.im.v1.pin.create({ data: { message_id: messageId } });
       check("pin", res);
     },
-    async downloadImage(messageId, imageKey) {
-      const res = await client.im.v1.messageResource.get({
-        params: { type: "image" },
-        path: { message_id: messageId, file_key: imageKey },
-      });
-      const chunks: Buffer[] = [];
-      for await (const chunk of res.getReadableStream()) chunks.push(Buffer.from(chunk));
-      const type = (res.headers as Record<string, unknown> | undefined)?.["content-type"];
-      return {
-        data: new Uint8Array(Buffer.concat(chunks)),
-        ...(typeof type === "string" ? { contentType: type } : {}),
-      };
-    },
+    downloadImage: (messageId, imageKey) => download(messageId, imageKey, "image"),
+    downloadFile: (messageId, fileKey) => download(messageId, fileKey, "file"),
   };
+
+  async function download(
+    messageId: string,
+    key: string,
+    type: "image" | "file",
+  ): Promise<DownloadedFile> {
+    const res = await client.im.v1.messageResource.get({
+      params: { type },
+      path: { message_id: messageId, file_key: key },
+    });
+    const chunks: Buffer[] = [];
+    for await (const chunk of res.getReadableStream()) chunks.push(Buffer.from(chunk));
+    const contentType = (res.headers as Record<string, unknown> | undefined)?.["content-type"];
+    return {
+      data: new Uint8Array(Buffer.concat(chunks)),
+      ...(typeof contentType === "string" ? { contentType } : {}),
+    };
+  }
 }
 
 /** Checks App ID and Secret by asking for a tenant access token. */
