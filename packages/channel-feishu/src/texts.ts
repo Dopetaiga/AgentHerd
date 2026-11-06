@@ -21,6 +21,12 @@ export interface CardTexts {
   endRelay: string;
   backToHerder: string;
   askAnswered: (answer: string) => string;
+  /** Header of a Herder question card. */
+  askHeader: string;
+  /** Header of an approval card. */
+  itemHeader: (task: string | undefined) => string;
+  /** Header of a red card without a task. */
+  errorHeader: string;
   toast: string;
   /** Put in the message text in place of an image that could not be downloaded. */
   imageFailed: (why: string) => string;
@@ -60,6 +66,9 @@ export const CARD_TEXTS: Record<Locale, CardTexts> = {
     endRelay: "结束转接",
     backToHerder: "已回到主管",
     askAnswered: (answer) => `你选了：**${answer}**`,
+    askHeader: "主管问你",
+    itemHeader: (task) => (task === undefined ? "⚠️ 等你确认" : `⚠️ 等你确认 · ${task}`),
+    errorHeader: "❌ 主管出错了",
     toast: "已收到",
     imageFailed: (why) => `[图片没能下载：${why}]`,
     fileFailed: (name, why) => `[文件 ${name} 没能下载：${why}]`,
@@ -96,6 +105,9 @@ export const CARD_TEXTS: Record<Locale, CardTexts> = {
     endRelay: "End relay",
     backToHerder: "Back to the Herder",
     askAnswered: (answer) => `You chose: **${answer}**`,
+    askHeader: "The Herder asks",
+    itemHeader: (task) => (task === undefined ? "⚠️ Needs your OK" : `⚠️ Needs your OK · ${task}`),
+    errorHeader: "❌ The Herder hit an error",
     toast: "Received",
     imageFailed: (why) => `[could not download an image: ${why}]`,
     fileFailed: (name, why) => `[could not download the file ${name}: ${why}]`,

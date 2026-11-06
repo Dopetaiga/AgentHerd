@@ -83,7 +83,7 @@ describe("renderCard text folding", () => {
 });
 
 describe("FOLD_CHARS", () => {
-  it("is 600", () => {
-    expect(FOLD_CHARS).toBe(600);
+  it("is 400", () => {
+    expect(FOLD_CHARS).toBe(400);
   });
 });

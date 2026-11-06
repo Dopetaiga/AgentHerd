@@ -85,7 +85,7 @@ describe("E2E-MODEL-PER-TASK", () => {
     expect(task?.model).toBe("svc/fast");
     expect(task?.agent).toBe("Mock · svc/fast");
     const report = channel.ofKind("report").map((m) => m.view as ReportView)[0];
-    expect(report?.title).toContain("Mock · svc/fast");
+    expect(report?.subtitle).toContain("Mock · svc/fast");
   });
 
   it("keeps the agent's own settings without a model, and refuses a model it cannot run", async () => {
@@ -174,7 +174,7 @@ await import(${JSON.stringify(BIN)});
     const notes = channel.ofKind("text").map((m) => JSON.stringify(m.view));
     expect(notes.some((n) => n.includes("running again with Mock · svc/good"))).toBe(true);
     const report = channel.ofKind("report").map((m) => m.view as ReportView)[0];
-    expect(report?.title).toContain("Mock · svc/good");
+    expect(report?.subtitle).toContain("Mock · svc/good");
   });
 
   it("moves the same model to another agent when the first agent does not start (ADR 0031)", async () => {

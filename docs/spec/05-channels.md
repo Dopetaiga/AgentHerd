@@ -76,7 +76,12 @@ The owner talks to one bot in a direct chat. What it sends there:
 | Reminder | Every `remindMinutes` (default 30) while an item is open | Yes |
 | Daily digest | On by default, can be turned off. Done today, still running, automatic decisions with reasons, decisions marked wrong | Yes |
 
-Long messages are folded, never shortened: over `foldChars` (default 600) the card shows the
+Each kind of message has its own look ([ADR 0036](../adr/0036-message-cards-by-kind.md), spec 08 §3):
+Herder talk has no header; Herder questions are purple 「主管问你」; reports carry ✅/❌/⚠️/⏹ with
+the task name and a subtitle (result · project · agent · time), coloured by result; a task's
+messages are blue ⏳, alarms orange ⚠️, errors red ❌; approvals are orange 「⚠️ 等你确认 · 任务名」.
+
+Long messages are folded, never shortened: over `foldChars` (default 400) the card shows the
 first lines and puts the rest in a collapsible panel; code blocks and logs are collapsed; over
 the card size limit the text is stored as a file and sent as a link.
 

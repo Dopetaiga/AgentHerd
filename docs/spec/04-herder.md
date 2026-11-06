@@ -176,11 +176,11 @@ decisions during the task.
 
 The body is chosen by size:
 
-1. Final reply ≤ `reportMaxChars` (default 600): the reply, verbatim.
+1. Final reply ≤ `reportMaxChars` (default 400, [ADR 0036](../adr/0036-message-cards-by-kind.md)): the reply, verbatim.
 2. Longer: AgentHerd sends the session one more prompt, labeled as from AgentHerd:
 
    ```text
-   [AgentHerd] Summarize for the owner what you did in this task, in at most 600 characters:
+   [AgentHerd] Summarize for the owner what you did in this task, in at most 400 characters:
    what changed, what you verified, outputs (files, commits, PR), risks or open parts.
    Do not call tools.
    ```
@@ -193,7 +193,7 @@ The Herder never writes or shortens the body.
 
 ### Reply length
 
-- The first prompt of every session AgentHerd starts gets a labeled note: replies go to a
+- Every prompt AgentHerd sends to a session gets a labeled note (ADR 0036; was the first only): replies go to a
   phone; keep each under `replyHintChars` (default 300); conclusion first; details in files
   or commit messages; no long code or logs.
 - Messages are folded in the channel, not shortened ([05-channels.md](05-channels.md#2-what-the-owner-sees)).

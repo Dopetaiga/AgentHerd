@@ -67,7 +67,8 @@ turns:
     const [report] = reports(channel);
     expect(report?.body).toBe("Fixed the flaky test. All 42 tests pass.");
     expect(report?.summarized).toBe(false);
-    expect(report?.title).toMatch(/^Done: Fix the flaky checkout test · shop · Mock · \d+s$/);
+    expect(report?.title).toBe("Fix the flaky checkout test");
+    expect(report?.subtitle).toMatch(/^Done · shop · Mock · \d+s$/);
     expect(herd.tasks()[0]?.stage).toBe("done");
   });
 });
@@ -185,7 +186,7 @@ turns:
 `);
     await expect(herd.run("mock", dir, "crashy")).rejects.toThrow(/exited/);
     const [report] = reports(channel);
-    expect(report?.title).toMatch(/^Failed: crashy/);
+    expect(report?.subtitle).toMatch(/^Failed · /);
     expect(herd.tasks()[0]?.stage).toBe("failed");
     expect(channel.ofKind("text").map((m) => (m.view as TextView).text)).toContain(
       "Watchdog: the agent exited (code 7)",

@@ -97,6 +97,7 @@ export async function onAlarm(ctx: HerdContext, alarm: Alarm): Promise<void> {
       kind: "text",
       taskLabel: f.task.title,
       text: ctx.texts.watchdog(alarm.detail),
+      tone: "alarm",
     });
   } catch (error) {
     ctx.store.audit("watchdog.error", { message: (error as Error).message });

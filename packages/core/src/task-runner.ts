@@ -80,7 +80,6 @@ export class TaskRunner {
       offs: [],
       queue: [],
       busy: false,
-      hinted: false,
     };
     ctx.following.set(sessionId, f);
     ctx.registry.add(sessionId, profile.id, cwd);
@@ -306,7 +305,6 @@ export class TaskRunner {
     f.failed = false;
     f.task.model = ref;
     f.task.agent = `${profile.name} · ${ref}`;
-    f.hinted = false;
     this.listen(f, f.connection, f.agentSessionId);
     const short = why.length > 200 ? `${why.slice(0, 200)}…` : why;
     ctx.store.audit("task.model-switched", {
@@ -320,7 +318,7 @@ export class TaskRunner {
       "note",
       ctx.texts.modelSwitched(fromLabel, f.task.agent, short),
     );
-    await say(ctx, ctx.texts.modelSwitched(fromLabel, f.task.agent, short), f.task.title);
+    await say(ctx, ctx.texts.modelSwitched(fromLabel, f.task.agent, short), f.task.title, "alarm");
     ctx.board.changed();
     return true;
   }
@@ -339,10 +337,8 @@ export class TaskRunner {
     f.alarm = false;
     // An agent that takes no images gets where they are saved instead.
     let prompt = connection.acceptsImages ? text : withImagePaths(text, images, ctx.texts);
-    if (!f.hinted) {
-      f.hinted = true;
-      prompt = `${replyHint(ctx.opts.replyHintChars ?? REPLY_HINT_CHARS, ctx.texts)}\n\n${prompt}`;
-    }
+    // Every prompt carries the length hint (ADR 0036); follow-ups were long without it.
+    prompt = `${replyHint(ctx.opts.replyHintChars ?? REPLY_HINT_CHARS, ctx.texts)}\n\n${prompt}`;
     ctx.registry.set(sessionId, "working");
     ctx.watchdog.turnStarted(sessionId);
     try {

@@ -152,6 +152,8 @@ export interface ReportView {
   taskId: string;
   result: ReportResult;
   title: string;
+  /** Project · agent · duration, under the title. */
+  subtitle?: string;
   body: string;
   /** True when the body is the agent's own summary of a longer reply. */
   summarized: boolean;
@@ -166,10 +168,24 @@ export interface RelayView {
   active: boolean;
 }
 
+/**
+ * How a text message looks (ADR 0036): `progress` a task's message in a relay or mid-task (blue),
+ * `alarm` a watchdog alarm or switch (orange), `error` something failed (red). Without a tone and
+ * without a task it is the Herder talking: no header.
+ */
+export type TextTone = "progress" | "alarm" | "error";
+
 export interface TextView {
   kind: "text";
   taskLabel?: string;
   text: string;
+  tone?: TextTone;
+  /** Header title for an `error` without a task, e.g. "主管出错了". */
+  title?: string;
+  /** Buttons under the text, e.g. 「重试」. */
+  options?: ItemOption[];
+  /** Target of the buttons' actions. */
+  target?: string;
 }
 
 /** A question from the Herder with suggested answers. */
