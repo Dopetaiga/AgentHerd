@@ -178,6 +178,7 @@ export class Herd {
         }),
       audit: (type, data) => this.store.audit(type, data),
       recordTurn: (role, text, taskId) => this.store.addHerderTurn(role, text, taskId),
+      memory: this.store.memory,
       getState: (key) => this.store.getState(key),
       setState: (key, value) => this.store.setState(key, value),
     };

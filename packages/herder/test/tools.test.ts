@@ -20,6 +20,7 @@ function tools(
   const ctx: TurnContext = {
     kind: "owner",
     ownerText: "",
+    typedText: "",
     images: [],
     asked: false,
     notified: false,

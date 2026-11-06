@@ -10,6 +10,18 @@ export {
 } from "./agent-models.ts";
 export { HERDER_STATE_KEY, Herder, type HerderOptions, MAX_SAVED_MESSAGES } from "./herder.ts";
 export {
+  HERDER_KINDS,
+  MAX_OPS,
+  memorySnapshot,
+  memoryTools,
+  opProblem,
+  RECALL_KINDS,
+  RECALL_MAX_CHARS,
+  RECALL_MAX_HITS,
+  recallBlock,
+  type ToolOp,
+} from "./memory.ts";
+export {
   type ModelTiers,
   placeModels,
   TIERS,
