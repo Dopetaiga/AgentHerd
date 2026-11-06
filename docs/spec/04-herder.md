@@ -114,6 +114,8 @@ it knows what happened without repeating it.
 
 ### Context and restarts
 
+- A failed Herder turn is retried, then run on the next model, then held with a 「重试」 card;
+  key, balance and request errors are not retried ([ADR 0037](../adr/0037-herder-retries-and-never-drops.md), spec 08 §5).
 - The session holds the conversation with the owner and short notes. Task state is read from
   `herd.db` with the read tools; after a compaction the Herder must re-read it.
 - Compaction keeps unresolved owner instructions verbatim.

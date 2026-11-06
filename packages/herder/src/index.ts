@@ -26,6 +26,7 @@ export {
   CUSTOM_CONTEXT_WINDOW,
   CUSTOM_MAX_TOKENS,
   type HerderChoice,
+  herderFallbacks,
   herderFromSettings,
   PI_KEY_ENV,
   PI_MODEL_ENV,

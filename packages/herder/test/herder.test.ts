@@ -8,7 +8,7 @@ import {
   streamSimple,
 } from "@earendil-works/pi-ai/compat";
 import { afterEach, describe, expect, it } from "vitest";
-import { HERDER_STATE_KEY, Herder, IMAGE_SEEN_NOTE } from "../src/herder.ts";
+import { HERDER_STATE_KEY, Herder, type HerderOptions, IMAGE_SEEN_NOTE } from "../src/herder.ts";
 import { fakeHost, task } from "./helpers.ts";
 
 let faux: FauxProviderRegistration[] = [];
@@ -18,7 +18,11 @@ afterEach(() => {
 });
 
 /** The user text of every request the model received. */
-function setup(opts: Parameters<typeof fakeHost>[0] = {}, maxSavedMessages?: number) {
+function setup(
+  opts: Parameters<typeof fakeHost>[0] = {},
+  maxSavedMessages?: number,
+  extra: Partial<HerderOptions> = {},
+) {
   const registration = registerFauxProvider();
   faux.push(registration);
   const { host, rec } = fakeHost(opts);
@@ -28,6 +32,8 @@ function setup(opts: Parameters<typeof fakeHost>[0] = {}, maxSavedMessages?: num
       model: registration.getModel(),
       streamFn: streamSimple,
       ...(maxSavedMessages === undefined ? {} : { maxSavedMessages }),
+      sleep: async () => {},
+      ...extra,
     });
   return { herder: make(), make, rec, faux: registration };
 }
@@ -105,7 +111,7 @@ describe("Herder", () => {
     expect(rec.said).toEqual(["好的，用 app。"]);
   });
 
-  it("a failed model call gives the owner a plain message and leaves no trace", async () => {
+  it("a key error is not retried: a red card says what to change and leaves no trace", async () => {
     const { herder, rec, faux } = setup();
     faux.setResponses([
       fauxAssistantMessage("", { stopReason: "error", errorMessage: "401 invalid key" }),
@@ -113,12 +119,59 @@ describe("Herder", () => {
     ]);
     herder.ownerMessage("你好");
     await herder.idle();
-    expect(rec.said[0]).toContain("401 invalid key");
-    expect(rec.said[0]).toContain("/help");
+    expect(rec.alerts).toHaveLength(1);
+    expect(rec.alerts[0]?.text).toContain("401 invalid key");
+    expect(rec.alerts[0]?.retry).toBe(false);
     expect(rec.state.get(HERDER_STATE_KEY)).toEqual([]);
     herder.ownerMessage("你好");
     await herder.idle();
-    expect(rec.said[1]).toBe("好了。");
+    expect(rec.said[0]).toBe("好了。");
+  });
+
+  it("a connection error is retried quietly (ADR 0037)", async () => {
+    const { herder, rec, faux } = setup();
+    const err = () =>
+      fauxAssistantMessage("", { stopReason: "error", errorMessage: "Connection error." });
+    faux.setResponses([err(), err(), fauxAssistantMessage("在的。")]);
+    herder.ownerMessage("在吗");
+    await herder.idle();
+    expect(rec.said).toEqual(["在的。"]);
+    expect(rec.alerts).toEqual([]);
+    expect(rec.audits.filter((a) => a.type === "herder.retry")).toHaveLength(2);
+  });
+
+  it("after the retries it runs on the next model and tells the owner", async () => {
+    let fallbackModel: HerderOptions["model"] | undefined;
+    const { herder, rec, faux } = setup({}, undefined, {
+      modelRef: "a/one",
+      fallbacks: () => [{ ref: "b/two", model: fallbackModel as HerderOptions["model"] }],
+    });
+    fallbackModel = faux.getModel();
+    const err = () => fauxAssistantMessage("", { stopReason: "error", errorMessage: "503 busy" });
+    faux.setResponses([err(), err(), err(), err(), fauxAssistantMessage("换好了。")]);
+    herder.ownerMessage("在吗");
+    await herder.idle();
+    expect(rec.said).toEqual(["换好了。"]);
+    expect(rec.alerts[0]?.text).toContain("b/two");
+  });
+
+  it("when every model fails the message is held and runs on 重试", async () => {
+    const { herder, rec, faux } = setup({}, undefined, { retryDelaysMs: [] });
+    faux.setResponses([
+      fauxAssistantMessage("", { stopReason: "error", errorMessage: "Connection error." }),
+      fauxAssistantMessage("第一条。"),
+      fauxAssistantMessage("第二条。"),
+    ]);
+    herder.ownerMessage("一");
+    await herder.idle();
+    expect(rec.alerts[0]?.retry).toBe(true);
+    expect(rec.said).toEqual([]);
+    herder.retry();
+    await herder.idle();
+    herder.ownerMessage("二");
+    await herder.idle();
+    expect(rec.said).toEqual(["第一条。", "第二条。"]);
+    expect(rec.turns.filter((t) => t.role === "owner").map((t) => t.text)).toEqual(["一", "二"]);
   });
 
   it("events start no turn; they go with the owner's next message", async () => {

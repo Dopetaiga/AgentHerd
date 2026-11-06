@@ -11,6 +11,12 @@ export interface CoreTexts {
   fileAttached(name: string, path: string): string;
   runAccepted: (title: string) => string;
   herderFailed: (message: string) => string;
+  /** The Herder now runs on another model (ADR 0037). */
+  herderSwitched: (to: string, why: string) => string;
+  /** Every model failed; the message waits. */
+  herderHeld: (message: string) => string;
+  /** The button that runs a held message again. */
+  retry: string;
   herderGuardHit: (path: string, reason: string) => string;
   usage(usage: string): string;
   noMatch(query: string): string;
@@ -84,7 +90,12 @@ const zh: CoreTexts = {
   help: HELP_ZH,
   noHerder: `还没有配置主管模型，现在只能用命令：\n${HELP_ZH}`,
   runAccepted: (title) => `已收到，正在启动：${title}`,
-  herderFailed: (message) => `主管这次没能回答（${message}）。固定命令仍然可用，发 /help 查看。`,
+  herderFailed: (message) =>
+    `主管这次没能回答：${message}\n重试也没用，请到模型页检查密钥、余额，或给主管换一个模型。固定命令仍然可用，发 /help 查看。`,
+  herderSwitched: (to, why) => `主管换成了 ${to}，原因：${why}`,
+  herderHeld: (message) =>
+    `所有模型都没能回答（${message}）。你的消息还在，网络恢复后会自动接着处理，也可以点「重试」。`,
+  retry: "重试",
   herderGuardHit: (path, reason) =>
     `主管想在 ${path} 操作，已被拦下（${reason}）。如果确实要做，请你自己用 /run。`,
   usage: (u) => `用法：${u}`,
@@ -145,7 +156,11 @@ const en: CoreTexts = {
   noHerder: `No Herder model is configured yet. Commands:\n${HELP_EN}`,
   runAccepted: (title) => `Received, starting: ${title}`,
   herderFailed: (message) =>
-    `The Herder could not answer (${message}). Commands still work; send /help.`,
+    `The Herder could not answer: ${message}\nRetrying will not help; check the key or balance on the Models page, or give the Herder another model. Commands still work; send /help.`,
+  herderSwitched: (to, why) => `The Herder switched to ${to} because: ${why}`,
+  herderHeld: (message) =>
+    `No model could answer (${message}). Your message is kept and runs when a model works again; or tap Retry.`,
+  retry: "Retry",
   herderGuardHit: (path, reason) =>
     `The Herder tried to work in ${path} and was stopped (${reason}). To do it anyway, use /run yourself.`,
   usage: (u) => `Usage: ${u}`,

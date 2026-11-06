@@ -4,6 +4,7 @@ import type { HerderEvent, HerderHost, HerderPort, OwnerImage } from "@agentherd
 import { Agent, type AgentMessage, type StreamFn } from "@agentherd/herder-loop";
 import { guardCheck } from "@agentherd/rules";
 import type { Api, Model } from "@earendil-works/pi-ai";
+import { errorKind, HELD_RETRY_MS, RETRY_DELAYS_MS } from "./errors.ts";
 import type { TierPlacement } from "./model-guide.ts";
 import { eventsPrompt, ownerAnswerPrompt, ownerMessagePrompt, systemPrompt } from "./prompt.ts";
 import { herderTools, otherOption, pathsIn, resolveProject, type TurnContext } from "./tools.ts";
@@ -19,11 +20,30 @@ export interface HerderOptions {
   maxSavedMessages?: number;
   /** The model tiers, for picking and swapping a task's model (ADR 0028). Read on each use. */
   modelTiers?: () => TierPlacement;
+  /** `service/model` of `model`, for telling the owner about a switch. */
+  modelRef?: string;
+  /** Other models to run on when this one keeps failing, best first (ADR 0037). */
+  fallbacks?: () => HerderModel[];
+  /** Waits before each retry of the same model. */
+  retryDelaysMs?: number[];
+  /** How often a held message is tried again. */
+  heldRetryMs?: number;
+  sleep?: (ms: number) => Promise<void>;
 }
 
-type Job =
+/** A model the Herder can run on. */
+export interface HerderModel {
+  ref: string;
+  model: Model<Api>;
+  apiKey?: string;
+}
+
+type Job = (
   | { kind: "owner"; text: string; images: OwnerImage[] }
-  | { kind: "answer"; question: string; answer: string };
+  | { kind: "answer"; question: string; answer: string }
+) & { recorded?: boolean };
+
+type Attempt = { ok: true } | { ok: false; message: string; acted: boolean };
 
 /** Events kept for the next owner turn; older ones are dropped. */
 export const MAX_HELD_EVENTS = 10;
@@ -49,15 +69,29 @@ export class Herder implements HerderPort {
   /** Whether the model reads images; otherwise it gets where they are saved. */
   private readonly seesImages: boolean;
   private readonly maxSaved: number;
+  private current: HerderModel;
+  private readonly fallbacks: () => HerderModel[];
+  private readonly delays: number[];
+  private readonly heldRetryMs: number;
+  private readonly sleep: (ms: number) => Promise<void>;
+  /** A message every model failed on; it runs before anything else (ADR 0037). */
+  private held: Job | undefined;
+  private heldTimer: ReturnType<typeof setTimeout> | undefined;
 
   constructor(opts: HerderOptions) {
     this.host = opts.host;
+    this.current = { ref: opts.modelRef ?? opts.model.id, model: opts.model };
+    this.fallbacks = opts.fallbacks ?? (() => []);
+    this.delays = opts.retryDelaysMs ?? RETRY_DELAYS_MS;
+    this.heldRetryMs = opts.heldRetryMs ?? HELD_RETRY_MS;
+    this.sleep = opts.sleep ?? ((ms) => new Promise((r) => setTimeout(r, ms)));
+    const ownKey = opts.getApiKey;
     this.maxSaved = opts.maxSavedMessages ?? MAX_SAVED_MESSAGES;
     this.seesImages = opts.model.input.includes("image");
     const saved = this.host.getState<AgentMessage[]>(HERDER_STATE_KEY) ?? [];
     this.agent = new Agent({
       streamFn: opts.streamFn,
-      ...(opts.getApiKey === undefined ? {} : { getApiKey: opts.getApiKey }),
+      getApiKey: async (provider) => this.current.apiKey ?? (await ownKey?.(provider)),
       beforeToolCall: async ({ toolCall, args }) => this.check(toolCall.name, args),
       initialState: {
         systemPrompt: systemPrompt(this.host.locale),
@@ -86,8 +120,20 @@ export class Herder implements HerderPort {
     if (this.events.length > MAX_HELD_EVENTS) this.events.shift();
   }
 
+  /** The owner tapped 「重试」, or the held timer fired: run the held message now. */
+  retry(): void {
+    const job = this.held;
+    if (job === undefined || this.stopped) return;
+    this.held = undefined;
+    if (this.heldTimer !== undefined) clearTimeout(this.heldTimer);
+    this.heldTimer = undefined;
+    this.jobs.unshift(job);
+    this.kick();
+  }
+
   async stop(): Promise<void> {
     this.stopped = true;
+    if (this.heldTimer !== undefined) clearTimeout(this.heldTimer);
     this.jobs.length = 0;
     this.agent.abort();
     await this.running;
@@ -101,6 +147,15 @@ export class Herder implements HerderPort {
   private enqueue(job: Job): void {
     if (this.stopped) return;
     this.jobs.push(job);
+    // A new message is a good moment to try the held one again; it keeps its place first.
+    if (this.held !== undefined) {
+      this.retry();
+      return;
+    }
+    this.kick();
+  }
+
+  private kick(): void {
     if (this.running === undefined) {
       this.running = this.drain().finally(() => {
         this.running = undefined;
@@ -111,6 +166,7 @@ export class Herder implements HerderPort {
   private async drain(): Promise<void> {
     for (let job = this.jobs.shift(); job !== undefined && !this.stopped; job = this.jobs.shift()) {
       await this.runJob(job);
+      if (this.held !== undefined) return; // Later messages wait behind the held one.
     }
   }
 
@@ -129,7 +185,7 @@ export class Herder implements HerderPort {
         notified: false,
         pickedDirs: pathsIn(job.text, this.host.userHome),
       };
-      this.host.recordTurn("owner", job.text);
+      if (!job.recorded) this.host.recordTurn("owner", job.text);
       prompt = ownerMessagePrompt(job.text, images, this.host.texts);
     } else {
       const text = `${this.lastOwnerText}\n${job.answer}`;
@@ -142,41 +198,23 @@ export class Herder implements HerderPort {
         // A picked button is a folder the owner chose; their earlier words may name one too.
         pickedDirs: pathsIn(`${this.lastOwnerText}\n ${job.answer}`, this.host.userHome),
       };
-      this.host.recordTurn("answer", job.answer);
+      if (!job.recorded) this.host.recordTurn("answer", job.answer);
       prompt = ownerAnswerPrompt(
         job.question,
         job.answer,
         job.answer.trim() === otherOption(this.host.locale),
       );
     }
+    job.recorded = true;
     if (this.events.length > 0) {
       for (const e of this.events) this.host.recordTurn("event", `${e.title}: ${e.text}`, e.taskId);
       prompt = `${eventsPrompt(this.events)}\n\n${prompt}`;
       this.events = [];
     }
     this.host.audit("herder.turn", { kind: job.kind });
-    const before = this.agent.state.messages.length;
-    try {
-      if (this.seesImages && images.length > 0) {
-        await this.agent.prompt(
-          prompt,
-          images.map((i) => ({ type: "image", data: i.data, mimeType: i.mimeType })),
-        );
-      } else {
-        await this.agent.prompt(prompt);
-      }
-    } catch (error) {
-      await this.fail(job, (error as Error).message, before);
-      return;
-    }
+    const done = await this.runWithRetries(job, prompt, images);
+    if (!done) return;
     const last = this.agent.state.messages.at(-1);
-    if (
-      last?.role === "assistant" &&
-      (last.stopReason === "error" || last.stopReason === "aborted")
-    ) {
-      await this.fail(job, last.errorMessage ?? last.stopReason, before);
-      return;
-    }
     if (!this.turn.asked && last?.role === "assistant") {
       const text = last.content
         .filter((c) => c.type === "text")
@@ -191,12 +229,87 @@ export class Herder implements HerderPort {
     this.save();
   }
 
-  /** A failed turn leaves no trace in the session; the owner gets a plain message. */
-  private async fail(job: Job, message: string, before: number): Promise<void> {
+  /**
+   * Runs the turn (ADR 0037): transient errors retry the same model after each delay, then each
+   * fallback model once. A key, balance or request error is not retried. When nothing works the
+   * message is held and the owner told; it runs again on 「重试」, the next message or a timer.
+   * A turn that already did something (a tool ran) is never run again: that could start a task twice.
+   * @returns whether the turn finished.
+   */
+  private async runWithRetries(job: Job, prompt: string, images: OwnerImage[]): Promise<boolean> {
+    let result = await this.attempt(prompt, images);
+    if (result.ok) return true;
+    const first = result.message;
+    if (!result.acted && errorKind(first) === "transient") {
+      for (const delay of this.delays) {
+        if (this.stopped) return false;
+        this.host.audit("herder.retry", { kind: job.kind, message: result.message, delay });
+        await this.sleep(delay);
+        if (this.stopped) return false;
+        result = await this.attempt(prompt, images);
+        if (result.ok || result.acted || errorKind(result.message) === "fatal") break;
+      }
+    }
+    if (!result.ok && !result.acted) {
+      for (const next of this.fallbacks().filter((m) => m.ref !== this.current.ref)) {
+        if (this.stopped) return false;
+        const from = this.current;
+        this.current = next;
+        this.agent.state.model = next.model;
+        result = await this.attempt(prompt, images);
+        if (result.ok) {
+          this.host.audit("herder.model-switched", { from: from.ref, to: next.ref, why: first });
+          await this.host.alert(this.host.texts.herderSwitched(next.ref, first), false);
+          return true;
+        }
+        if (result.acted) break;
+        this.current = from;
+        this.agent.state.model = from.model;
+      }
+    }
+    if (result.ok) return true;
+    this.host.audit("herder.error", { kind: job.kind, message: result.message });
+    if (this.stopped) return false;
+    if (result.acted || errorKind(result.message) === "fatal") {
+      await this.host.alert(this.host.texts.herderFailed(result.message), false);
+      return false;
+    }
+    this.held = job;
+    this.heldTimer = setTimeout(() => this.retry(), this.heldRetryMs);
+    this.heldTimer.unref?.();
+    await this.host.alert(this.host.texts.herderHeld(result.message), true);
+    return false;
+  }
+
+  /** One try. A failed try leaves no trace in the session. */
+  private async attempt(prompt: string, images: OwnerImage[]): Promise<Attempt> {
+    const before = this.agent.state.messages.length;
+    let message: string | undefined;
+    try {
+      if (this.seesImages && images.length > 0) {
+        await this.agent.prompt(
+          prompt,
+          images.map((i) => ({ type: "image", data: i.data, mimeType: i.mimeType })),
+        );
+      } else {
+        await this.agent.prompt(prompt);
+      }
+      const last = this.agent.state.messages.at(-1);
+      if (
+        last?.role === "assistant" &&
+        (last.stopReason === "error" || last.stopReason === "aborted")
+      ) {
+        message = last.errorMessage ?? last.stopReason;
+      }
+    } catch (error) {
+      message = (error as Error).message;
+    }
+    if (message === undefined) return { ok: true };
+    const added = this.agent.state.messages.slice(before);
+    const acted = added.some((m) => m.role === "toolResult");
     this.agent.state.messages = this.agent.state.messages.slice(0, before);
-    this.host.audit("herder.error", { kind: job.kind, message });
-    if (!this.stopped) await this.host.say(this.host.texts.herderFailed(message));
     this.save();
+    return { ok: false, message, acted };
   }
 
   /** Guard list on every tool call (docs/spec/06-security.md). A hit blocks the call and tells the owner. */

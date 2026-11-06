@@ -11,8 +11,9 @@ import {
   getProviders,
   streamSimple,
 } from "@earendil-works/pi-ai/compat";
-import { Herder } from "./herder.ts";
+import { Herder, type HerderModel } from "./herder.ts";
 import type { TierPlacement } from "./model-guide.ts";
+import { fallbackOrder } from "./tools.ts";
 
 /** pi-ai providers that need more than one key (cloud credentials, OAuth or an account id). */
 const NOT_KEY_ONLY = new Set([
@@ -166,17 +167,58 @@ export function herderFromSettings(
   if (key === undefined && choice.service.kind === "builtin") {
     return { reason: `no key for service "${choice.service.id}"` };
   }
+  const ref = `${choice.service.id}/${choice.model}`;
   return {
-    ref: `${choice.service.id}/${choice.model}`,
+    ref,
     factory: (host) =>
       new Herder({
         host,
         model,
+        modelRef: ref,
         streamFn: streamSimple,
         getApiKey: () => key ?? "none",
+        fallbacks: () => herderFallbacks(settings, secrets, ref, modelTiers?.(), env),
         ...(modelTiers === undefined ? {} : { modelTiers }),
       }),
   };
+}
+
+/**
+ * Models the Herder can switch to when its own keeps failing (ADR 0037), in the order tasks use:
+ * the same model on other services, then its tier, then the other tiers. Models without a key are
+ * left out.
+ */
+export function herderFallbacks(
+  settings: ModelSettings,
+  secrets: SecretStore,
+  current: string,
+  tiers?: TierPlacement,
+  env?: Record<string, string>,
+): HerderModel[] {
+  const all = settings.services.flatMap((s) =>
+    s.models.map((m) => ({ ref: `${s.id}/${m}`, agents: ["herder"], service: s, model: m })),
+  );
+  let order: string[];
+  try {
+    order = fallbackOrder(all, current, "herder", tiers);
+  } catch {
+    order = all.map((m) => m.ref);
+  }
+  for (const m of all) if (!order.includes(m.ref)) order.push(m.ref);
+  const out: HerderModel[] = [];
+  for (const ref of order) {
+    if (ref === current) continue;
+    const entry = all.find((m) => m.ref === ref);
+    if (entry === undefined) continue;
+    const key = serviceKey(entry.service, secrets, env);
+    if (key === undefined && entry.service.kind === "builtin") continue;
+    try {
+      out.push({ ref, model: resolveModel(entry.service, entry.model), apiKey: key ?? "none" });
+    } catch {
+      // A model pi-ai cannot resolve is skipped.
+    }
+  }
+  return out;
 }
 
 /** Env names the Pi bridge reads (packages/pi-acp/extension/model.ts). */

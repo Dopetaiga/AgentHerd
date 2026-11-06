@@ -16,8 +16,15 @@ import {
   openTasks,
   type RunResult,
   say,
+  send,
 } from "./herd-context.ts";
-import type { HerderFactory, HerderHost, HerderPort, OwnerImage } from "./herder-port.ts";
+import {
+  HERDER_RETRY_TARGET,
+  type HerderFactory,
+  type HerderHost,
+  type HerderPort,
+  type OwnerImage,
+} from "./herder-port.ts";
 import { Inbox } from "./inbox.ts";
 import { OwnerCommands } from "./owner-commands.ts";
 import { Registry } from "./registry.ts";
@@ -157,6 +164,18 @@ export class Herd {
       endRelay: () => this.relays.end("ended by the Herder"),
       say: (text) => say(this.ctx, text),
       ask: (text, options) => this.owner.ask(text, options),
+      alert: (text, retry) =>
+        send(this.ctx, {
+          kind: "text",
+          text,
+          tone: "error",
+          ...(retry
+            ? {
+                target: HERDER_RETRY_TARGET,
+                options: [{ action: "retry", label: this.texts.retry }],
+              }
+            : {}),
+        }),
       audit: (type, data) => this.store.audit(type, data),
       recordTurn: (role, text, taskId) => this.store.addHerderTurn(role, text, taskId),
       getState: (key) => this.store.getState(key),

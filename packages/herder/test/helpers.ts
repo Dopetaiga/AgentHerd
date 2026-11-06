@@ -20,6 +20,7 @@ export interface Recorded {
   relays: string[];
   audits: { type: string; data: Record<string, unknown> }[];
   turns: { role: string; text: string }[];
+  alerts: { text: string; retry: boolean }[];
   state: Map<string, unknown>;
 }
 
@@ -59,6 +60,7 @@ export function fakeHost(
     relays: [],
     audits: [],
     turns: [],
+    alerts: [],
     state: new Map(),
   };
   const tasks = opts.tasks ?? [];
@@ -96,6 +98,7 @@ export function fakeHost(
     startRelay: async (taskId) => void rec.relays.push(taskId),
     endRelay: async () => void rec.relays.push("end"),
     say: async (text) => void rec.said.push(text),
+    alert: async (text, retry) => void rec.alerts.push({ text, retry }),
     ask: async (text, options) => void rec.asked.push({ text, options }),
     audit: (type, data) => void rec.audits.push({ type, data }),
     recordTurn: (role, text) => void rec.turns.push({ role, text }),
