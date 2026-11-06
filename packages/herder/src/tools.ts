@@ -38,19 +38,47 @@ export function otherOption(locale: string): string {
   return locale === "en" ? "Other" : "其他";
 }
 
-const PATH_RE = /(?:^|[\s"'`(（「:：])((?:~|\/)[^\s"'`)）」，。；;,!?！？]*)/g;
+// `~`, `/` or a Windows drive (`C:\`) starts a path; it ends at whitespace or punctuation.
+const PATH_RE = /(?:^|[\s"'`(（「：])((?:~|\/|[A-Za-z]:[\\/])[^\s"'`)）」，。；;,!?！？]*)/g;
+
+function homePath(raw: string): boolean {
+  return raw === "~" || raw.startsWith("~/") || raw.startsWith("~\\");
+}
 
 /** Absolute and `~/` paths in the owner's words, resolved. */
 export function pathsIn(text: string, home: string): string[] {
   const out: string[] = [];
   for (const m of text.matchAll(PATH_RE)) {
     const raw = (m[1] ?? "").replace(/[.:：]+$/, "");
-    if (raw === "" || raw === "/") continue;
-    const dir =
-      raw === "~" || raw.startsWith("~/") ? resolve(join(home, raw.slice(1))) : resolve(raw);
+    if (raw === "" || raw === "/" || !(homePath(raw) || isAbsolute(raw))) continue;
+    const dir = homePath(raw) ? resolve(join(home, raw.slice(1))) : resolve(raw);
     if (!out.includes(dir)) out.push(dir);
   }
   return out;
+}
+
+/**
+ * The folders an answer to `ask` picks: the whole answer when it is one path (a button can
+ * hold a path with spaces, like `项目 2`), and the paths in it.
+ */
+export function pathsInAnswer(answer: string, home: string): string[] {
+  const whole = answer.trim();
+  const out = homePath(whole)
+    ? [resolve(join(home, whole.slice(1)))]
+    : isAbsolute(whole)
+      ? [resolve(whole)]
+      : [];
+  for (const p of pathsIn(answer, home)) if (!out.includes(p)) out.push(p);
+  return out;
+}
+
+/** Same folder; Windows and macOS paths ignore case. */
+export function samePath(
+  a: string,
+  b: string,
+  platform: NodeJS.Platform = process.platform,
+): boolean {
+  return platform === "linux" ? a === b : a.toLowerCase() === b.toLowerCase();
 }
 
 function ok(text: string): AgentToolResult<undefined> {
@@ -79,7 +107,7 @@ export function findTasks(tasks: Task[], query: string): Task[] {
 /** A directory from an absolute path or `~/path`. Names go through project_find and the owner. */
 export function resolveProject(host: HerderHost, project: string): string {
   const p = project.trim();
-  if (p === "~" || p.startsWith("~/")) return resolve(join(host.userHome, p.slice(1)));
+  if (homePath(p)) return resolve(join(host.userHome, p.slice(1)));
   if (isAbsolute(p)) return resolve(p);
   throw new Error(
     `"${p}" is not a path; call project_find with the name and ask the owner to pick the folder`,
@@ -253,7 +281,7 @@ export function herderTools(
         const model = picked?.ref;
         const profile = named ?? agentForModel(model, ids);
         const cwd = resolveProject(host, args.project);
-        if (!t.pickedDirs.includes(cwd)) {
+        if (!t.pickedDirs.some((d) => samePath(d, cwd))) {
           throw new Error(
             `the owner did not pick ${cwd} in this message; call project_find and ask the owner to pick the folder`,
           );

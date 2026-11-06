@@ -34,6 +34,10 @@ Rules:
 - Code check in `session_start`: `cwd` must be a folder the owner typed in this turn or picked by
   a button in this turn (`TurnContext.pickedDirs`). Anything else is rejected with "ask the owner
   with project_find + ask". Recent folders are no longer offered as guesses.
+  - A typed folder is an absolute path (`/…`, or `C:\…` / `C:/…` on Windows) or `~/…` (`~\…`);
+    it ends at whitespace or punctuation.
+  - A button answer that is one path counts as a whole, spaces included (`…\项目 2`).
+  - Windows and macOS compare folders ignoring case.
 
 ## 2. Memory
 

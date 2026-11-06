@@ -15,7 +15,14 @@ import {
   ownerMessagePrompt,
   systemPrompt,
 } from "./prompt.ts";
-import { herderTools, otherOption, pathsIn, resolveProject, type TurnContext } from "./tools.ts";
+import {
+  herderTools,
+  otherOption,
+  pathsIn,
+  pathsInAnswer,
+  resolveProject,
+  type TurnContext,
+} from "./tools.ts";
 
 export const HERDER_STATE_KEY = "herder.messages";
 export const MAX_SAVED_MESSAGES = 200;
@@ -234,7 +241,10 @@ export class Herder implements HerderPort {
         asked: false,
         notified: false,
         // A picked button is a folder the owner chose; their earlier words may name one too.
-        pickedDirs: pathsIn(`${this.lastOwnerText}\n ${job.answer}`, this.host.userHome),
+        pickedDirs: [
+          ...pathsInAnswer(job.answer, this.host.userHome),
+          ...pathsIn(this.lastOwnerText, this.host.userHome),
+        ],
       };
       if (!job.recorded) this.host.recordTurn("answer", job.answer);
       prompt = ownerAnswerPrompt(
