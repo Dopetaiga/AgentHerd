@@ -11,6 +11,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   builtinProviders,
   CUSTOM_CONTEXT_WINDOW,
+  herderFallbacks,
   herderFromSettings,
   knownInput,
   PI_KEY_ENV,
@@ -163,6 +164,29 @@ describe("herderFromSettings", () => {
     expect(herderFromSettings(s, secrets({ "model:deepseek": "k" }), {})).toMatchObject({
       ref: "deepseek/deepseek-flash",
     });
+  });
+});
+
+describe("herderFallbacks", () => {
+  it("lists the other models with a key, the current one left out", () => {
+    const relay: ModelService = {
+      id: "relay",
+      name: "Relay",
+      kind: "openai-compatible",
+      baseUrl: "https://relay.example/v1",
+      models: ["deepseek-flash", "glm-5"],
+    };
+    let s = putService(putService(emptyModelSettings(), deepseek), relay);
+    s = chooseModel(s, "herder", { serviceId: "deepseek", model: "deepseek-flash" });
+    const keys = secrets({ "model:relay": "k" });
+    const refs = herderFallbacks(s, keys, "deepseek/deepseek-flash").map((m) => m.ref);
+    expect(refs[0]).toBe("relay/deepseek-flash");
+    expect(refs).toContain("relay/glm-5");
+    expect(refs).not.toContain("deepseek/deepseek-flash");
+    // Without a key a built-in service is skipped.
+    expect(herderFallbacks(s, keys, "relay/glm-5").map((m) => m.ref)).not.toContain(
+      "deepseek/deepseek-flash",
+    );
   });
 });
 

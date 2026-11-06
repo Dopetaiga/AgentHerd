@@ -7,6 +7,7 @@ import type { AskView, Inbound, InboundFile, InboundImage, MessageRef } from "@a
 import { parseCommand } from "./commands.ts";
 import { type HerdContext, openTasks, say, type TaskOps } from "./herd-context.ts";
 import type { OwnerImage } from "./herder-port.ts";
+import { HERDER_RETRY_TARGET } from "./herder-port.ts";
 import type { Relay } from "./relay.ts";
 import type { Task } from "./tasks.ts";
 import { taskTitle } from "./tasks.ts";
@@ -37,6 +38,7 @@ export class OwnerCommands {
       if (inbound.kind === "action") {
         if (this.asks.has(inbound.target))
           return await this.onAskAnswer(inbound.target, inbound.action);
+        if (inbound.target === HERDER_RETRY_TARGET) return ctx.herder()?.retry?.();
         if (inbound.action === "relay") return await this.relay.start(inbound.target);
         if (inbound.action === "end-relay") return await this.relay.end("ended by you");
         await ctx.inbox.handle(inbound);

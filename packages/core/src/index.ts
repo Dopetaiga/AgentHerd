@@ -14,6 +14,7 @@ export type {
   HerderTurnRole,
   OwnerImage,
 } from "./herder-port.ts";
+export { HERDER_RETRY_TARGET } from "./herder-port.ts";
 export type { Answerable, InboxOptions, OwnerAnswer } from "./inbox.ts";
 export { BODY_MAX_LINES, DEFAULT_REMIND_MINUTES, Inbox, itemBody, itemView } from "./inbox.ts";
 export {

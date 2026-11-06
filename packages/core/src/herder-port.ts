@@ -59,6 +59,8 @@ export interface HerderHost {
   startRelay(taskId: string): Promise<void>;
   endRelay(): Promise<void>;
   say(text: string): Promise<void>;
+  /** A red card from the Herder (ADR 0037); `retry` adds a 「重试」 button that calls {@link HerderPort.retry}. */
+  alert(text: string, retry: boolean): Promise<void>;
   ask(text: string, options: string[]): Promise<void>;
   audit(type: string, data: Record<string, unknown>): void;
   /** Keeps a line of the Herder's conversation with the owner (`herder_turns`). */
@@ -67,12 +69,17 @@ export interface HerderHost {
   setState(key: string, value: unknown): void;
 }
 
+/** Card action target of the 「重试」 button on a held Herder message. */
+export const HERDER_RETRY_TARGET = "herder";
+
 /** Calls return at once; the Herder works through them one at a time. */
 export interface HerderPort {
   /** `text` may be empty when the owner sent only images. */
   ownerMessage(text: string, images?: OwnerImage[]): void;
   ownerAnswer(question: string, answer: string): void;
   event(event: HerderEvent): void;
+  /** Runs a message held after every model failed (the owner tapped 「重试」). */
+  retry?(): void;
   stop(): Promise<void>;
 }
 
