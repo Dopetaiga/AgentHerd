@@ -331,6 +331,17 @@ export async function pastLessons(
   }
 }
 
+/**
+ * What the owner asked for in lasting words (kind owner), for a new task's prompt: the agent writes
+ * the reply the owner reads, so "以后汇报最多三句话" must reach it too. Empty when none.
+ */
+export function ownerPrefsText(memory: MemoryStore | undefined): string {
+  if (memory === undefined) return "";
+  const rows = memory.list({ kinds: ["owner"] }).reverse();
+  if (rows.length === 0) return "";
+  return `主人说过的长期要求（主管记下的，可能已过时；和这次的话冲突时以这次为准）：\n${rows.map((r) => `- ${r.abstract}`).join("\n")}`;
+}
+
 /** Lessons as text for the task prompt's added context. */
 export function lessonsText(rows: readonly MemoryRow[]): string {
   if (rows.length === 0) return "";

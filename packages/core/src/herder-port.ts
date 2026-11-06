@@ -57,6 +57,8 @@ export interface HerderHost {
   /** A new short name for a task, when its work changed. */
   renameTask(taskId: string, name: string): void;
   cancelTurn(taskId: string): Promise<void>;
+  /** Closes a task for good because the owner said it is finished. */
+  endTask(taskId: string): Promise<void>;
   startRelay(taskId: string): Promise<void>;
   endRelay(): Promise<void>;
   say(text: string): Promise<void>;

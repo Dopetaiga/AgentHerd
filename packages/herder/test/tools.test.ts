@@ -86,6 +86,7 @@ describe("tools", () => {
       "relay_end",
       "relay_start",
       "session_cancel",
+      "session_end",
       "session_list",
       "session_prompt",
       "session_start",
@@ -303,7 +304,18 @@ describe("tools", () => {
     const event = tools({ kind: "event" }, opts);
     await expect(event.call("session_prompt", { task: "aaaa", text: "go" })).rejects.toThrow();
     await expect(event.call("session_cancel", { task: "aaaa" })).rejects.toThrow();
+    await expect(event.call("session_end", { task: "aaaa" })).rejects.toThrow();
     await expect(event.call("relay_start", { task: "aaaa" })).rejects.toThrow();
+  });
+
+  it("session_end closes the task the owner says is finished", async () => {
+    const { call, rec } = tools(
+      { ownerText: "这个任务可以结束了" },
+      { tasks: [task("aaaa1111", "修构建")] },
+    );
+    await call("session_end", { task: "aaaa" });
+    expect(rec.ended).toEqual(["aaaa1111"]);
+    expect(rec.cancelled).toEqual([]);
   });
 
   it("session_prompt with a name renames the task", async () => {

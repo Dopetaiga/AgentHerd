@@ -15,3 +15,22 @@ export const RETRY_DELAYS_MS = [2_000, 10_000, 30_000];
 
 /** How often a message held because every model failed is tried again. */
 export const HELD_RETRY_MS = 60_000;
+
+/** Longest reason shown on a card. */
+export const REASON_MAX_CHARS = 160;
+
+/**
+ * A provider error made readable for a card: the status code plus the API's own message instead
+ * of the whole JSON body, cut to {@link REASON_MAX_CHARS}.
+ */
+export function shortError(message: string): string {
+  const status = /^\s*(\d{3})\b/.exec(message)?.[1];
+  const inner = /"message"\s*:\s*"((?:[^"\\]|\\.)*)"/.exec(message)?.[1];
+  let text = inner === undefined ? message : inner.replace(/\\(.)/g, "$1");
+  text = text
+    .replace(/\s*\(request_id:[^)]*\)/i, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (status !== undefined && !text.startsWith(status)) text = `${status} ${text}`;
+  return text.length > REASON_MAX_CHARS ? `${text.slice(0, REASON_MAX_CHARS - 1)}…` : text;
+}

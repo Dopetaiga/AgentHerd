@@ -1,6 +1,6 @@
 import { type Embedder, Store } from "@agentherd/core";
 import { describe, expect, it } from "vitest";
-import { lessonsText, pastLessons } from "../src/memory.ts";
+import { lessonsText, ownerPrefsText, pastLessons } from "../src/memory.ts";
 import { MemoryWorker } from "../src/memory-jobs.ts";
 
 const task = { actor: "task", source: "task" } as const;
@@ -104,5 +104,24 @@ describe("pastLessons", () => {
     const picked = await pastLessons(store.memory, "补测试", undefined, async () => '{"ids": []}');
     expect(picked).toEqual([]);
     expect(lessonsText(picked)).toBe("");
+  });
+});
+
+describe("ownerPrefsText", () => {
+  it("gives a new task what the owner asked for in lasting words", () => {
+    const store = Store.open(":memory:");
+    expect(ownerPrefsText(store.memory)).toBe("");
+    store.memory.write(
+      [{ op: "add", kind: "owner", abstract: "汇报用中文，最多三句话", scope: "global" }],
+      { actor: "herder", source: "said" },
+    );
+    store.memory.write([{ op: "add", kind: "note", abstract: "DSH 只在本机有", scope: "global" }], {
+      actor: "herder",
+      source: "said",
+    });
+    const text = ownerPrefsText(store.memory);
+    expect(text).toContain("- 汇报用中文，最多三句话");
+    expect(text).not.toContain("DSH");
+    expect(ownerPrefsText(undefined)).toBe("");
   });
 });

@@ -7,7 +7,7 @@ import type { HerderHost, OwnerImage, Task } from "@agentherd/core";
 import type { AgentTool, AgentToolResult } from "@agentherd/herder-loop";
 import { arr, obj, opt, str } from "@earendil-works/pi-schema";
 import { agentForModel } from "./agent-models.ts";
-import { lessonsText, pastLessons } from "./memory.ts";
+import { lessonsText, ownerPrefsText, pastLessons } from "./memory.ts";
 import { TIERS, type TierPlacement, tiersText } from "./model-guide.ts";
 import { findProjects, foundText } from "./project-find.ts";
 import { composeTaskPrompt, HERDER_LABEL } from "./prompt.ts";
@@ -170,6 +170,7 @@ export function herderTools(
           ...(tasks.length === 0
             ? ["(none)"]
             : tasks.map((t) => `${taskLine(t)}${open.has(t.id) ? "" : " (ended)"}`)),
+          "(Only tasks since AgentHerd last started. Earlier ones ended when it stopped; what they found is kept as cases in memory (memory_search).)",
           `Agents: AgentHerd picks one from the model (GPT models run in Codex, the rest in Pi). Installed: ${host
             .profiles()
             .map((p) => `${p.id} (${p.name})`)
@@ -241,7 +242,11 @@ export function herderTools(
                 host.embedder,
                 host.memoryComplete,
               );
-        const added = [args.addedContext?.trim() ?? "", lessonsText(lessons)]
+        const added = [
+          args.addedContext?.trim() ?? "",
+          ownerPrefsText(host.memory),
+          lessonsText(lessons),
+        ]
           .filter((s) => s !== "")
           .join("\n\n");
         const prompt = composeTaskPrompt(args.ownerText.trim(), added === "" ? undefined : added);
@@ -297,6 +302,19 @@ export function herderTools(
         const task = oneTask(host, args.task);
         await host.cancelTurn(task.id);
         return ok(`cancelled the turn of ${task.id.slice(0, 8)}`);
+      },
+    },
+    {
+      name: "session_end",
+      label: "End a task",
+      description:
+        'Closes a task for good when the owner says it is finished or no longer wanted ("可以结束了", "不用了"). The agent stops and the task leaves the board. To stop only what it is doing now, use session_cancel.',
+      parameters: taskSchema,
+      execute: async (_id: string, args: { task: string }) => {
+        if (turn().kind === "event") throw new Error("only the owner can end a task");
+        const task = oneTask(host, args.task);
+        await host.endTask(task.id);
+        return ok(`ended ${task.id.slice(0, 8)}`);
       },
     },
     {

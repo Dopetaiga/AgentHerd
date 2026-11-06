@@ -160,6 +160,7 @@ export class Herd {
         void this.promptTask(taskId, text, images).catch(() => {}),
       renameTask: (taskId, name) => this.runner.renameTask(taskId, name),
       cancelTurn: (taskId) => this.cancelTurn(taskId),
+      endTask: (taskId) => this.endTask(taskId, this.texts.endedByOwner),
       startRelay: (taskId) => this.relays.start(taskId),
       endRelay: () => this.relays.end("ended by the Herder"),
       say: (text) => say(this.ctx, text),
