@@ -7,7 +7,7 @@ describe("renderCard report", () => {
   it("uses green for result done", () => {
     expect(renderCard(makeReport({ result: "done" }), "en").header).toMatchObject({
       template: "green",
-      title: { tag: "plain_text", content: "Daily summary" },
+      title: { tag: "plain_text", content: "✅ Daily summary" },
     });
   });
 

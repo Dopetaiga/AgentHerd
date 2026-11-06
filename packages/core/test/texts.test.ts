@@ -73,7 +73,8 @@ describe("core texts", () => {
       coreTexts("zh-CN"),
     );
     expect(view.result).toBe("blocked");
-    expect(view.title).toBe("受阻：写笔记 · notes · dsh · 40s");
+    expect(view.title).toBe("写笔记");
+    expect(view.subtitle).toBe("受阻 · notes · dsh · 40s");
   });
 
   it("agent prompts stay labeled as AgentHerd", () => {

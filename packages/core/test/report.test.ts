@@ -129,12 +129,13 @@ describe("reportView", () => {
 
   it("builds a Done title with project, agent, and duration", () => {
     const view = reportView(task(), body, now);
-    expect(view.title).toBe("Done: T · P · A · 40s");
+    expect(view.title).toBe("T");
+    expect(view.subtitle).toBe("Done · P · A · 40s");
   });
 
   it("builds a Failed title for a failed stage", () => {
     const view = reportView(task({ stage: "failed" }), body, now);
-    expect(view.title).toBe("Failed: T · P · A · 40s");
+    expect(view.subtitle).toBe("Failed · P · A · 40s");
   });
 
   it("copies the automatic decisions", () => {

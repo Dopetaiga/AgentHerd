@@ -7,7 +7,7 @@ import type { Task } from "./tasks.ts";
 import { CORE_TEXTS, type CoreTexts } from "./texts.ts";
 
 /** Default `reportMaxChars`. */
-export const REPORT_MAX_CHARS = 600;
+export const REPORT_MAX_CHARS = 400;
 
 /** Default `replyHintChars`. */
 export const REPLY_HINT_CHARS = 300;
@@ -95,7 +95,8 @@ export function reportView(
     kind: "report",
     taskId: task.id,
     result,
-    title: `${texts.result[result]}${texts.titleSep}${task.title} · ${task.project} · ${task.agent} · ${duration}`,
+    title: task.title,
+    subtitle: `${texts.result[result]} · ${task.project} · ${task.agent} · ${duration}`,
     body: body.body,
     summarized: body.summarized,
     automaticDecisions: [...task.automaticDecisions],

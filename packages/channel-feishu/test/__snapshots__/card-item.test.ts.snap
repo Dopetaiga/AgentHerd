@@ -5,7 +5,7 @@ exports[`renderCard > renders a final item card 1`] = `
   "body": {
     "elements": [
       {
-        "content": "**Fix the build**",
+        "content": "**Run \`npm install\`?**",
         "tag": "markdown",
       },
       {
@@ -40,7 +40,7 @@ Install dependencies in /repo
       },
     ],
     "title": {
-      "content": "Run \`npm install\`?",
+      "content": "⚠️ Needs your OK · Fix the build",
       "tag": "plain_text",
     },
   },
@@ -53,7 +53,7 @@ exports[`renderCard > renders a high-risk item card 1`] = `
   "body": {
     "elements": [
       {
-        "content": "**Fix the build**",
+        "content": "**Run \`npm install\`?**",
         "tag": "markdown",
       },
       {
@@ -100,7 +100,7 @@ Install dependencies in /repo
     "update_multi": true,
   },
   "header": {
-    "template": "red",
+    "template": "orange",
     "text_tag_list": [
       {
         "color": "red",
@@ -112,7 +112,7 @@ Install dependencies in /repo
       },
     ],
     "title": {
-      "content": "Run \`npm install\`?",
+      "content": "⚠️ Needs your OK · Fix the build",
       "tag": "plain_text",
     },
   },
@@ -125,10 +125,6 @@ exports[`renderCard > renders a text view 1`] = `
   "body": {
     "elements": [
       {
-        "content": "**Build**",
-        "tag": "markdown",
-      },
-      {
         "content": "hello world",
         "tag": "markdown",
       },
@@ -136,6 +132,13 @@ exports[`renderCard > renders a text view 1`] = `
   },
   "config": {
     "update_multi": true,
+  },
+  "header": {
+    "template": "blue",
+    "title": {
+      "content": "⏳ Build",
+      "tag": "plain_text",
+    },
   },
   "schema": "2.0",
 }
@@ -146,7 +149,7 @@ exports[`renderCard > renders an allow/deny item card 1`] = `
   "body": {
     "elements": [
       {
-        "content": "**Fix the build**",
+        "content": "**Run \`npm install\`?**",
         "tag": "markdown",
       },
       {
@@ -228,7 +231,7 @@ Install dependencies in /repo
       },
     ],
     "title": {
-      "content": "Run \`npm install\`?",
+      "content": "⚠️ Needs your OK · Fix the build",
       "tag": "plain_text",
     },
   },

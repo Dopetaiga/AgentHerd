@@ -4,6 +4,7 @@ import type {
   ReportResult,
   Risk,
   Stage,
+  TextTone,
   TextView,
   View,
 } from "@agentherd/protocol";
@@ -149,7 +150,34 @@ function reportTemplate(result: ReportResult): string {
 }
 
 /** Maximum body length shown before a report body is folded. */
-export const FOLD_CHARS = 600;
+export const FOLD_CHARS = 400;
+
+const REPORT_ICON: Record<ReportResult, string> = {
+  done: "✅",
+  failed: "❌",
+  blocked: "⚠️",
+  stopped: "⏹",
+};
+
+const TONE: Record<TextTone, { icon: string; template: string }> = {
+  progress: { icon: "⏳", template: "blue" },
+  alarm: { icon: "⚠️", template: "orange" },
+  error: { icon: "❌", template: "red" },
+};
+
+/**
+ * A text's header (ADR 0036): none for the Herder talking; a task's message gets its name with an
+ * icon and colour by tone (blue by default); an error without a task gets a red header.
+ */
+function textHeader(view: TextView, t: CardTexts): Record<string, unknown> | undefined {
+  if (view.taskLabel === undefined && view.tone === undefined) return undefined;
+  const tone = TONE[view.tone ?? "progress"];
+  const title =
+    view.taskLabel !== undefined
+      ? `${tone.icon} ${view.taskLabel}`
+      : (view.title ?? (view.tone === "error" ? t.errorHeader : tone.icon));
+  return { title: { tag: "plain_text", content: title }, template: tone.template };
+}
 
 /** Shorten a long body, cutting at the last newline after position 200 when possible. */
 function foldBody(body: string): string {
@@ -176,10 +204,7 @@ export function renderCard(view: View, locale: Locale = DEFAULT_LOCALE): Record<
   const t = CARD_TEXTS[locale];
   switch (view.kind) {
     case "item": {
-      const elements: Record<string, unknown>[] = [];
-      if (view.taskLabel !== undefined) {
-        elements.push(markdown(`**${view.taskLabel}**`));
-      }
+      const elements: Record<string, unknown>[] = [markdown(`**${view.title}**`)];
       elements.push(markdown(`\`\`\`\n${escapeCodeFence(view.body)}\n\`\`\``));
       if (view.reason !== undefined) {
         elements.push(markdown(`${t.reasonPrefix}<font color='grey'>${view.reason}</font>`));
@@ -198,9 +223,9 @@ export function renderCard(view: View, locale: Locale = DEFAULT_LOCALE): Record<
       }
       return makeCard(
         itemHeader(
-          view.title,
+          t.itemHeader(view.taskLabel),
           view.risk,
-          view.final !== undefined ? "grey" : riskTemplate(view.risk),
+          view.final !== undefined ? "grey" : "orange",
           t,
         ),
         elements,
@@ -208,16 +233,16 @@ export function renderCard(view: View, locale: Locale = DEFAULT_LOCALE): Record<
     }
     case "text": {
       const elements: Record<string, unknown>[] = [];
-      if (view.taskLabel !== undefined) {
-        elements.push(markdown(`**${view.taskLabel}**`));
-      }
       if (view.text.length <= FOLD_CHARS) {
         elements.push(markdown(view.text));
       } else {
         elements.push(markdown(`${foldBody(view.text)}…`));
         elements.push(collapsiblePanel(t.showAll, view.text));
       }
-      return makeCard(undefined, elements);
+      if (view.options !== undefined && view.target !== undefined) {
+        for (const o of view.options) elements.push(actionRow(view.target, o.action, o.label));
+      }
+      return makeCard(textHeader(view, t), elements);
     }
     case "board": {
       const header = { title: { tag: "plain_text", content: t.boardHeader }, template: "blue" };
@@ -277,19 +302,26 @@ export function renderCard(view: View, locale: Locale = DEFAULT_LOCALE): Record<
         );
       }
       elements.push(actionRow(view.taskId, "relay", t.relayToTask));
-      return makeCard(
-        {
-          title: { tag: "plain_text", content: view.title },
-          template: reportTemplate(view.result),
-        },
-        elements,
-      );
+      const header: Record<string, unknown> = {
+        title: { tag: "plain_text", content: `${REPORT_ICON[view.result]} ${view.title}` },
+        template: reportTemplate(view.result),
+      };
+      if (view.subtitle !== undefined) {
+        header.subtitle = { tag: "plain_text", content: view.subtitle };
+      }
+      return makeCard(header, elements);
     }
     case "ask": {
       const elements: Record<string, unknown>[] = [markdown(view.text)];
       if (view.final !== undefined) elements.push(markdown(t.askAnswered(view.final)));
       else for (const o of view.options) elements.push(actionRow(view.askId, o.action, o.label));
-      return makeCard(undefined, elements);
+      return makeCard(
+        {
+          title: { tag: "plain_text", content: t.askHeader },
+          template: view.final !== undefined ? "grey" : "purple",
+        },
+        elements,
+      );
     }
     case "relay": {
       const elements: Record<string, unknown>[] = [];

@@ -7,6 +7,8 @@ import type {
   ChannelBinding,
   Locale,
   Mode,
+  TextTone,
+  TextView,
   View,
 } from "@agentherd/protocol";
 import type { ExtraGuard } from "@agentherd/rules";
@@ -99,8 +101,6 @@ export interface Following {
   /** Prompts waiting for the current turn to end. */
   queue: QueuedPrompt[];
   busy: boolean;
-  /** The reply hint goes only with the first prompt. */
-  hinted: boolean;
   idleTimer?: Timer;
 }
 
@@ -164,11 +164,16 @@ export function openTasks(ctx: HerdContext): Task[] {
   return allTasks(ctx).filter((t) => ctx.following.get(t.id)?.ended === false);
 }
 
-export async function say(ctx: HerdContext, text: string, taskLabel?: string): Promise<void> {
-  await send(
-    ctx,
-    taskLabel === undefined ? { kind: "text", text } : { kind: "text", text, taskLabel },
-  );
+export async function say(
+  ctx: HerdContext,
+  text: string,
+  taskLabel?: string,
+  tone?: TextTone,
+): Promise<void> {
+  const view: TextView = { kind: "text", text };
+  if (taskLabel !== undefined) view.taskLabel = taskLabel;
+  if (tone !== undefined) view.tone = tone;
+  await send(ctx, view);
 }
 
 /** Sends a view; a failure is audited, never thrown. */

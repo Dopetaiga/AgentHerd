@@ -85,7 +85,8 @@ describe("E2E-RUN-COMMAND", () => {
     await channel.say(`/run mock ${dir} Fix the build\nsecond line`);
     await until(() => reports(channel).length === 1);
     expect(reports(channel)[0]?.body).toBe("first done");
-    expect(reports(channel)[0]?.title).toMatch(/^已完成：Fix the build/);
+    expect(reports(channel)[0]?.title).toBe("Fix the build");
+    expect(reports(channel)[0]?.subtitle).toMatch(/^已完成 · /);
     expect(herd.openTasks()).toHaveLength(1);
   });
 
