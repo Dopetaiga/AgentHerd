@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // A fake `pi --mode rpc` for tests. It loads the real gate extension (`-e <path>`) and plays
 // FAKE_PI (JSON): { calls: [{ toolName, input }], reply, error?, startFail? }.
-// Each prompt runs every call through the gate, then replies.
+// Each prompt runs every call through the gate, then replies. "{images}" in the reply becomes
+// the mime types of the images the prompt carried.
 
 import { pathToFileURL } from "node:url";
 import { type GateApi, LineSplitter } from "../src/index.ts";
@@ -22,6 +23,7 @@ const write = (r: object) => process.stdout.write(`${JSON.stringify(r)}\n`);
 const ext = process.argv[process.argv.indexOf("-e") + 1] ?? "";
 const answers = new Map<string, (r: Record<string, unknown>) => void>();
 let nextUi = 1;
+let images: { mimeType: string }[] = [];
 let aborted = false;
 let abortRun: (() => void) | undefined;
 
@@ -78,7 +80,10 @@ async function run(): Promise<void> {
   } else {
     write({
       type: "message_update",
-      assistantMessageEvent: { type: "text_delta", delta: plan.reply },
+      assistantMessageEvent: {
+        type: "text_delta",
+        delta: plan.reply.replace("{images}", images.map((i) => i.mimeType).join(",")),
+      },
     });
     write({ type: "message_end", message: { role: "assistant", stopReason: "stop" } });
   }
@@ -97,6 +102,7 @@ process.stdin.on("data", (chunk: Buffer) =>
         respond({ isStreaming: false });
         break;
       case "prompt":
+        images = (r.images as { mimeType: string }[] | undefined) ?? [];
         respond({ disposition: "started" });
         void run();
         break;

@@ -11,6 +11,7 @@ export {
   CLOSE_GRACE_MS,
   type ExitEvent,
   type PermissionRequest,
+  type PromptImage,
   type SessionUpdateEvent,
   STDERR_LINES,
   type StartOptions,

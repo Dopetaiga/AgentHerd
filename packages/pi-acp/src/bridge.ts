@@ -189,7 +189,7 @@ export function createPiBridge(opts: BridgeOptions): AgentApp & { closeAll(): Pr
   const app = agent({ name: BRIDGE_NAME })
     .onRequest(methods.agent.initialize, () => ({
       protocolVersion: PROTOCOL_VERSION,
-      agentCapabilities: { loadSession: false },
+      agentCapabilities: { loadSession: false, promptCapabilities: { image: true } },
       agentInfo: { name: BRIDGE_NAME, version: "0.0.0" },
       authMethods: [],
     }))
@@ -208,7 +208,16 @@ export function createPiBridge(opts: BridgeOptions): AgentApp & { closeAll(): Pr
       const result = new Promise<{ stopReason: StopReason } | Error>((resolve) => {
         s.turn = { client, done: resolve };
       });
-      const accepted = await s.pi.request({ type: "prompt", message: text });
+      const images = params.prompt.flatMap((block) =>
+        block.type === "image"
+          ? [{ type: "image" as const, data: block.data, mimeType: block.mimeType }]
+          : [],
+      );
+      const accepted = await s.pi.request({
+        type: "prompt",
+        message: text,
+        ...(images.length === 0 ? {} : { images }),
+      });
       if (
         !accepted.success ||
         (accepted.data as { disposition?: string })?.disposition === "handled"

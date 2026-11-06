@@ -6,8 +6,15 @@ import { CORE_TEXTS } from "@agentherd/core";
 export interface Recorded {
   said: string[];
   asked: { text: string; options: string[] }[];
-  started: { profileId: string; cwd: string; title: string; prompt: string; model?: string }[];
-  prompted: { taskId: string; text: string }[];
+  started: {
+    profileId: string;
+    cwd: string;
+    title: string;
+    prompt: string;
+    model?: string;
+    images?: string[];
+  }[];
+  prompted: { taskId: string; text: string; images?: string[] }[];
   renamed: { taskId: string; name: string }[];
   cancelled: string[];
   relays: string[];
@@ -66,17 +73,23 @@ export function fakeHost(
     models: () => opts.models ?? [],
     checkModel: async (ref) =>
       opts.failing?.includes(ref) ? { ok: false, message: "down" } : { ok: true },
-    startTask: async (profileId, cwd, title, prompt, model) => {
+    startTask: async (profileId, cwd, title, prompt, model, images) => {
       rec.started.push({
         profileId,
         cwd,
         title,
         prompt,
         ...(model === undefined ? {} : { model }),
+        ...(images === undefined ? {} : { images: images.map((i) => i.path) }),
       });
       return `task-${rec.started.length}-0000-0000`;
     },
-    promptTask: (taskId, text) => void rec.prompted.push({ taskId, text }),
+    promptTask: (taskId, text, images) =>
+      void rec.prompted.push({
+        taskId,
+        text,
+        ...(images === undefined ? {} : { images: images.map((i) => i.path) }),
+      }),
     renameTask: (taskId, name) => void rec.renamed.push({ taskId, name }),
     cancelTurn: async (taskId) => void rec.cancelled.push(taskId),
     startRelay: async (taskId) => void rec.relays.push(taskId),

@@ -42,6 +42,9 @@ flowchart TD
 | `/interrupt <text>` during a relay | Cancels the current turn, then sends the text | No |
 | `status` | Sends the board | No |
 
+Images in a message go the same way as its text; how the Herder and agents get them is in
+[05-channels.md §1](05-channels.md#1-channel-interface).
+
 ### What the Herder does with a direct message
 
 1. **Not a task** (a question about state, small talk): it answers from the store.

@@ -17,7 +17,7 @@ import {
   type RunResult,
   say,
 } from "./herd-context.ts";
-import type { HerderFactory, HerderHost, HerderPort } from "./herder-port.ts";
+import type { HerderFactory, HerderHost, HerderPort, OwnerImage } from "./herder-port.ts";
 import { Inbox } from "./inbox.ts";
 import { OwnerCommands } from "./owner-commands.ts";
 import { Registry } from "./registry.ts";
@@ -145,12 +145,13 @@ export class Herd {
       decisions: (limit) => this.store.recentDecisions(limit),
       models: () => this.opts.agentModels?.list() ?? [],
       checkModel: async (ref) => this.opts.agentModels?.check?.(ref) ?? { ok: true },
-      startTask: async (profileId, cwd, title, prompt, model) => {
-        const { taskId, turn } = await this.startTask(profileId, cwd, title, prompt, model);
+      startTask: async (profileId, cwd, title, prompt, model, images) => {
+        const { taskId, turn } = await this.startTask(profileId, cwd, title, prompt, model, images);
         turn.catch(() => {});
         return taskId;
       },
-      promptTask: (taskId, text) => void this.promptTask(taskId, text).catch(() => {}),
+      promptTask: (taskId, text, images) =>
+        void this.promptTask(taskId, text, images).catch(() => {}),
       renameTask: (taskId, name) => this.runner.renameTask(taskId, name),
       cancelTurn: (taskId) => this.cancelTurn(taskId),
       startRelay: (taskId) => this.relays.start(taskId),
@@ -225,18 +226,19 @@ export class Herd {
     ownerText: string,
     prompt: string = ownerText,
     model?: string,
+    images?: OwnerImage[],
   ): Promise<{ taskId: string; turn: Promise<RunResult> }> {
-    return this.runner.startTask(profileId, cwd, ownerText, prompt, model);
+    return this.runner.startTask(profileId, cwd, ownerText, prompt, model, images);
   }
 
   /** Sends a prompt to an open task. Queued while a turn runs; settles when its turn ends. */
-  promptTask(taskId: string, text: string): Promise<RunResult> {
-    return this.runner.promptTask(taskId, text);
+  promptTask(taskId: string, text: string, images?: OwnerImage[]): Promise<RunResult> {
+    return this.runner.promptTask(taskId, text, images);
   }
 
   /** Cancels the current turn of a task, then sends the text as the next prompt. */
-  interruptTask(taskId: string, text: string): Promise<RunResult> {
-    return this.runner.interruptTask(taskId, text);
+  interruptTask(taskId: string, text: string, images?: OwnerImage[]): Promise<RunResult> {
+    return this.runner.interruptTask(taskId, text, images);
   }
 
   /** Cancels the current turn of a task, if one is running. */

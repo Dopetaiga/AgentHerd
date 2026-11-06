@@ -44,11 +44,23 @@ export function parseCardAction(payload: unknown): Inbound | null {
   return { kind: "action", target, action: act, from: openId };
 }
 
+/** An owner message as Feishu sent it; images are still keys to download. */
+export interface FeishuMessage {
+  messageId: string;
+  text: string;
+  from: string;
+  replyTo?: { channelId: "feishu"; id: string };
+  imageKeys: string[];
+  /** File, audio and video messages: the key to download and the name to save it under. */
+  files: { key: string; name: string }[];
+}
+
 /**
- * Parse a Feishu `im.message.receive_v1` payload into an inbound owner message. Returns null
- * for non-p2p chats, non-text messages, non-user senders, bad JSON, or empty text.
+ * Parse a Feishu `im.message.receive_v1` payload: `text`, `image`, rich text (`post`, its
+ * text and images), and `file`, `audio` and `media` (video) messages as files. Returns null for non-p2p chats, other message types, non-user senders, bad
+ * JSON, or a message with neither text nor images.
  */
-export function parseMessage(payload: unknown): Inbound | null {
+export function parseFeishuMessage(payload: unknown): FeishuMessage | null {
   const data = eventRoot(payload);
   if (data === null) return null;
 
@@ -61,9 +73,7 @@ export function parseMessage(payload: unknown): Inbound | null {
   if (openId === null || openId === "") return null;
 
   const message = isRecord(data.message) ? data.message : null;
-  if (message === null || message.chat_type !== "p2p" || message.message_type !== "text") {
-    return null;
-  }
+  if (message === null || message.chat_type !== "p2p") return null;
   if (typeof message.content !== "string") return null;
 
   let content: unknown;
@@ -74,12 +84,93 @@ export function parseMessage(payload: unknown): Inbound | null {
   }
   if (!isRecord(content)) return null;
 
-  const text = typeof content.text === "string" ? content.text.trim() : null;
-  if (text === null || text === "") return null;
-
-  const parentId = typeof message.parent_id === "string" ? message.parent_id : null;
-  if (parentId !== null && parentId !== "") {
-    return { kind: "message", text, from: openId, replyTo: { channelId: "feishu", id: parentId } };
+  let text = "";
+  const imageKeys: string[] = [];
+  const files: { key: string; name: string }[] = [];
+  switch (message.message_type) {
+    case "text":
+      text = typeof content.text === "string" ? content.text.trim() : "";
+      break;
+    case "image":
+      if (typeof content.image_key === "string" && content.image_key !== "") {
+        imageKeys.push(content.image_key);
+      }
+      break;
+    case "post":
+      text = postText(postBody(content), imageKeys);
+      break;
+    case "file":
+    case "audio":
+    case "media": {
+      const key = content.file_key;
+      if (typeof key !== "string" || key === "") break;
+      const given = typeof content.file_name === "string" ? content.file_name : "";
+      const fallback = message.message_type === "audio" ? `${key}.opus` : key;
+      files.push({ key, name: given === "" ? fallback : given });
+      break;
+    }
+    default:
+      return null;
   }
-  return { kind: "message", text, from: openId };
+  if (text === "" && imageKeys.length === 0 && files.length === 0) return null;
+
+  const messageId = typeof message.message_id === "string" ? message.message_id : "";
+  const parsed: FeishuMessage = { messageId, text, from: openId, imageKeys, files };
+  const parentId = typeof message.parent_id === "string" ? message.parent_id : null;
+  if (parentId !== null && parentId !== "") parsed.replyTo = { channelId: "feishu", id: parentId };
+  return parsed;
+}
+
+/** A received post is `{title, content}`; a sent one may be wrapped in a language key. */
+function postBody(content: Record<string, unknown>): Record<string, unknown> {
+  if (Array.isArray(content.content)) return content;
+  for (const value of Object.values(content)) {
+    if (isRecord(value) && Array.isArray(value.content)) return value;
+  }
+  return content;
+}
+
+/** The text of a post, one line per paragraph; image keys go into `images`. */
+function postText(post: Record<string, unknown>, images: string[]): string {
+  const lines: string[] = [];
+  if (typeof post.title === "string" && post.title.trim() !== "") lines.push(post.title.trim());
+  const paragraphs = Array.isArray(post.content) ? post.content : [];
+  for (const paragraph of paragraphs) {
+    if (!Array.isArray(paragraph)) continue;
+    let line = "";
+    for (const node of paragraph) {
+      if (!isRecord(node)) continue;
+      if (node.tag === "img" && typeof node.image_key === "string" && node.image_key !== "") {
+        images.push(node.image_key);
+      } else if (node.tag === "at") {
+        line += typeof node.user_name === "string" ? `@${node.user_name}` : "";
+      } else if (node.tag === "a") {
+        const label = typeof node.text === "string" ? node.text : "";
+        const href = typeof node.href === "string" ? node.href : "";
+        line += href !== "" && href !== label ? `${label} (${href})` : label;
+      } else if (node.tag === "code_block") {
+        line += typeof node.text === "string" ? `\n${node.text}\n` : "";
+      } else if (typeof node.text === "string") {
+        line += node.text;
+      }
+    }
+    // A paragraph that is only an image leaves no empty line behind.
+    if (line.trim() !== "") lines.push(line);
+  }
+  return lines.join("\n").trim();
+}
+
+/**
+ * Parse a Feishu `im.message.receive_v1` payload into an inbound owner message without its
+ * images. Returns null when the message has no text.
+ */
+export function parseMessage(payload: unknown): Inbound | null {
+  const m = parseFeishuMessage(payload);
+  if (m === null || m.text === "") return null;
+  return {
+    kind: "message",
+    text: m.text,
+    from: m.from,
+    ...(m.replyTo === undefined ? {} : { replyTo: m.replyTo }),
+  };
 }

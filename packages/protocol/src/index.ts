@@ -186,7 +186,29 @@ export type View = ItemView | BoardView | ReportView | RelayView | TextView | As
 
 export type Inbound =
   | { kind: "action"; target: string; action: string; text?: string; from: string }
-  | { kind: "message"; text: string; from: string; replyTo?: MessageRef };
+  | {
+      kind: "message";
+      /** May be empty when the message is only images. */
+      text: string;
+      from: string;
+      replyTo?: MessageRef;
+      images?: InboundImage[];
+      files?: InboundFile[];
+    };
+
+/** An image the owner sent, already downloaded by the channel. */
+export interface InboundImage {
+  /** `image/png`, `image/jpeg`, … */
+  mimeType: string;
+  data: Uint8Array;
+}
+
+/** A file the owner sent (document, audio, video), already downloaded by the channel. */
+export interface InboundFile {
+  /** The name the owner's client gave it, e.g. `report.pdf`. */
+  name: string;
+  data: Uint8Array;
+}
 
 export type InboundSink = (inbound: Inbound) => void | Promise<void>;
 

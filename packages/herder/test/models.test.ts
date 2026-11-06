@@ -12,6 +12,7 @@ import {
   builtinProviders,
   CUSTOM_CONTEXT_WINDOW,
   herderFromSettings,
+  knownInput,
   PI_KEY_ENV,
   PI_MODEL_ENV,
   piModelEnv,
@@ -106,6 +107,14 @@ describe("resolveModel", () => {
       provider: "relay",
       contextWindow: CUSTOM_CONTEXT_WINDOW,
     });
+  });
+});
+
+describe("knownInput", () => {
+  it("reads images for a model pi-ai knows with vision, under any provider prefix", () => {
+    expect(knownInput("claude-opus-5-5")).toEqual(["text", "image"]);
+    expect(knownInput("anthropic/claude-opus-5-5")).toEqual(["text", "image"]);
+    expect(knownInput("my-private-model")).toEqual(["text"]);
   });
 });
 

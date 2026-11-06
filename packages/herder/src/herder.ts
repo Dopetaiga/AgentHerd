@@ -1,6 +1,6 @@
 // The Herder: one resident session on a light model (docs/spec/04-herder.md §1, ADR 0018).
 
-import type { HerderEvent, HerderHost, HerderPort } from "@agentherd/core";
+import type { HerderEvent, HerderHost, HerderPort, OwnerImage } from "@agentherd/core";
 import { Agent, type AgentMessage, type StreamFn } from "@agentherd/herder-loop";
 import { guardCheck } from "@agentherd/rules";
 import type { Api, Model } from "@earendil-works/pi-ai";
@@ -21,7 +21,9 @@ export interface HerderOptions {
   modelTiers?: () => TierPlacement;
 }
 
-type Job = { kind: "owner"; text: string } | { kind: "answer"; question: string; answer: string };
+type Job =
+  | { kind: "owner"; text: string; images: OwnerImage[] }
+  | { kind: "answer"; question: string; answer: string };
 
 /** Events kept for the next owner turn; older ones are dropped. */
 export const MAX_HELD_EVENTS = 10;
@@ -33,14 +35,24 @@ export class Herder implements HerderPort {
   private events: HerderEvent[] = [];
   private running: Promise<void> | undefined;
   private stopped = false;
-  private turn: TurnContext = { kind: "owner", ownerText: "", asked: false, notified: false };
+  private turn: TurnContext = {
+    kind: "owner",
+    ownerText: "",
+    images: [],
+    asked: false,
+    notified: false,
+  };
   /** The owner message an answer belongs to. */
   private lastOwnerText = "";
+  private lastOwnerImages: OwnerImage[] = [];
+  /** Whether the model reads images; otherwise it gets where they are saved. */
+  private readonly seesImages: boolean;
   private readonly maxSaved: number;
 
   constructor(opts: HerderOptions) {
     this.host = opts.host;
     this.maxSaved = opts.maxSavedMessages ?? MAX_SAVED_MESSAGES;
+    this.seesImages = opts.model.input.includes("image");
     const saved = this.host.getState<AgentMessage[]>(HERDER_STATE_KEY) ?? [];
     this.agent = new Agent({
       streamFn: opts.streamFn,
@@ -56,8 +68,8 @@ export class Herder implements HerderPort {
     });
   }
 
-  ownerMessage(text: string): void {
-    this.enqueue({ kind: "owner", text });
+  ownerMessage(text: string, images: OwnerImage[] = []): void {
+    this.enqueue({ kind: "owner", text, images });
   }
 
   ownerAnswer(question: string, answer: string): void {
@@ -103,13 +115,22 @@ export class Herder implements HerderPort {
 
   private async runJob(job: Job): Promise<void> {
     let prompt: string;
+    let images: OwnerImage[] = [];
     if (job.kind === "owner") {
+      images = job.images;
       this.lastOwnerText = job.text;
-      this.turn = { kind: "owner", ownerText: job.text, asked: false, notified: false };
-      prompt = ownerMessagePrompt(job.text);
+      this.lastOwnerImages = images;
+      this.turn = { kind: "owner", ownerText: job.text, images, asked: false, notified: false };
+      prompt = ownerMessagePrompt(job.text, images, this.host.texts);
     } else {
       const text = `${this.lastOwnerText}\n${job.answer}`;
-      this.turn = { kind: "answer", ownerText: text, asked: false, notified: false };
+      this.turn = {
+        kind: "answer",
+        ownerText: text,
+        images: this.lastOwnerImages,
+        asked: false,
+        notified: false,
+      };
       prompt = ownerAnswerPrompt(job.question, job.answer);
     }
     if (this.events.length > 0) {
@@ -119,7 +140,14 @@ export class Herder implements HerderPort {
     this.host.audit("herder.turn", { kind: job.kind });
     const before = this.agent.state.messages.length;
     try {
-      await this.agent.prompt(prompt);
+      if (this.seesImages && images.length > 0) {
+        await this.agent.prompt(
+          prompt,
+          images.map((i) => ({ type: "image", data: i.data, mimeType: i.mimeType })),
+        );
+      } else {
+        await this.agent.prompt(prompt);
+      }
     } catch (error) {
       await this.fail(job, (error as Error).message, before);
       return;
@@ -178,6 +206,9 @@ export class Herder implements HerderPort {
 
   /** Saves the session, cut at a user message so tool calls keep their results. */
   private save(): void {
+    // Images are seen once; the text keeps where they are saved. Base64 in every later turn
+    // would cost far more than it helps.
+    this.agent.state.messages = this.agent.state.messages.map(withoutImages);
     let messages = this.agent.state.messages.filter((m) => m.role !== "system");
     if (messages.length > this.maxSaved) {
       let start = messages.length - this.maxSaved;
@@ -186,4 +217,20 @@ export class Herder implements HerderPort {
     }
     this.host.setState(HERDER_STATE_KEY, messages);
   }
+}
+
+/** Seen once; without this note the model later reads only the path and thinks it never saw it. */
+export const IMAGE_SEEN_NOTE =
+  "[You saw the image(s) of this message when it arrived; they are no longer attached. Each is still saved at the path above. Ask the owner to send it again if you need to look again.]";
+
+function withoutImages(m: AgentMessage): AgentMessage {
+  if (m.role !== "user" || typeof m.content === "string") return m;
+  if (!m.content.some((c) => c.type === "image")) return m;
+  return {
+    ...m,
+    content: [
+      ...m.content.filter((c) => c.type !== "image"),
+      { type: "text", text: IMAGE_SEEN_NOTE },
+    ],
+  };
 }

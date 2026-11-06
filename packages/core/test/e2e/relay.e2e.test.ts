@@ -1,7 +1,7 @@
 // E2E scenarios for plan 008: tasks started from chat with fixed commands, relays, interrupts.
 // A real mock agent speaks ACP; the fake channel plays the owner.
 
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -142,6 +142,54 @@ describe("E2E-RELAY", () => {
     await channel.say("  keep\n  spacing ");
     await until(() => texts(channel).includes("second done"));
     expect(seen).toEqual(["  keep\n  spacing "]);
+  });
+
+  it("an image the owner sends is saved; an agent without image support gets its path", async () => {
+    const { channel, herd } = await setup(THREE_TURNS);
+    await channel.say(`/run mock ${dir} task`);
+    await until(() => reports(channel).length === 1);
+    const id = herd.tasks()[0]?.id ?? "";
+    await channel.say(`/relay ${id.slice(0, 8)}`);
+    const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 7]);
+    await herd.handle({
+      kind: "message",
+      text: "",
+      from: "owner",
+      images: [{ mimeType: "image/png", data: png }],
+    });
+    await until(() => texts(channel).includes("second done"));
+    const prompt = herd
+      .transcript(id)
+      .entries.filter((e) => e.role === "prompt")
+      .at(-1)?.text;
+    const path = /保存在 (.+\.png)\]/.exec(prompt ?? "")?.[1] ?? "";
+    expect(path.startsWith(join(dir, "attachments"))).toBe(true);
+    expect(new Uint8Array(readFileSync(path))).toEqual(png);
+  });
+
+  it("a file the owner sends is saved under its name and its path goes to the agent", async () => {
+    const { channel, herd } = await setup(THREE_TURNS);
+    await channel.say(`/run mock ${dir} task`);
+    await until(() => reports(channel).length === 1);
+    const id = herd.tasks()[0]?.id ?? "";
+    await channel.say(`/relay ${id.slice(0, 8)}`);
+    const data = new Uint8Array([1, 2, 3]);
+    await herd.handle({
+      kind: "message",
+      text: "看看这个",
+      from: "owner",
+      files: [{ name: "a/b:报告.pdf", data }],
+    });
+    await until(() => texts(channel).includes("second done"));
+    const prompt = herd
+      .transcript(id)
+      .entries.filter((e) => e.role === "prompt")
+      .at(-1)?.text;
+    expect(prompt?.startsWith("看看这个\n[主人发来一个文件「a/b:报告.pdf」，已保存在 ")).toBe(true);
+    const path = /已保存在 (.+)\]/.exec(prompt ?? "")?.[1] ?? "";
+    expect(path.startsWith(join(dir, "attachments"))).toBe(true);
+    expect(path.endsWith("-a_b_报告.pdf")).toBe(true);
+    expect(new Uint8Array(readFileSync(path))).toEqual(data);
   });
 
   it("the relay ends after relayIdleMinutes with no owner message", async () => {

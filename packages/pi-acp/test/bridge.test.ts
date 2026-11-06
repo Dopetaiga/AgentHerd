@@ -76,6 +76,14 @@ describe("pi-acp bridge", () => {
     expect(text(updates)).toBe("done");
   });
 
+  it("passes the owner's images on to Pi", async () => {
+    const { conn, cwd, updates } = await start({ reply: "saw {images}" });
+    expect(conn.acceptsImages).toBe(true);
+    const sid = await conn.newSession(cwd);
+    await conn.prompt(sid, "look", [{ data: "iVBORw0K", mimeType: "image/png" }]);
+    expect(text(updates)).toBe("saw image/png");
+  });
+
   it("blocks the call when denied", async () => {
     const { conn, cwd, updates, asked } = await start({
       calls: [{ toolName: "bash", input: { command: "rm -rf build" } }],

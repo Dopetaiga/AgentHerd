@@ -3,7 +3,7 @@
 
 import { statSync } from "node:fs";
 import { basename, isAbsolute, join, resolve } from "node:path";
-import type { HerderHost, Task } from "@agentherd/core";
+import type { HerderHost, OwnerImage, Task } from "@agentherd/core";
 import type { AgentTool, AgentToolResult } from "@agentherd/herder-loop";
 import { arr, obj, opt, str } from "@earendil-works/pi-schema";
 import { agentForModel } from "./agent-models.ts";
@@ -15,6 +15,8 @@ export interface TurnContext {
   kind: "owner" | "answer" | "event";
   /** The owner's words this turn may pass on: the message, or the one the answer belongs to. */
   ownerText: string;
+  /** The owner's images this turn; tasks started or messaged for the owner get them. */
+  images: OwnerImage[];
   asked: boolean;
   notified: boolean;
 }
@@ -194,7 +196,10 @@ export function herderTools(
         if (!isDirectory(cwd)) throw new Error(`${cwd} is not a directory`);
         const prompt = composeTaskPrompt(args.ownerText.trim(), args.addedContext);
         const title = args.name.trim() || args.ownerText.trim();
-        const taskId = await host.startTask(profile, cwd, title, prompt, model);
+        const taskId =
+          t.images.length === 0
+            ? await host.startTask(profile, cwd, title, prompt, model)
+            : await host.startTask(profile, cwd, title, prompt, model, t.images);
         const using = model === undefined ? "its own model settings" : model;
         const switched =
           picked?.switched === undefined
@@ -218,12 +223,11 @@ export function herderTools(
         const verbatim = isVerbatim(args.text, t.ownerText);
         const name = args.name?.trim();
         if (name !== undefined && name !== "") host.renameTask(task.id, name);
-        host.promptTask(
-          task.id,
-          verbatim
-            ? `${"[Owner's message]"}\n${args.text.trim()}`
-            : `${HERDER_LABEL}\n${args.text.trim()}`,
-        );
+        const text = verbatim
+          ? `${"[Owner's message]"}\n${args.text.trim()}`
+          : `${HERDER_LABEL}\n${args.text.trim()}`;
+        if (t.images.length === 0) host.promptTask(task.id, text);
+        else host.promptTask(task.id, text, t.images);
         return ok(
           `sent to ${task.id.slice(0, 8)}${verbatim ? "" : " (labeled as from the Herder)"}`,
         );

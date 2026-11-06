@@ -17,7 +17,14 @@ function tools(
   modelTiers?: () => TierPlacement,
 ) {
   const { host, rec } = fakeHost(opts);
-  const ctx: TurnContext = { kind: "owner", ownerText: "", asked: false, notified: false, ...turn };
+  const ctx: TurnContext = {
+    kind: "owner",
+    ownerText: "",
+    images: [],
+    asked: false,
+    notified: false,
+    ...turn,
+  };
   const byName = new Map(herderTools(host, () => ctx, modelTiers).map((t) => [t.name, t]));
   const call = async (name: string, args: unknown) => {
     const tool = byName.get(name);

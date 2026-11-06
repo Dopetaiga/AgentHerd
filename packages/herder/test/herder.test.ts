@@ -1,3 +1,4 @@
+import { tmpdir } from "node:os";
 import {
   type FauxProviderRegistration,
   fauxAssistantMessage,
@@ -7,7 +8,7 @@ import {
   streamSimple,
 } from "@earendil-works/pi-ai/compat";
 import { afterEach, describe, expect, it } from "vitest";
-import { HERDER_STATE_KEY, Herder } from "../src/herder.ts";
+import { HERDER_STATE_KEY, Herder, IMAGE_SEEN_NOTE } from "../src/herder.ts";
 import { fakeHost, task } from "./helpers.ts";
 
 let faux: FauxProviderRegistration[] = [];
@@ -32,6 +33,51 @@ function setup(opts: Parameters<typeof fakeHost>[0] = {}, maxSavedMessages?: num
 }
 
 describe("Herder", () => {
+  it("an owner's image reaches the model once and goes with the task it starts", async () => {
+    const { herder, rec, faux } = setup();
+    const image = { mimeType: "image/png", data: "iVBORw0K", path: "/h/attachments/a.png" };
+    const seen: string[] = [];
+    faux.setResponses([
+      (context) => {
+        const last = context.messages.at(-1);
+        const content = typeof last?.content === "string" ? [] : (last?.content ?? []);
+        seen.push(content.map((c) => c.type).join(","));
+        return fauxAssistantMessage(
+          [
+            fauxToolCall("session_start", {
+              name: "修图",
+              project: tmpdir(),
+              profile: "mock",
+              ownerText: "按这张图改",
+            }),
+          ],
+          { stopReason: "toolUse" },
+        );
+      },
+      (context) => {
+        console.log("DBG", JSON.stringify(context.messages.at(-1)).slice(0, 600));
+        return fauxAssistantMessage("开始了。");
+      },
+      (context) => {
+        const images = context.messages.flatMap((m) =>
+          typeof m.content === "string" ? [] : m.content.filter((c) => c.type === "image"),
+        );
+        seen.push(`later:${images.length}`);
+        seen.push(JSON.stringify(context.messages));
+        return fauxAssistantMessage("好。");
+      },
+    ]);
+    herder.ownerMessage("按这张图改", [image]);
+    await herder.idle();
+    expect(seen[0]).toBe("text,image");
+    expect(rec.started[0]?.images).toEqual(["/h/attachments/a.png"]);
+    herder.ownerMessage("还有吗");
+    await herder.idle();
+    expect(seen[1]).toBe("later:0");
+    expect(seen[2]).toContain(IMAGE_SEEN_NOTE.slice(0, 30));
+    expect(JSON.stringify(rec.state.get(HERDER_STATE_KEY))).not.toContain("iVBORw0K");
+  });
+
   it("answers the owner with its final text", async () => {
     const { herder, rec, faux } = setup();
     faux.setResponses([fauxAssistantMessage("现在没有任务在跑。")]);

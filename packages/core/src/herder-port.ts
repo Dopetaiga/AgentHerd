@@ -6,6 +6,15 @@ import type { DecisionRow } from "./store.ts";
 import type { Task } from "./tasks.ts";
 import type { CoreTexts } from "./texts.ts";
 
+/** An image the owner sent, saved under `<home>/attachments`. */
+export interface OwnerImage {
+  mimeType: string;
+  /** Base64. */
+  data: string;
+  /** Where the image is saved, for agents and models that cannot take images. */
+  path: string;
+}
+
 export interface HerderEvent {
   kind: "task-reported" | "watchdog";
   taskId: string;
@@ -39,8 +48,9 @@ export interface HerderHost {
     title: string,
     prompt: string,
     model?: string,
+    images?: OwnerImage[],
   ): Promise<string>;
-  promptTask(taskId: string, text: string): void;
+  promptTask(taskId: string, text: string, images?: OwnerImage[]): void;
   /** A new short name for a task, when its work changed. */
   renameTask(taskId: string, name: string): void;
   cancelTurn(taskId: string): Promise<void>;
@@ -55,7 +65,8 @@ export interface HerderHost {
 
 /** Calls return at once; the Herder works through them one at a time. */
 export interface HerderPort {
-  ownerMessage(text: string): void;
+  /** `text` may be empty when the owner sent only images. */
+  ownerMessage(text: string, images?: OwnerImage[]): void;
   ownerAnswer(question: string, answer: string): void;
   event(event: HerderEvent): void;
   stop(): Promise<void>;

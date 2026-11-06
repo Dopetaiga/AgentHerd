@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { parseCardAction, parseMessage } from "../src/inbound.ts";
+import { parseCardAction, parseFeishuMessage, parseMessage } from "../src/inbound.ts";
 
 const fixturesDir = join(dirname(fileURLToPath(import.meta.url)), "fixtures");
 
@@ -117,8 +117,68 @@ describe("parseMessage", () => {
     });
   });
 
-  it("returns null for an image message", () => {
+  it("returns null for an image message, which has no text", () => {
     expect(parseMessage(loadFixture("message-image.json"))).toBeNull();
+  });
+});
+
+function p2p(type: string, content: unknown) {
+  return {
+    sender: { sender_id: { open_id: "ou_owner000" }, sender_type: "user" },
+    message: {
+      message_id: "om_1",
+      chat_type: "p2p",
+      message_type: type,
+      content: JSON.stringify(content),
+    },
+  };
+}
+
+describe("parseFeishuMessage", () => {
+  it("keeps the image key of an image message", () => {
+    expect(parseFeishuMessage(loadFixture("message-image.json"))).toEqual({
+      messageId: "om_msg002",
+      text: "",
+      from: "ou_owner000",
+      imageKeys: ["img_000"],
+      files: [],
+    });
+  });
+
+  it("reads the text and images of a rich-text post", () => {
+    const post = {
+      title: "Bug",
+      content: [
+        [
+          { tag: "text", text: "the page " },
+          { tag: "a", text: "here", href: "https://example.com" },
+          { tag: "text", text: " breaks" },
+        ],
+        [{ tag: "img", image_key: "img_1" }],
+        [
+          { tag: "at", user_name: "Ann" },
+          { tag: "text", text: " look" },
+        ],
+      ],
+    };
+    expect(parseFeishuMessage(p2p("post", post))).toEqual({
+      messageId: "om_1",
+      text: "Bug\nthe page here (https://example.com) breaks\n@Ann look",
+      from: "ou_owner000",
+      imageKeys: ["img_1"],
+      files: [],
+    });
+  });
+
+  it("reads a post wrapped in a language key", () => {
+    const post = { zh_cn: { title: "", content: [[{ tag: "text", text: "你好" }]] } };
+    expect(parseFeishuMessage(p2p("post", post))?.text).toBe("你好");
+  });
+
+  it("returns null for message types it does not read", () => {
+    expect(parseFeishuMessage(p2p("sticker", { file_key: "f" }))).toBeNull();
+    expect(parseFeishuMessage(p2p("file", { file_name: "no key" }))).toBeNull();
+    expect(parseFeishuMessage(p2p("post", { title: "", content: [] }))).toBeNull();
   });
 
   it("returns null for a group chat message", () => {
