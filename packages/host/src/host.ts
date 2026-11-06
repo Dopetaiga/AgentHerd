@@ -60,6 +60,7 @@ import type {
 } from "./api.ts";
 import type { AgentDef, Fetchers } from "./catalog.ts";
 import { type CliConfig, readConfig, writeConfig } from "./config.ts";
+import { LocalEmbedder } from "./embedder.ts";
 import { probeModels } from "./probe.ts";
 import { availableProfiles } from "./profiles.ts";
 import { RuntimeStore } from "./runtimes.ts";
@@ -108,6 +109,8 @@ export class Host implements HostApi {
   private herd: Herd | undefined;
   /** Background memory jobs of the running herd (ADR 0038). */
   private memoryWorker: MemoryWorker | undefined;
+  /** Local vector model for memory search, made once and kept across herd restarts. */
+  private embedder: LocalEmbedder | undefined;
   private connected = false;
   private channelError: string | undefined;
   private herderReason: string | undefined;
@@ -244,6 +247,13 @@ export class Host implements HostApi {
         check: (ref) => this.checkModel(ref),
         next: (profileId, failed, tried) => this.nextModel(profileId, failed, tried),
       },
+      ...(this.opts.memoryJobs === true
+        ? {
+            embedder: this.memoryEmbedder(),
+            memoryComplete: (system: string, user: string, signal: AbortSignal) =>
+              this.memoryComplete(system, user, signal),
+          }
+        : {}),
     });
     herd.registry.onChange(() => this.emitTasks());
     try {
@@ -264,22 +274,28 @@ export class Host implements HostApi {
     this.emitTasks();
   }
 
+  private memoryEmbedder(): LocalEmbedder {
+    if (this.embedder === undefined) {
+      this.embedder = new LocalEmbedder(this.opts.home, (line) => this.log(line));
+      this.embedder.warm();
+    }
+    return this.embedder;
+  }
+
+  private async memoryComplete(system: string, user: string, signal: AbortSignal): Promise<string> {
+    const model = memoryModel(this.settings(), this.opts.secrets, this.placement(), this.opts.env);
+    if (model === undefined) throw new Error("no model for memory");
+    return model.complete(system, user, signal);
+  }
+
   private startMemoryWorker(herd: Herd): void {
     if (this.opts.memoryJobs !== true) return;
     const worker = new MemoryWorker({
       memory: herd.store.memory,
       transcript: (taskId) => herd.store.transcript(taskId),
       herderTurns: (limit) => herd.store.herderTurns(limit),
-      complete: async (system, user, signal) => {
-        const model = memoryModel(
-          this.settings(),
-          this.opts.secrets,
-          this.placement(),
-          this.opts.env,
-        );
-        if (model === undefined) throw new Error("no model for memory");
-        return model.complete(system, user, signal);
-      },
+      complete: (system, user, signal) => this.memoryComplete(system, user, signal),
+      embedder: this.memoryEmbedder(),
       log: (line) => this.log(line),
     });
     worker.start();

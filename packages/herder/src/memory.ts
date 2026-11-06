@@ -3,6 +3,8 @@
 // the resident snapshot in the system prompt and the recall block added to an owner message.
 
 import {
+  type Completer,
+  type Embedder,
   MemoryFullError,
   type MemoryKind,
   type MemoryOp,
@@ -148,7 +150,11 @@ function entryLine(r: MemoryRow): string {
   return `- [${short(r.id)}] ${r.abstract}${until}`;
 }
 
-export function memoryTools(memory: MemoryStore, turn: () => TurnContext): AgentTool[] {
+export function memoryTools(
+  memory: MemoryStore,
+  turn: () => TurnContext,
+  embedder?: Embedder,
+): AgentTool[] {
   const tools = [
     {
       name: "memory",
@@ -209,7 +215,7 @@ Owner and note memory is small; when full, the call fails with what is there: re
         "Searches long-term memory: people, projects, how past tasks went (cases) and what was learned (experience). Use it when an answer depends on earlier work, people or decisions not already in this conversation.",
       parameters: searchSchema,
       execute: async (_id: string, args: { query: string }) => {
-        const hits = memory.search(args.query, { limit: 8 });
+        const hits = await memory.searchHybrid(args.query, embedder, { limit: 8 });
         if (hits.length === 0) return ok("(nothing found)");
         memory.touch(hits.map((h) => h.id));
         return ok(
@@ -241,9 +247,16 @@ export function memorySnapshot(memory: MemoryStore): string {
 }
 
 /** Entries that may matter for the owner's message, for the end of the prompt; empty when none. */
-export function recallBlock(memory: MemoryStore, text: string): string {
+export async function recallBlock(
+  memory: MemoryStore,
+  text: string,
+  embedder?: Embedder,
+): Promise<string> {
   if (text.trim() === "") return "";
-  const hits = memory.search(text, { kinds: RECALL_KINDS, limit: RECALL_MAX_HITS });
+  const hits = await memory.searchHybrid(text, embedder, {
+    kinds: RECALL_KINDS,
+    limit: RECALL_MAX_HITS,
+  });
   if (hits.length === 0) return "";
   const lines: string[] = [];
   let size = 0;
@@ -255,4 +268,75 @@ export function recallBlock(memory: MemoryStore, text: string): string {
   }
   memory.touch(hits.slice(0, lines.length).map((h) => h.id));
   return `[记忆召回 · 仅供参考，${MEMORY_DATA_NOTE}]\n${lines.join("\n")}`;
+}
+
+/** Past cases and lessons handed to a new task, at most. */
+export const LESSONS_MAX = 3;
+/** Candidates the ranking model reads. */
+export const LESSONS_CANDIDATES = 10;
+/** The ranking model gets this long; a slow model must not hold up the task. */
+export const RERANK_TIMEOUT_MS = 8000;
+
+const RERANK_SYSTEM = `You pick which past cases and lessons help with a new coding task.
+Reply with only a JSON object {"ids": ["<id>", ...]} listing at most ${LESSONS_MAX} ids, most useful first.
+Pick only entries about the same kind of work; similar words are not enough. Reply {"ids": []} when none help.`;
+
+/**
+ * Past cases and experience that may help a new task (docs/spec/08-herder-interaction.md §2): hybrid
+ * search, then a cheap model keeps the ones that really apply. Without the model, the best few
+ * keyword-and-vector hits. Never throws: memory must not stop a task from starting.
+ */
+export async function pastLessons(
+  memory: MemoryStore,
+  request: string,
+  embedder?: Embedder,
+  complete?: Completer,
+): Promise<MemoryRow[]> {
+  try {
+    const hits = await memory.searchHybrid(request, embedder, {
+      kinds: ["case", "experience"],
+      limit: LESSONS_CANDIDATES,
+    });
+    if (hits.length === 0) return [];
+    let picked = hits.slice(0, LESSONS_MAX);
+    if (complete !== undefined) {
+      try {
+        const list = hits
+          .map((h) => `- id=${h.id.slice(0, 8)} [${KIND_NAMES[h.kind]}] ${h.abstract}`)
+          .join("\n");
+        const reply = await complete(
+          RERANK_SYSTEM,
+          `New task:\n${request}\n\nPast entries:\n${list}`,
+          AbortSignal.timeout(RERANK_TIMEOUT_MS),
+        );
+        const start = reply.indexOf("{");
+        const end = reply.lastIndexOf("}");
+        const ids = (JSON.parse(reply.slice(start, end + 1)) as { ids?: unknown }).ids;
+        if (Array.isArray(ids)) {
+          picked = ids
+            .map((id) =>
+              hits.find((h) => typeof id === "string" && id !== "" && h.id.startsWith(id)),
+            )
+            .filter((h): h is (typeof hits)[number] => h !== undefined)
+            .slice(0, LESSONS_MAX);
+        }
+      } catch {
+        // Keep the search order when the model is slow or says something odd.
+      }
+    }
+    memory.touch(picked.map((h) => h.id));
+    return picked;
+  } catch {
+    return [];
+  }
+}
+
+/** Lessons as text for the task prompt's added context. */
+export function lessonsText(rows: readonly MemoryRow[]): string {
+  if (rows.length === 0) return "";
+  const lines = rows.map(
+    (r) =>
+      `- [${KIND_NAMES[r.kind]}] ${r.abstract}${r.body === "" ? "" : `\n  ${r.body.slice(0, 500).replaceAll("\n", "\n  ")}`}`,
+  );
+  return `过去类似任务的记录（仅供参考，可能已过时；以项目现在的情况为准）：\n${lines.join("\n")}`;
 }

@@ -16,7 +16,7 @@ OpenMausBot, rakazo, open-duet, AnyModelBot, DeepSeekBot and OpenViking.
 - Writes come from the Herder's `memory` tool, a task-end job and a review job, and all pass code
   checks: owner facts need verbatim typed evidence, preferences a lasting marker, no temporary
   paths, no values the Herder chose itself. Changes are revisions and can be undone.
-- Storage in `herd.db` (no Markdown files), FTS5 trigram plus a bundled local embedding model
+- Storage in `herd.db` (no Markdown files), FTS5 trigram plus a local embedding model (downloaded once into `<home>/models` until there is an installer)
   (bge-small-zh-v1.5), hybrid 0.7/0.3, fast-model rerank when starting a task.
 - Shown and edited in the app's 「记忆」 page and with `/记忆`, `/忘掉`, `/恢复` in Feishu.
 

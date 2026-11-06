@@ -16,6 +16,7 @@ import type { Board } from "./board.ts";
 import type { Clock, Timer } from "./clock.ts";
 import type { HerderFactory, HerderPort, OwnerImage } from "./herder-port.ts";
 import type { Inbox } from "./inbox.ts";
+import type { Completer, Embedder } from "./memory-store.ts";
 import type { Registry } from "./registry.ts";
 import type { Store } from "./store.ts";
 import type { Task } from "./tasks.ts";
@@ -51,6 +52,10 @@ export interface HerdOptions {
   herder?: HerderFactory;
   /** Models a task can run with. Without it, agents use their own settings. */
   agentModels?: AgentModels;
+  /** Vectors for the Herder's memory search (ADR 0038). */
+  embedder?: Embedder;
+  /** A cheap model the Herder uses to rank past cases. */
+  memoryComplete?: Completer;
 }
 
 /** The owner's models and how an agent runs one (ADR 0025). Supplied by the host. */
