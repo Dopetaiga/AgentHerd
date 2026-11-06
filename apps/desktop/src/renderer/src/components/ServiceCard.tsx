@@ -1,6 +1,6 @@
 // One model service: its models (with a per-model test), key, edit and delete actions.
 
-import { CheckCircle2, Loader2, Play, XCircle } from "lucide-react";
+import { CheckCircle2, Loader2, Pencil, Play, XCircle } from "lucide-react";
 import { useState } from "react";
 import { devOpen } from "../dev-bridge";
 import { applyModels, call, errorText, host, type ServiceView, useApp } from "../store";
@@ -137,7 +137,64 @@ function TestModel({ serviceId, model }: { serviceId: string; model: string }) {
   );
 }
 
-/** Edits a saved service: its key and its models, in the same form as adding one. */
+/**
+ * The service name in the edit dialog's title. A click turns it into a text field; Enter or
+ * leaving the field keeps the text, Escape puts the previous name back. 保存 saves it.
+ */
+function EditableName({
+  value,
+  onChange,
+  disabled,
+}: {
+  value: string;
+  onChange: (name: string) => void;
+  disabled: boolean;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [before, setBefore] = useState(value);
+  if (editing) {
+    return (
+      <input
+        autoFocus
+        aria-label="名称"
+        className={`${inputClass} h-7 w-64 font-normal`}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        onFocus={(e) => e.target.select()}
+        onBlur={() => setEditing(false)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") setEditing(false);
+          if (e.key === "Escape") {
+            // Only this field: the dialog closes on Escape too.
+            e.stopPropagation();
+            onChange(before);
+            setEditing(false);
+          }
+        }}
+      />
+    );
+  }
+  return (
+    <button
+      type="button"
+      title="点击修改名称"
+      disabled={disabled}
+      onClick={() => {
+        setBefore(value);
+        setEditing(true);
+      }}
+      className="group flex min-w-0 items-center gap-1 rounded-md px-1 py-0.5 hover:bg-hover"
+    >
+      <span className="truncate">{value.trim() === "" ? "未命名" : value}</span>
+      <Pencil
+        size={13}
+        className="shrink-0 text-ink-dim opacity-60 group-hover:text-ink-muted group-hover:opacity-100"
+      />
+    </button>
+  );
+}
+
+/** Edits a saved service: its name, key and models, in the same form as adding one. */
 function EditModelsDialog({ service, onClose }: { service: ServiceView; onClose: () => void }) {
   const providers = useApp((s) => s.providers);
   const catalog =
@@ -145,13 +202,15 @@ function EditModelsDialog({ service, onClose }: { service: ServiceView; onClose:
       ? (providers.find((p) => p.provider === service.provider)?.models ?? [])
       : [];
   const [picked, setPicked] = useState<string[]>(service.models);
+  const [name, setName] = useState(service.name);
   const [key, setKey] = useState("");
   const [saving, setSaving] = useState(false);
   const probe = useModelProbe();
   const custom = service.kind === "openai-compatible";
   // 探测模型 may find the list under <address>/v1; saving then fixes the address too.
   const [baseUrl, setBaseUrl] = useState(service.baseUrl);
-  const problem = picked.length === 0 ? "至少选一个模型" : null;
+  const problem =
+    name.trim() === "" ? "名称不能为空" : picked.length === 0 ? "至少选一个模型" : null;
 
   const save = async () => {
     setSaving(true);
@@ -159,7 +218,12 @@ function EditModelsDialog({ service, onClose }: { service: ServiceView; onClose:
     // An empty key keeps the saved key.
     const result = await call((h) =>
       h.putService(
-        { ...plain, models: picked, ...(custom && baseUrl !== undefined ? { baseUrl } : {}) },
+        {
+          ...plain,
+          name: name.trim(),
+          models: picked,
+          ...(custom && baseUrl !== undefined ? { baseUrl } : {}),
+        },
         key === "" ? undefined : key,
       ),
     );
@@ -173,7 +237,12 @@ function EditModelsDialog({ service, onClose }: { service: ServiceView; onClose:
   return (
     <Modal
       size="large"
-      title={`编辑 ${service.name}`}
+      title={
+        <span className="flex min-w-0 items-center gap-1">
+          <span className="shrink-0">编辑</span>
+          <EditableName value={name} onChange={setName} disabled={saving} />
+        </span>
+      }
       description={
         <span className="font-mono">
           {service.kind === "builtin" ? providerName(service.provider ?? "") : baseUrl}
