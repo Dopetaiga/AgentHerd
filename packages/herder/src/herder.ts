@@ -6,7 +6,7 @@ import { guardCheck } from "@agentherd/rules";
 import type { Api, Model } from "@earendil-works/pi-ai";
 import type { TierPlacement } from "./model-guide.ts";
 import { eventsPrompt, ownerAnswerPrompt, ownerMessagePrompt, systemPrompt } from "./prompt.ts";
-import { herderTools, resolveProject, type TurnContext } from "./tools.ts";
+import { herderTools, otherOption, pathsIn, resolveProject, type TurnContext } from "./tools.ts";
 
 export const HERDER_STATE_KEY = "herder.messages";
 export const MAX_SAVED_MESSAGES = 200;
@@ -41,6 +41,7 @@ export class Herder implements HerderPort {
     images: [],
     asked: false,
     notified: false,
+    pickedDirs: [],
   };
   /** The owner message an answer belongs to. */
   private lastOwnerText = "";
@@ -120,7 +121,15 @@ export class Herder implements HerderPort {
       images = job.images;
       this.lastOwnerText = job.text;
       this.lastOwnerImages = images;
-      this.turn = { kind: "owner", ownerText: job.text, images, asked: false, notified: false };
+      this.turn = {
+        kind: "owner",
+        ownerText: job.text,
+        images,
+        asked: false,
+        notified: false,
+        pickedDirs: pathsIn(job.text, this.host.userHome),
+      };
+      this.host.recordTurn("owner", job.text);
       prompt = ownerMessagePrompt(job.text, images, this.host.texts);
     } else {
       const text = `${this.lastOwnerText}\n${job.answer}`;
@@ -130,10 +139,18 @@ export class Herder implements HerderPort {
         images: this.lastOwnerImages,
         asked: false,
         notified: false,
+        // A picked button is a folder the owner chose; their earlier words may name one too.
+        pickedDirs: pathsIn(`${this.lastOwnerText}\n ${job.answer}`, this.host.userHome),
       };
-      prompt = ownerAnswerPrompt(job.question, job.answer);
+      this.host.recordTurn("answer", job.answer);
+      prompt = ownerAnswerPrompt(
+        job.question,
+        job.answer,
+        job.answer.trim() === otherOption(this.host.locale),
+      );
     }
     if (this.events.length > 0) {
+      for (const e of this.events) this.host.recordTurn("event", `${e.title}: ${e.text}`, e.taskId);
       prompt = `${eventsPrompt(this.events)}\n\n${prompt}`;
       this.events = [];
     }
@@ -166,7 +183,10 @@ export class Herder implements HerderPort {
         .map((c) => (c as { text: string }).text)
         .join("")
         .trim();
-      if (text !== "") await this.host.say(text);
+      if (text !== "") {
+        this.host.recordTurn("herder", text);
+        await this.host.say(text);
+      }
     }
     this.save();
   }

@@ -19,6 +19,7 @@ export interface Recorded {
   cancelled: string[];
   relays: string[];
   audits: { type: string; data: Record<string, unknown> }[];
+  turns: { role: string; text: string }[];
   state: Map<string, unknown>;
 }
 
@@ -39,7 +40,7 @@ export function task(id: string, title: string): Task {
 export function fakeHost(
   opts: {
     tasks?: Task[];
-    projects?: string[];
+
     models?: { ref: string; agents: string[] }[];
     failing?: string[];
     profiles?: { id: string; name: string }[];
@@ -57,6 +58,7 @@ export function fakeHost(
     cancelled: [],
     relays: [],
     audits: [],
+    turns: [],
     state: new Map(),
   };
   const tasks = opts.tasks ?? [];
@@ -67,7 +69,6 @@ export function fakeHost(
     profiles: () => opts.profiles ?? [{ id: "mock", name: "Mock" }],
     tasks: () => tasks,
     openTasks: () => tasks,
-    recentProjects: () => opts.projects ?? [],
     relayTaskId: () => undefined,
     decisions: () => [],
     models: () => opts.models ?? [],
@@ -97,6 +98,7 @@ export function fakeHost(
     say: async (text) => void rec.said.push(text),
     ask: async (text, options) => void rec.asked.push({ text, options }),
     audit: (type, data) => void rec.audits.push({ type, data }),
+    recordTurn: (role, text) => void rec.turns.push({ role, text }),
     getState: <T>(key: string) => rec.state.get(key) as T | undefined,
     setState: (key, value) => void rec.state.set(key, structuredClone(value)),
   };

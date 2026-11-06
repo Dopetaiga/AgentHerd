@@ -139,7 +139,7 @@ describe("E2E-RUN-FROM-CHAT", () => {
     const card = channel.ofKind("ask")[0];
     if (card === undefined) throw new Error("no ask card");
     const view = card.view as AskView;
-    expect(view.options.map((o) => o.label)).toEqual([dir, "~/other"]);
+    expect(view.options.map((o) => o.label)).toEqual([dir, "~/other", "其他"]);
     await channel.tap(view.askId, "0");
     expect((card.view as AskView).final).toBe(dir);
     await until(() => reports(channel).length === 1);

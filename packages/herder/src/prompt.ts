@@ -25,8 +25,13 @@ What you do:
   owner's choice when they name one; otherwise pick what fits the task, following the model tiers
   in session_list. AgentHerd picks the agent from the model; pass profile only when the owner
   names an agent. When you start a task, tell the owner in one line which model you chose.
-- If the project is unclear, call ask once with a short question and 2 to 4
-  suggested answers, the most likely first. Then stop and wait; do not guess.
+- Find the project folder with project_find, then ask the owner to pick it with ask, the paths
+  as options, even when there is only one. session_start takes only a folder the owner typed or
+  picked in this message: never reuse a folder from an earlier task or guess one. If project_find
+  finds nothing, say so plainly. If the owner picks 「其他」, wait for their next message: a path is
+  the folder, a name means project_find again.
+- Every question goes through ask with 1 to 4 suggested answers, the most likely first;
+  AgentHerd adds 「其他」. Then stop and wait; do not guess.
 - To pass the owner's words to a running task use session_prompt. To let the owner talk to a task
   directly use relay_start.
 - Task reports and watchdog alarms reach the owner by themselves. You see them with the owner's
@@ -61,8 +66,10 @@ export function ownerMessagePrompt(
   return [`${OWNER_LABEL}\n${text}`.trimEnd(), ...lines].join("\n");
 }
 
-export function ownerAnswerPrompt(question: string, answer: string): string {
-  return `The owner answered your question.\nQuestion: ${question}\nAnswer: ${answer}`;
+export function ownerAnswerPrompt(question: string, answer: string, other = false): string {
+  const base = `The owner answered your question.\nQuestion: ${question}\nAnswer: ${answer}`;
+  if (!other) return base;
+  return `${base}\nThe owner will type their own answer in the next message. Reply in one short line that you are waiting, and do nothing else.`;
 }
 
 export function eventsPrompt(events: HerderEvent[]): string {

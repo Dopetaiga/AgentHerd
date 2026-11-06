@@ -75,8 +75,10 @@ The Herder may add, never rewrite.
   - Report of #12: ...
   ```
 
-- If the Herder cannot tell which task or project the owner means, it asks with buttons. It
-  does not guess.
+- If the Herder cannot tell which task the owner means, it asks with buttons. It does not guess.
+- Projects: the Herder finds folders with `project_find` and the owner always picks one with a
+  button; `session_start` runs only in a folder the owner typed or picked in that message
+  ([ADR 0035](../adr/0035-herder-finds-projects-owner-picks.md), spec 08 §1).
 
 ### Relay
 
@@ -96,7 +98,7 @@ The Herder may add, never rewrite.
 | Group | Tools |
 | --- | --- |
 | Sessions | `session_start(project, name, profile?, ownerText, addedContext, model?)` (name: the task's short name, shown on the board and every report, [ADR 0034](../adr/0034-herder-names-tasks.md)) (model: `service/model` the agent can run, picked by the Herder, [ADR 0025](../adr/0025-herder-picks-model-per-task.md)), `session_prompt(sessionId, text, name?)` (name renames the task), `session_cancel(sessionId)`, `session_list()` (also lists models, the agents that can run each, and the owner's model guide, [ADR 0026](../adr/0026-model-guide-for-the-herder.md)) |
-| Owner | `ask(text, options)`, `notify(text)`, `relay_start(sessionId)`, `relay_end()` |
+| Owner | `ask(text, options)` (AgentHerd adds 「其他」), `project_find(name)`, `notify(text)`, `relay_start(sessionId)`, `relay_end()` |
 | Read | `task_get`, `task_list`, `session_transcript`, `decisions_list`, `read`, `grep`, `list`, `git_log`, `git_diff` (read tools only inside known project directories) |
 
 There is no tool to approve an item, write files or run shell commands. Every Herder tool call
