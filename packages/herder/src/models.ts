@@ -75,11 +75,27 @@ export function resolveModel(service: ModelService, modelId: string): Model<Api>
     provider: service.id,
     baseUrl: (service.baseUrl ?? "").replace(/\/+$/, ""),
     reasoning: false,
-    input: ["text"],
+    input: knownInput(modelId),
     cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
     contextWindow: CUSTOM_CONTEXT_WINDOW,
     maxTokens: CUSTOM_MAX_TOKENS,
   };
+}
+
+/**
+ * What a model id reads, from pi-ai's catalog: a relay usually serves a model under its own
+ * name (`gemini-3.8-flash`, `anthropic/claude-opus-5-5`). Unknown ids read text only, because
+ * an image sent to a model without vision fails the whole request.
+ */
+export function knownInput(modelId: string): ("text" | "image")[] {
+  const bare = modelId.slice(modelId.lastIndexOf("/") + 1);
+  for (const provider of getProviders()) {
+    for (const m of (getModels as (p: string) => Model<Api>[])(provider)) {
+      const id = m.id.slice(m.id.lastIndexOf("/") + 1);
+      if (id === bare && m.input.includes("image")) return ["text", "image"];
+    }
+  }
+  return ["text"];
 }
 
 /** The key of a service: the secret store first, then the provider's environment variable. */
