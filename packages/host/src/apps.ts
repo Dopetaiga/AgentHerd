@@ -286,8 +286,10 @@ export class Apps {
       try {
         const t = await this.client(key).tool(slug);
         const hints = hintsOf(t.tags);
+        // /tools/{slug} names the toolkit by its slug ("gmail"); the toolkit list has "Gmail".
+        const toolkitName = this.connected.find((c) => c.slug === t.toolkit)?.name ?? t.toolkitName;
         const info: AppToolInfo = {
-          title: `${t.toolkitName}: ${t.name}`,
+          title: `${toolkitName}: ${t.name}`,
           toolkit: t.toolkit,
           ...(hints === undefined ? {} : { hints }),
         };
