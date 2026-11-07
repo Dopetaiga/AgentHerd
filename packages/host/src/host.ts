@@ -213,7 +213,7 @@ export class Host implements HostApi {
   }
 
   /** One message from an agent's `agentherd` MCP server, for the running herd. */
-  mcp(token: string, msg: JsonRpcMessage): JsonRpcMessage | undefined {
+  mcp(token: string, msg: JsonRpcMessage): Promise<JsonRpcMessage | undefined> {
     if (this.herd === undefined) throw new UnknownTokenError();
     return this.herd.mcp(token, msg);
   }

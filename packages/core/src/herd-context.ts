@@ -16,7 +16,7 @@ import type { Board } from "./board.ts";
 import type { Clock, Timer } from "./clock.ts";
 import type { HerderFactory, HerderPort, OwnerImage } from "./herder-port.ts";
 import type { Inbox } from "./inbox.ts";
-import type { HerdReport, McpGateway } from "./mcp-gateway.ts";
+import type { AppTools, HerdReport, McpGateway } from "./mcp-gateway.ts";
 import type { Completer, Embedder } from "./memory-store.ts";
 import type { Registry } from "./registry.ts";
 import type { Store } from "./store.ts";
@@ -67,6 +67,8 @@ export interface HerdOptions {
    * (docs/spec/09-agent-tools.md §1). Without it, agents get no MCP servers.
    */
   mcpServer?: (token: string) => StdioMcpServer;
+  /** The owner's connected apps, if any (docs/spec/09-agent-tools.md §3). Read on every call. */
+  apps?: () => AppTools | undefined;
 }
 
 /** The owner's models and how an agent runs one (ADR 0025). Supplied by the host. */

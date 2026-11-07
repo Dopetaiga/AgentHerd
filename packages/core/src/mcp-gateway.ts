@@ -2,7 +2,8 @@
 // JSON-RPC lines between an agent's relay script and `handle`; the token says which task speaks.
 
 import { randomBytes } from "node:crypto";
-import type { ReportState } from "@agentherd/protocol";
+import type { AppHints, ReportState } from "@agentherd/protocol";
+import type { AppCall } from "./app-calls.ts";
 
 export interface JsonRpcMessage {
   jsonrpc: "2.0";
@@ -96,13 +97,79 @@ const toolText = (text: string, isError = false) => ({
   ...(isError ? { isError: true } : {}),
 });
 
+/** An MCP tool as tools/list shows it. */
+export interface McpTool {
+  name: string;
+  description?: string;
+  inputSchema: unknown;
+}
+
+/** What AgentHerd knows about one app tool (docs/spec/09-agent-tools.md §3). */
+export interface AppToolInfo {
+  title: string;
+  toolkit: string;
+  hints?: AppHints;
+}
+
+/** The owner's connected apps (Composio), as the gateway uses them. */
+export interface AppTools {
+  list(): Promise<McpTool[]>;
+  /** Titles and hints of app tools by slug; unknown slugs are missing from the map. */
+  describe(slugs: readonly string[]): Promise<Map<string, AppToolInfo>>;
+  /** Runs one tool; the answer is an MCP tools/call result. */
+  call(name: string, args: unknown): Promise<unknown>;
+}
+
+export interface GatewayOptions {
+  /** The connected apps now, if any. */
+  apps?: () => AppTools | undefined;
+  /** Whether the calls may run (the approval pipeline, maybe the owner). */
+  approve?: (taskId: string, calls: AppCall[]) => Promise<boolean>;
+  /** Tool error text for calls the owner did not allow. */
+  denied?: (title: string) => string;
+}
+
+/** Meta tools that only search or describe tools: no approval. */
+export const DIRECT_META = new Set(["COMPOSIO_SEARCH_TOOLS", "COMPOSIO_GET_TOOL_SCHEMAS"]);
+export const MULTI_EXECUTE = "COMPOSIO_MULTI_EXECUTE_TOOL";
+/** Meta tools agents never see: connections are the owner's, and code runs stay local. */
+export const HIDDEN_META = new Set([
+  "COMPOSIO_MANAGE_CONNECTIONS",
+  "COMPOSIO_REMOTE_WORKBENCH",
+  "COMPOSIO_REMOTE_BASH_TOOL",
+  "COMPOSIO_PROXY_EXECUTE",
+  "COMPOSIO_WAIT_FOR_CONNECTIONS",
+]);
+
+/** The slugs a call runs, or why it cannot be read. */
+export function slugsOf(name: string, args: unknown): string[] | string {
+  if (name !== MULTI_EXECUTE) return [name];
+  const tools = (args as { tools?: unknown } | null)?.tools;
+  if (!Array.isArray(tools) || tools.length === 0) return "tools must be a non-empty list";
+  const slugs: string[] = [];
+  for (const t of tools) {
+    const slug = (t as { tool_slug?: unknown } | null)?.tool_slug;
+    if (typeof slug !== "string" || slug === "") return "each tool needs a tool_slug";
+    slugs.push(slug);
+  }
+  return slugs;
+}
+
+function argumentsOf(name: string, args: unknown, index: number): unknown {
+  if (name !== MULTI_EXECUTE) return args;
+  const tools = (args as { tools: { arguments?: unknown }[] }).tools;
+  return tools[index]?.arguments;
+}
+
 export class McpGateway {
   private readonly tasks = new Map<string, string>();
   private readonly tokens = new Map<string, string>();
   private readonly onReport: (taskId: string, report: HerdReport) => void;
+  private readonly opts: GatewayOptions;
 
-  constructor(onReport: (taskId: string, report: HerdReport) => void) {
+  constructor(onReport: (taskId: string, report: HerdReport) => void, opts: GatewayOptions = {}) {
     this.onReport = onReport;
+    this.opts = opts;
   }
 
   /** A new token for the task; an older one stops working. */
@@ -125,10 +192,17 @@ export class McpGateway {
     return this.tasks.get(token);
   }
 
-  /** The answer to one message, `undefined` for notifications and stray responses. */
-  handle(token: string, msg: JsonRpcMessage): JsonRpcMessage | undefined {
+  /**
+   * The answer to one message, `undefined` for notifications and stray responses. Throws
+   * UnknownTokenError at once for a token no task holds.
+   */
+  handle(token: string, msg: JsonRpcMessage): Promise<JsonRpcMessage | undefined> {
     const taskId = this.tasks.get(token);
     if (taskId === undefined) throw new UnknownTokenError();
+    return this.answer(taskId, msg);
+  }
+
+  private async answer(taskId: string, msg: JsonRpcMessage): Promise<JsonRpcMessage | undefined> {
     const id = msg.id;
     if (msg.method === undefined || id === undefined || id === null) return undefined;
     const answer = (result: unknown): JsonRpcMessage => ({ jsonrpc: "2.0", id, result });
@@ -146,10 +220,10 @@ export class McpGateway {
       case "ping":
         return answer({});
       case "tools/list":
-        return answer({ tools: [HERD_REPORT_TOOL] });
+        return answer({ tools: [HERD_REPORT_TOOL, ...(await this.appList())] });
       case "tools/call": {
         if (params.name !== HERD_REPORT_TOOL.name) {
-          return answer(toolText(`unknown tool ${String(params.name)}`, true));
+          return answer(await this.callApp(taskId, params.name, params.arguments));
         }
         const report = parseReport(params.arguments);
         if (typeof report === "string") return answer(toolText(report, true));
@@ -162,6 +236,49 @@ export class McpGateway {
           id,
           error: { code: -32601, message: `method not found: ${msg.method}` },
         };
+    }
+  }
+
+  private async appList(): Promise<McpTool[]> {
+    const apps = this.opts.apps?.();
+    if (apps === undefined) return [];
+    try {
+      const tools = await apps.list();
+      return tools.filter((t) => t.name !== HERD_REPORT_TOOL.name && !HIDDEN_META.has(t.name));
+    } catch {
+      return [];
+    }
+  }
+
+  private async callApp(taskId: string, name: unknown, args: unknown): Promise<unknown> {
+    const apps = this.opts.apps?.();
+    if (typeof name !== "string" || apps === undefined || HIDDEN_META.has(name)) {
+      return toolText(`unknown tool ${String(name)}`, true);
+    }
+    try {
+      if (!DIRECT_META.has(name)) {
+        const slugs = slugsOf(name, args);
+        if (typeof slugs === "string") return toolText(slugs, true);
+        const known = await apps.describe(slugs);
+        const calls: AppCall[] = slugs.map((slug, i) => {
+          const info = known.get(slug);
+          return {
+            slug,
+            title: info?.title ?? slug,
+            toolkit: info?.toolkit ?? slug.split("_")[0]?.toLowerCase() ?? slug,
+            ...(info?.hints === undefined ? {} : { hints: info.hints }),
+            arguments: argumentsOf(name, args, i),
+          };
+        });
+        const approve = this.opts.approve ?? (async () => false);
+        if (!(await approve(taskId, calls))) {
+          const title = calls.map((c) => c.title).join(", ");
+          return toolText(this.opts.denied?.(title) ?? `The owner did not allow ${title}.`, true);
+        }
+      }
+      return await apps.call(name, args);
+    } catch (error) {
+      return toolText(`app call failed: ${(error as Error).message}`, true);
     }
   }
 }

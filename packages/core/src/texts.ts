@@ -46,6 +46,10 @@ export interface CoreTexts {
   exited(code: string): string;
   // Automatic decisions in the report.
   byRule(allowed: boolean, ruleId: string | undefined, what: string): string;
+  /** An app call that writes, run without asking (docs/spec/09-agent-tools.md §3). */
+  appWrite(title: string): string;
+  /** The tool result an agent gets when the owner denied an app call. */
+  appDenied(title: string): string;
   // Items.
   allow: string;
   deny: string;
@@ -153,6 +157,8 @@ const zh: CoreTexts = {
   repeatedToolCall: (n, label) => `同一个工具调用重复了 ${n} 次：${label}`,
   quiet: (m) => `Agent 已经 ${m} 分钟没有动静`,
   exited: (code) => `Agent 进程退出了（代码 ${code}）`,
+  appWrite: (t) => `已自动执行：${t}`,
+  appDenied: (t) => `The owner did not allow ${t}.`,
   byRule: (allowed, id, what) =>
     `${allowed ? "已按规则批准" : "已按规则拒绝"}${id === undefined ? "" : ` ${id}`}：${what}`,
   allow: "批准",
@@ -254,6 +260,8 @@ const en: CoreTexts = {
   repeatedToolCall: (n, label) => `the same tool call ran ${n} times: ${label}`,
   quiet: (m) => `no event from the agent for ${m} minutes`,
   exited: (code) => `the agent exited (code ${code})`,
+  appWrite: (t) => `Ran on its own: ${t}`,
+  appDenied: (t) => `The owner did not allow ${t}.`,
   byRule: (allowed, id, what) =>
     `${allowed ? "Allowed" : "Denied"} by rule${id === undefined ? "" : ` ${id}`}: ${what}`,
   allow: "Allow",
