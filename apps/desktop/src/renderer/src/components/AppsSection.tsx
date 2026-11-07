@@ -8,8 +8,8 @@ import { call, useApp } from "../store";
 import { Badge, Button, Group, IconTile, inputClass, Row, Section } from "./ui";
 
 const COMPOSIO_KEYS = "https://platform.composio.dev/";
-/** Apps shown before the owner searches; connected ones always show. */
-const SHOWN = 8;
+/** Reveal app rows in small batches, including search results. */
+const SHOWN = 5;
 
 function AppLogo({ app }: { app: AppView }) {
   const [broken, setBroken] = useState(false);
@@ -121,6 +121,7 @@ function AppRow({ app }: { app: AppView }) {
 export function AppsSection() {
   const apps = useApp((s) => s.apps);
   const [search, setSearch] = useState("");
+  const [visible, setVisible] = useState(SHOWN);
   const [editingKey, setEditingKey] = useState(false);
   // Search results must not replace the default list needed when the field is cleared.
   const [results, setResults] = useState<{ query: string; view: AppsView }>();
@@ -152,10 +153,10 @@ export function AppsSection() {
     ...new Map([...(found?.apps ?? []), ...(apps?.apps ?? [])].map((a) => [a.slug, a])).values(),
   ];
   // Keep the current query in force while a request is pending or an app event arrives.
-  const shown =
-    q === ""
-      ? list.filter((a, i) => a.connected || i < SHOWN)
-      : list.filter((a) => a.name.toLowerCase().includes(q) || a.slug.toLowerCase().includes(q));
+  const matching = list
+    .filter((a) => a.name.toLowerCase().includes(q) || a.slug.toLowerCase().includes(q))
+    .sort((a, b) => Number(b.connected) - Number(a.connected));
+  const shown = matching.slice(0, visible);
 
   return (
     <Section
@@ -236,11 +237,21 @@ export function AppsSection() {
               spellCheck={false}
               placeholder="搜索应用，如 gmail、github、notion"
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setVisible(SHOWN);
+              }}
             />
           </Row>
         )}
         {hasKey && shown.map((app) => <AppRow key={app.slug} app={app} />)}
+        {hasKey && matching.length > visible && (
+          <Row>
+            <Button variant="ghost" size="sm" onClick={() => setVisible((n) => n + SHOWN)}>
+              显示更多
+            </Button>
+          </Row>
+        )}
         {hasKey && view !== undefined && shown.length === 0 && view.problem === undefined && (
           <Row description="没有找到应用" />
         )}

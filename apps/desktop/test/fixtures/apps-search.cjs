@@ -45,7 +45,40 @@ async function searchScenario() {
   const slugOnly = names();
   await fill("no-such-app");
   const noMatch = names();
+  window.searchTest.many();
+  await fill("");
+  const appNames = () =>
+    [...document.querySelectorAll("div.truncate.font-medium")]
+      .map((e) => e.textContent)
+      .filter((s) => s.startsWith("App "));
+  const more = () =>
+    [...document.querySelectorAll("button")].find((e) => e.textContent.includes("显示更多"));
+  const firstBatch = appNames();
+  const callsBeforeMore = window.searchTest.pending();
+  more()?.click();
+  await tick();
+  const secondBatch = appNames();
+  more()?.click();
+  await tick();
+  const lastBatch = appNames();
+  const moreAtEnd = more() !== undefined;
+  const extraCalls = window.searchTest.pending() - callsBeforeMore;
+  await fill("app");
+  const searchBatch = appNames();
+  more()?.click();
+  await tick();
+  const searchExpanded = appNames().length;
+  await fill("");
+  const resetBatch = appNames().length;
   return {
+    firstBatch,
+    secondBatch,
+    lastBatch,
+    moreAtEnd,
+    extraCalls,
+    searchBatch,
+    searchExpanded,
+    resetBatch,
     immediate,
     newer,
     late,

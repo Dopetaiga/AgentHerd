@@ -22,6 +22,18 @@ Object.assign(window, {
     answer: (i: number, filtered: boolean) =>
       calls[i]?.resolve({ ...all, apps: filtered ? [apps[1]] : apps }),
     event: () => useApp.setState({ apps: all }),
+    many: () =>
+      useApp.setState({
+        apps: {
+          hasKey: true,
+          apps: Array.from({ length: 12 }, (_, i) => ({
+            slug: `app-${i}`,
+            name: `App ${i}`,
+            connected: i >= 10,
+            connecting: false,
+          })),
+        },
+      }),
   },
 });
 useApp.setState({ apps: all });

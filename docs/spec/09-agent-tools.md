@@ -72,7 +72,10 @@ belongs to, and answers `"reported"`. The core treats it as the agent report sou
    that do not match. The current search stays in force while requests are pending or connection
    events arrive; an older search response cannot replace a newer one. Search results do not
    overwrite the default list. Clearing the field restores that list immediately, without waiting
-   for the background refresh.
+   for the background refresh. Default and search lists show five apps at a time, connected apps
+   first (counting toward the five). **显示更多** reveals another five already loaded rows without
+   a network request and disappears when all are visible. Changing or clearing the search resets
+   the visible count to five.
 3. **连接** asks Composio for an authorization link for that toolkit and opens it in the browser;
    the app polls until the connection is active (or 5 minutes pass). **断开** deletes the connected
    account.
