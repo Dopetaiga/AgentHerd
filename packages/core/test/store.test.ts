@@ -427,6 +427,36 @@ describe("Store (tasks, ADR 0039)", () => {
   });
 });
 
+describe("Store (herder_log)", () => {
+  const m = (text: string) => ({ role: "user", content: [{ type: "text", text }], timestamp: 1 });
+
+  it("keeps the Herder's whole conversation and rewrites only from the first change", () => {
+    const store = Store.open(":memory:");
+    store.writeHerderLog(0, [m("a"), m("b"), m("c")]);
+    store.writeHerderLog(2, [m("c2"), m("d")]);
+    expect(store.herderLog()).toEqual([m("a"), m("b"), m("c2"), m("d")]);
+    store.writeHerderLog(1, []);
+    expect(store.herderLog()).toEqual([m("a")]);
+    store.close();
+  });
+
+  it("moves the tail a version-6 database kept in state into the log", () => {
+    const dir = mkdtempSync(join(tmpdir(), "agentherd-core-"));
+    const dbPath = join(dir, "herd.db");
+    const old = Store.open(dbPath);
+    old.setState("herder.messages", [m("a"), m("b")]);
+    old.close();
+    const raw = new DatabaseSync(dbPath);
+    raw.exec("DROP TABLE herder_log");
+    raw.exec("UPDATE schema_version SET version = 6");
+    raw.close();
+    const migrated = Store.open(dbPath);
+    expect(migrated.herderLog()).toEqual([m("a"), m("b")]);
+    expect(migrated.getState("herder.messages")).toBeUndefined();
+    migrated.close();
+  });
+});
+
 describe("Store (herder_turns)", () => {
   it("keeps the Herder's conversation and finds Chinese words in it", () => {
     const store = Store.open(":memory:");

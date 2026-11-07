@@ -203,6 +203,8 @@ export class Herd {
         : { memoryComplete: this.opts.memoryComplete }),
       getState: (key) => this.store.getState(key),
       setState: (key, value) => this.store.setState(key, value),
+      herderLog: () => this.store.herderLog(),
+      writeHerderLog: (from, messages) => this.store.writeHerderLog(from, messages),
     };
   }
 

@@ -9,10 +9,17 @@ export {
   modelEnvFor,
 } from "./agent-models.ts";
 export {
-  HERDER_STATE_KEY,
+  CONTEXT_STATE_KEY,
+  type ContextHooks,
+  DEFAULT_CONTEXT_WINDOW,
+  FORCED_FOLD_AT,
+  FORCED_FOLD_TO,
+  HerderContext,
+  withoutContextMarks,
+} from "./context.ts";
+export {
   Herder,
   type HerderOptions,
-  MAX_SAVED_MESSAGES,
   MEMORY_REFRESH_MS,
   REVIEW_EVERY_TURNS,
   REVIEW_IDLE_MS,

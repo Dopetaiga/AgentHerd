@@ -60,7 +60,19 @@ export const TASKS_TABLE_SQL = `CREATE TABLE IF NOT EXISTS tasks(
 );
 CREATE INDEX IF NOT EXISTS tasks_updated ON tasks(updated_at);`;
 
-export const LATEST_SCHEMA_VERSION = 6;
+/**
+ * The Herder's whole conversation as the model saw it, one message per row, oldest first. Nothing
+ * is cut: old parts are folded into summaries the model writes (ADR 0041).
+ */
+export const HERDER_LOG_TABLE_SQL = `CREATE TABLE IF NOT EXISTS herder_log(
+  seq INTEGER PRIMARY KEY,
+  message_json TEXT NOT NULL
+);`;
+
+/** Where the Herder kept the tail of its conversation before schema version 7. */
+export const LEGACY_HERDER_STATE_KEY = "herder.messages";
+
+export const LATEST_SCHEMA_VERSION = 7;
 
 export const SCHEMA_SQL = `
 CREATE TABLE sessions(
@@ -117,4 +129,5 @@ ${TRANSCRIPT_TABLE_SQL}
 ${HERDER_TURNS_TABLE_SQL}
 ${MEMORY_TABLES_SQL}
 ${TASKS_TABLE_SQL}
+${HERDER_LOG_TABLE_SQL}
 `;

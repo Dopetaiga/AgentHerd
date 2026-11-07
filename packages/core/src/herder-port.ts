@@ -76,6 +76,10 @@ export interface HerderHost {
   readonly memoryComplete?: Completer;
   getState<T>(key: string): T | undefined;
   setState(key: string, value: unknown): void;
+  /** The Herder's whole conversation as the model saw it, oldest first (ADR 0041). */
+  herderLog(): unknown[];
+  /** Replaces the saved conversation from position `from` on with `messages`. */
+  writeHerderLog(from: number, messages: unknown[]): void;
 }
 
 /** Card action target of the 「重试」 button on a held Herder message. */

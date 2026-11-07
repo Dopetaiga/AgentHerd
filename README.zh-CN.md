@@ -85,3 +85,7 @@ pnpm --filter @agentherd/desktop start
 ## 许可证
 
 [MIT](LICENSE)
+
+主管的上下文管理用的是 [billion-context](https://github.com/ranxianglei/billion-context) 的
+[acp-kernel](https://github.com/ranxianglei/acp-kernel)（MIT，另加一条署名条款），代码复制在
+[`packages/context-kernel`](packages/context-kernel/UPSTREAM.md)。

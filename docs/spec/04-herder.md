@@ -100,6 +100,7 @@ The Herder may add, never rewrite.
 | Sessions | `session_start(project, name, profile?, ownerText, addedContext, model?)` (name: the task's short name, shown on the board and every report, [ADR 0034](../adr/0034-herder-names-tasks.md)) (model: `service/model` the agent can run, picked by the Herder, [ADR 0025](../adr/0025-herder-picks-model-per-task.md)), `session_prompt(sessionId, text, name?)` (name renames the task), `session_cancel(sessionId)` (stops the running turn), `session_end(sessionId)` (closes the task when the owner says it is finished; the case memory is written then), `session_list()` (also lists models, the agents that can run each, and the owner's model guide, [ADR 0026](../adr/0026-model-guide-for-the-herder.md)) |
 | Owner | `ask(text, options)` (AgentHerd adds 「其他」), `project_find(name)`, `notify(text)`, `relay_start(sessionId)`, `relay_end()` |
 | Read | `task_get`, `task_list`, `session_transcript`, `decisions_list`, `read`, `grep`, `list`, `git_log`, `git_diff` (read tools only inside known project directories) |
+| Context | `compress`, `decompress`, `search_context`, `acp_status`: fold finished parts of its own conversation, find and show them again ([ADR 0041](../adr/0041-herder-context-folded-by-the-model.md)) |
 
 There is no tool to approve an item, write files or run shell commands. Every Herder tool call
 is checked by the guard list first; a match goes to the owner instead of running. Every call is
@@ -117,9 +118,14 @@ it knows what happened without repeating it.
 - A failed Herder turn is retried, then run on the next model, then held with a 「重试」 card;
   key, balance and request errors are not retried ([ADR 0037](../adr/0037-herder-retries-and-never-drops.md), spec 08 §5).
 - The session holds the conversation with the owner and short notes. Task state is read from
-  `herd.db` with the read tools; after a compaction the Herder must re-read it.
-- Compaction keeps unresolved owner instructions verbatim.
-- The session is saved and reloaded across restarts.
+  `herd.db` with the read tools; after a fold the Herder must re-read it.
+- The whole conversation is kept in `herd.db` (`herder_log`) and reloaded after a restart; nothing
+  is cut. Before each request it goes through billion-context's kernel (`packages/context-kernel`):
+  each message gets a ref, and parts the Herder folded with `compress` show as its summary. Summaries
+  keep unresolved owner instructions verbatim; `search_context` and `decompress` bring folded parts
+  back. At 90 % of the model's window AgentHerd folds the oldest whole turns itself (never the
+  current one); a "context too long" error folds about half and retries once
+  ([ADR 0041](../adr/0041-herder-context-folded-by-the-model.md)).
 - Tasks are saved in `herd.db` and come back after a restart as ended tasks. `session_prompt` to an
   ended task starts its agent again in the same folder with the same model; Pi reopens its own
   session, other agents get the earlier conversation as text ([ADR 0039](../adr/0039-tasks-kept-and-continued.md)).

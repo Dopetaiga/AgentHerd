@@ -1,10 +1,20 @@
 // The Herder: one resident session on a light model (docs/spec/04-herder.md §1, ADR 0018).
 
+import type { CompressionState } from "@agentherd/context-kernel";
 import type { HerderEvent, HerderHost, HerderPort, OwnerImage } from "@agentherd/core";
 import { REVIEW_JOB } from "@agentherd/core";
-import { Agent, type AgentMessage, type StreamFn } from "@agentherd/herder-loop";
+import { Agent, type AgentMessage, type AgentTool, type StreamFn } from "@agentherd/herder-loop";
 import { guardCheck } from "@agentherd/rules";
-import type { Api, Model } from "@earendil-works/pi-ai";
+import { type Api, isContextOverflow, type Model } from "@earendil-works/pi-ai";
+import {
+  CONTEXT_STATE_KEY,
+  CONTEXT_TOOL_NAMES,
+  changedFrom,
+  HerderContext,
+  leadingSystem,
+  withoutContextMarks,
+  withoutMarksDeep,
+} from "./context.ts";
 import { errorKind, HELD_RETRY_MS, RETRY_DELAYS_MS, shortError } from "./errors.ts";
 import { memorySnapshot, memoryTools, recallBlock } from "./memory.ts";
 import type { TierPlacement } from "./model-guide.ts";
@@ -17,15 +27,11 @@ import {
 } from "./prompt.ts";
 import { herderTools, otherOption, pathsIn, resolveProject, type TurnContext } from "./tools.ts";
 
-export const HERDER_STATE_KEY = "herder.messages";
-export const MAX_SAVED_MESSAGES = 200;
-
 export interface HerderOptions {
   host: HerderHost;
   model: Model<Api>;
   streamFn: StreamFn;
   getApiKey?: (provider: string) => string | undefined | Promise<string | undefined>;
-  maxSavedMessages?: number;
   /** The model tiers, for picking and swapping a task's model (ADR 0028). Read on each use. */
   modelTiers?: () => TierPlacement;
   /** `service/model` of `model`, for telling the owner about a switch. */
@@ -53,7 +59,7 @@ type Job = (
   | { kind: "answer"; question: string; answer: string }
 ) & { recorded?: boolean };
 
-type Attempt = { ok: true } | { ok: false; message: string; acted: boolean };
+type Attempt = { ok: true } | { ok: false; message: string; acted: boolean; overflow: boolean };
 
 /** A pause after which the memory in the system prompt is rebuilt. */
 export const MEMORY_REFRESH_MS = 60 * 60_000;
@@ -87,7 +93,10 @@ export class Herder implements HerderPort {
   private lastOwnerImages: OwnerImage[] = [];
   /** Whether the model reads images; otherwise it gets where they are saved. */
   private readonly seesImages: boolean;
-  private readonly maxSaved: number;
+  /** The whole conversation and its folds (ADR 0041). */
+  private readonly context: HerderContext;
+  /** The log as last written to the store, to write only what changed. */
+  private saved: AgentMessage[];
   private current: HerderModel;
   private readonly fallbacks: () => HerderModel[];
   private readonly delays: number[];
@@ -110,27 +119,41 @@ export class Herder implements HerderPort {
     this.heldRetryMs = opts.heldRetryMs ?? HELD_RETRY_MS;
     this.sleep = opts.sleep ?? ((ms) => new Promise((r) => setTimeout(r, ms)));
     const ownKey = opts.getApiKey;
-    this.maxSaved = opts.maxSavedMessages ?? MAX_SAVED_MESSAGES;
     this.seesImages = opts.model.input.includes("image");
     this.now = opts.now ?? (() => Date.now());
-    const saved = this.host.getState<AgentMessage[]>(HERDER_STATE_KEY) ?? [];
+    const log = this.host.herderLog() as AgentMessage[];
+    this.context = new HerderContext(
+      {
+        contextWindow: () => this.current.model.contextWindow,
+        messages: () => this.agent.state.messages,
+        audit: (type, data) => this.host.audit(type, data),
+      },
+      log,
+      this.host.getState<CompressionState>(CONTEXT_STATE_KEY),
+    );
     this.agent = new Agent({
       streamFn: opts.streamFn,
       getApiKey: async (provider) => this.current.apiKey ?? (await ownKey?.(provider)),
       beforeToolCall: async ({ toolCall, args }) => this.check(toolCall.name, args),
+      transformContext: async (messages) => this.context.project(messages),
       initialState: {
         systemPrompt: this.fullSystemPrompt(),
         model: opts.model,
         thinkingLevel: "off",
         tools: [
-          ...herderTools(this.host, () => this.turn, opts.modelTiers),
-          ...(this.host.memory === undefined
-            ? []
-            : memoryTools(this.host.memory, () => this.turn, this.host.embedder)),
+          ...[
+            ...herderTools(this.host, () => this.turn, opts.modelTiers),
+            ...(this.host.memory === undefined
+              ? []
+              : memoryTools(this.host.memory, () => this.turn, this.host.embedder)),
+          ].map(withoutMarksInArgs),
+          ...this.context.tools(),
         ],
-        messages: saved,
+        messages: log,
       },
     });
+    const messages = this.agent.state.messages;
+    this.saved = messages.slice(leadingSystem(messages));
   }
 
   ownerMessage(text: string, images: OwnerImage[] = []): void {
@@ -258,11 +281,12 @@ export class Herder implements HerderPort {
     if (!done) return;
     const last = this.agent.state.messages.at(-1);
     if (!this.turn.asked && last?.role === "assistant") {
-      const text = last.content
-        .filter((c) => c.type === "text")
-        .map((c) => (c as { text: string }).text)
-        .join("")
-        .trim();
+      const text = withoutContextMarks(
+        last.content
+          .filter((c) => c.type === "text")
+          .map((c) => (c as { text: string }).text)
+          .join(""),
+      ).trim();
       if (text !== "") {
         this.host.recordTurn("herder", text);
         await this.host.say(text);
@@ -280,6 +304,11 @@ export class Herder implements HerderPort {
    */
   private async runWithRetries(job: Job, prompt: string, images: OwnerImage[]): Promise<boolean> {
     let result = await this.attempt(prompt, images);
+    // Too long for the model after all (the count is an estimate): fold old turns, try once more.
+    if (!result.ok && result.overflow && !result.acted && this.context.foldForOverflow()) {
+      this.host.audit("herder.context.overflow", { message: result.message });
+      result = await this.attempt(prompt, images);
+    }
     if (result.ok) return true;
     const first = result.message;
     if (!result.acted && errorKind(first) === "transient") {
@@ -356,8 +385,9 @@ export class Herder implements HerderPort {
     memory.enqueueJob(REVIEW_JOB, { afterId });
   }
 
+  /** The rules, then how to fold, then the memory: what changes least comes first, for the cache. */
   private fullSystemPrompt(): string {
-    const base = systemPrompt(this.host.locale);
+    const base = `${systemPrompt(this.host.locale)}\n\n${this.context.systemPrompt()}`;
     const snapshot = this.host.memory === undefined ? "" : memorySnapshot(this.host.memory);
     return snapshot === "" ? base : `${base}\n\n${snapshot}`;
   }
@@ -385,6 +415,7 @@ export class Herder implements HerderPort {
   private async attempt(prompt: string, images: OwnerImage[]): Promise<Attempt> {
     const before = this.agent.state.messages.length;
     let message: string | undefined;
+    let overflow = false;
     try {
       if (this.seesImages && images.length > 0) {
         await this.agent.prompt(
@@ -400,16 +431,20 @@ export class Herder implements HerderPort {
         (last.stopReason === "error" || last.stopReason === "aborted")
       ) {
         message = last.errorMessage ?? last.stopReason;
+        overflow = isContextOverflow(last, this.current.model.contextWindow);
       }
     } catch (error) {
       message = (error as Error).message;
     }
     if (message === undefined) return { ok: true };
     const added = this.agent.state.messages.slice(before);
-    const acted = added.some((m) => m.role === "toolResult");
+    // Folding or reading the conversation changed nothing outside it, so the turn may run again.
+    const acted = added.some((m) => m.role === "toolResult" && !CONTEXT_TOOL_NAMES.has(m.toolName));
+    const lead = leadingSystem(this.agent.state.messages);
     this.agent.state.messages = this.agent.state.messages.slice(0, before);
+    this.context.rollback(before - lead);
     this.save();
-    return { ok: false, message, acted };
+    return { ok: false, message, acted, overflow };
   }
 
   /** Guard list on every tool call (docs/spec/06-security.md). A hit blocks the call and tells the owner. */
@@ -437,19 +472,35 @@ export class Herder implements HerderPort {
     return { block: true, reason: `blocked by the guard list: ${result.reason}` };
   }
 
-  /** Saves the session, cut at a user message so tool calls keep their results. */
+  /**
+   * Saves the whole conversation (nothing is cut, ADR 0041): the messages from the first one that
+   * changed since the last save, and the folds.
+   */
   private save(): void {
     // Images are seen once; the text keeps where they are saved. Base64 in every later turn
     // would cost far more than it helps.
     this.agent.state.messages = this.agent.state.messages.map(withoutImages);
-    let messages = this.agent.state.messages.filter((m) => m.role !== "system");
-    if (messages.length > this.maxSaved) {
-      let start = messages.length - this.maxSaved;
-      while (start < messages.length && messages[start]?.role !== "user") start++;
-      messages = messages.slice(start);
+    const messages = this.agent.state.messages;
+    const log = messages.slice(leadingSystem(messages));
+    const from = changedFrom(this.saved, log);
+    if (from < log.length || from < this.saved.length) {
+      this.host.writeHerderLog(from, log.slice(from));
     }
-    this.host.setState(HERDER_STATE_KEY, messages);
+    this.saved = log;
+    this.host.setState(CONTEXT_STATE_KEY, this.context.state);
   }
+}
+
+/** Ref tags the model copied into a tool's arguments are removed before the tool sees them. */
+function withoutMarksInArgs(tool: AgentTool): AgentTool {
+  const prepare = tool.prepareArguments;
+  return {
+    ...tool,
+    prepareArguments: (args: unknown) => {
+      const prepared = prepare === undefined ? args : prepare(args);
+      return JSON.stringify(prepared)?.includes("<acp") ? withoutMarksDeep(prepared) : prepared;
+    },
+  } as AgentTool;
 }
 
 /** Seen once; without this note the model later reads only the path and thinks it never saw it. */
