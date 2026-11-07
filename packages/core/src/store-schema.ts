@@ -96,7 +96,15 @@ export const OUTBOX_TABLE_SQL = `CREATE TABLE IF NOT EXISTS outbox(
   error TEXT
 );`;
 
-export const LATEST_SCHEMA_VERSION = 9;
+/** Schema 10: pull requests tasks opened, followed on GitHub (docs/spec/04-herder.md "Pull requests"). */
+export const PR_WATCHES_TABLE_SQL = `CREATE TABLE IF NOT EXISTS pr_watches(
+  key TEXT PRIMARY KEY,
+  task_id TEXT NOT NULL,
+  data_json TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);`;
+
+export const LATEST_SCHEMA_VERSION = 10;
 
 export const SCHEMA_SQL = `
 CREATE TABLE sessions(
@@ -157,4 +165,5 @@ ${TASK_WORKSPACE_SQL}
 ${MESSAGE_TASKS_TABLE_SQL}
 ${HERDER_LOG_TABLE_SQL}
 ${OUTBOX_TABLE_SQL}
+${PR_WATCHES_TABLE_SQL}
 `;

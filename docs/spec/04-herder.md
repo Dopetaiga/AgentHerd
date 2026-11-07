@@ -150,6 +150,7 @@ an alarm.
 | Agent report | MCP tool `herd_report` of the `agentherd` server, offered in `session/new` and `session/load` ([09-agent-tools.md](09-agent-tools.md)) |
 | Final reply | The agent's last message when the task's turn ends |
 | Watchdog | Timer, every `watchdogSeconds` (default 60) |
+| Pull requests | `gh`, every 2 minutes, for pull requests a task opened (see Pull requests) |
 
 `herd_report(state, summary, changes?, tests?, risks?, links?)`, with `state` one of
 `progress`, `waiting`, `ready`, `blocked`, `failed`, `dropped`. `summary` ≤ 600 characters.
@@ -230,6 +231,33 @@ Messages for the owner (texts, reports, alarms, relay views) go through an outbo
 after 2 s, doubling up to 60 s; after 24 h it is dropped and audited (`send.dropped`). What a
 crash or stop left unsent goes out right after the next start. The board, approval cards and
 Herder questions are sent on their own paths.
+
+### Pull requests
+
+A task's pull requests are followed on GitHub with the owner's `gh` login, like super-agent
+follows its tickets' pull requests ([ADR 0047](../adr/0047-follow-the-pull-requests-tasks-open.md)).
+
+- **Which.** At the end of each turn, links `https://github.com/<owner>/<repo>/pull/<n>` in the
+  agent's reply and `herd_report` summary are read. One is followed when its author is the `gh`
+  user, it was opened after the task started and it is open; a pull request the agent only
+  mentioned is not. Table `pr_watches` (schema 9) keeps the task, the comment and review ids
+  already handled, the head commit whose failed checks were handed over, and the wake count.
+- **When.** Every 2 minutes (`github.pollMinutes`). A task that is working, or whose ended turn is
+  not looked at yet, is skipped: while a task works, what its account writes on GitHub is the
+  agent's. After a turn, new comments by the `gh` user are marked as the agent's own.
+- **People.** New comments, reviews with text, line comments and `CHANGES_REQUESTED` wake the
+  task with one prompt that quotes them (labeled as from GitHub, not from the owner), and the
+  owner gets 「PR #n 有新评论（login）：<first line>」「已交给任务处理」. An ended task is started
+  again, as with any prompt (ADR 0039). A bare approval is only told: 「PR #n 已被 login 批准」.
+- **Bots** (`type: Bot` or a login ending in `[bot]`) are marked seen and never wake or notify.
+- **Checks.** When every check of the head commit finished and some failed, the task gets the
+  names and how to read the logs, once per head commit; the owner gets an alarm-toned
+  「PR #n 的检查没通过：…」.
+- **End.** Merged or closed: the owner is told once (「PR #n 已合并」/「已关闭，没有合并」), the
+  Herder gets an event, and the watch ends. A watch with no activity for 14 days ends silently.
+  At most 20 wakes per pull request; later activity is only told.
+- **Failures.** `gh` missing, logged out or offline is audited (`github.error`) once per distinct
+  error; nothing is sent to the owner. `agentherd run` does not follow pull requests.
 
 ### Reply length
 

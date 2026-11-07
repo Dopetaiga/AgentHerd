@@ -24,6 +24,7 @@ import {
   LEGACY_HERDER_STATE_KEY,
   MESSAGE_TASKS_TABLE_SQL,
   OUTBOX_TABLE_SQL,
+  PR_WATCHES_TABLE_SQL,
   SCHEMA_SQL,
   STATE_TABLE_SQL,
   TASK_WORKSPACE_SQL,
@@ -132,6 +133,10 @@ export class Store {
       if (version < 9) {
         this.db.exec(OUTBOX_TABLE_SQL);
         this.db.prepare("UPDATE schema_version SET version = ?").run(9);
+      }
+      if (version < 10) {
+        this.db.exec(PR_WATCHES_TABLE_SQL);
+        this.db.prepare("UPDATE schema_version SET version = ?").run(10);
       }
     }
 
@@ -487,6 +492,27 @@ export class Store {
       }));
   }
 
+  /** Saves how far AgentHerd has read a pull request a task opened. */
+  savePrWatch(watch: PrWatch): void {
+    this.db
+      .prepare(
+        "INSERT OR REPLACE INTO pr_watches(key, task_id, data_json, updated_at) VALUES (?, ?, ?, ?)",
+      )
+      .run(prKey(watch), watch.taskId, JSON.stringify(watch), new Date().toISOString());
+  }
+
+  /** Pull requests followed, oldest first. */
+  prWatches(): PrWatch[] {
+    return this.db
+      .prepare("SELECT data_json FROM pr_watches ORDER BY rowid")
+      .all()
+      .map((r) => JSON.parse(String(r.data_json)) as PrWatch);
+  }
+
+  deletePrWatch(watch: Pick<PrWatch, "repo" | "number">): void {
+    this.db.prepare("DELETE FROM pr_watches WHERE key = ?").run(prKey(watch));
+  }
+
   /** The channel took the message, or it was given up. */
   deleteOutbox(id: string): void {
     this.db.prepare("DELETE FROM outbox WHERE id = ?").run(id);
@@ -574,6 +600,30 @@ export class Store {
 }
 
 /** A task as saved in herd.db (ADR 0039). */
+/** A pull request a task opened, as far as AgentHerd has read it. */
+export interface PrWatch {
+  /** `owner/name` */
+  repo: string;
+  number: number;
+  url: string;
+  taskId: string;
+  /** Ids of comments and reviews already handled. */
+  seen: string[];
+  /** Head commit whose failed checks were already handed to the task. */
+  ciFailedSha?: string;
+  /** Times the task was woken for this pull request. */
+  wakes: number;
+  createdAt: string;
+  /** Last comment, review or failed check; a watch quiet for long ends. */
+  activeAt: string;
+  /** Set once it merged or closed. */
+  closed?: "merged" | "closed";
+}
+
+export function prKey(w: Pick<PrWatch, "repo" | "number">): string {
+  return `${w.repo.toLowerCase()}#${w.number}`;
+}
+
 /** A message for the owner waiting in the outbox. */
 export interface OutboxRow {
   id: string;
