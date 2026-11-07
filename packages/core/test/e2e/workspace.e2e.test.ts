@@ -4,7 +4,7 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { FakeChannel } from "@agentherd/channel-fake";
 import type { AgentProfile, TextView } from "@agentherd/protocol";
@@ -123,6 +123,7 @@ describe("task copies (ADR 0043)", () => {
 
     await herd.endTask(taskId, "done");
     expect(existsSync(copy)).toBe(false);
+    expect(existsSync(dirname(copy))).toBe(false);
     expect(existsSync(join(proj, "node_modules", "dep", "index.js"))).toBe(true);
   }, 60000);
 

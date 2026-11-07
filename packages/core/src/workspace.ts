@@ -252,6 +252,12 @@ export class Workspaces {
       rmSync(root, { recursive: true, force: true });
       await this.git(["worktree", "prune"], { cwd: top }).catch(() => "");
     }
+    // The project's folder of copies goes with its last copy.
+    try {
+      rmdirSync(dirname(root));
+    } catch {
+      // Other tasks of the project still have copies there.
+    }
   }
 
   private locked<T>(key: string, run: () => Promise<T>): Promise<T> {
