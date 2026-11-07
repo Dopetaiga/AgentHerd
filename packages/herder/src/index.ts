@@ -1,12 +1,17 @@
 export {
+  type AgentLaunch,
   agentForModel,
   agentModelEnv,
   CODEX_KEY_ENV,
   CODEX_PROVIDER,
+  DSH_KEY_ENV,
+  DSH_PROVIDER,
+  dshModelPatch,
   isGptModel,
   type ModelChoice,
   modelChoices,
   modelEnvFor,
+  modelLaunchFor,
 } from "./agent-models.ts";
 export {
   HERDER_STATE_KEY,

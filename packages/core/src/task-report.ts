@@ -2,6 +2,7 @@
 
 import type { AgentConnection } from "@agentherd/acp-client";
 import { type Following, firstLine, type HerdContext } from "./herd-context.ts";
+import type { HerdReport } from "./mcp-gateway.ts";
 import {
   REPORT_MAX_CHARS,
   reportBody,
@@ -18,6 +19,21 @@ export function setReport(ctx: HerdContext, f: Following, text: string): void {
   ctx.board.changed();
 }
 
+/**
+ * An agent's `herd_report` (docs/spec/09-agent-tools.md §2): its state sets the stage, its
+ * summary the board line.
+ */
+export function applyReport(ctx: HerdContext, f: Following, report: HerdReport): void {
+  f.report = report;
+  ctx.store.audit("task.herd_report", {
+    taskId: f.task.id,
+    state: report.state,
+    summary: report.summary,
+  });
+  setReport(ctx, f, report.summary);
+  restage(ctx, f);
+}
+
 /** Recomputes the stage of a task from its session; updates the board if it changed. */
 export function restage(ctx: HerdContext, f: Following): void {
   const row = ctx.registry.get(f.task.id);
@@ -27,6 +43,7 @@ export function restage(ctx: HerdContext, f: Following): void {
     session: f.failed ? "error" : row.state,
     openItems: row.state === "waiting-approval" ? 1 : 0,
     alarm: f.alarm,
+    report: f.report?.state,
     finished: f.finished,
   });
   if (stage === f.task.stage) return;

@@ -9,6 +9,7 @@ a mistake with the user's shell. This spec lists the rules that keep that power 
 | --- | --- |
 | Chat app → core | Only the owner's id is accepted. Every inbound action names an existing open item; anything else is dropped. |
 | Desktop / CLI → core | Unix socket with mode `600` in a directory with mode `700`. No TCP listener. |
+| Agent → core (MCP) | The `agentherd` relay reaches `<home>/run/mcp.sock` (mode `600`; Windows: a named pipe) and must send its task's 32-byte token first; tokens die with the task. No TCP listener ([09-agent-tools.md](09-agent-tools.md)). |
 | Core → agent configs | Exporters write only their own block, after a backup; a rule is never widened. |
 | Renderer → main → core | `contextIsolation: true`, `sandbox: true`, `nodeIntegration: false`. The preload exposes typed methods only. |
 | Herder model → decisions | Model output is data. It is parsed against a schema; on a parse error the item is escalated. The guard list runs before any model. |
@@ -16,9 +17,11 @@ a mistake with the user's shell. This spec lists the rules that keep that power 
 
 ## 2. Secrets
 
-- App Secret and model keys live in `<home>/secrets.json`, mode 600 inside the mode 700
-  `~/.agentherd`, held by the host process; the UI can replace or remove a key but never read it
-  back. The guard list already blocks agents from reading `~/.agentherd`.
+- App Secret, model keys and the owner's Composio API key (`composio`, 09-agent-tools §3) live in
+  `<home>/secrets.json`, mode 600 inside the mode 700 `~/.agentherd`, held by the host process;
+  the UI can replace or remove a key but never read it back. The Composio key goes only to
+  Composio: never to an agent, the Herder, a card or the audit log. The guard list already blocks
+  agents from reading `~/.agentherd`.
 - Logs, `herd.db`, cards and model prompts are passed through a redaction step: known secret
   formats (API keys, tokens, private keys) and values of variables whose names contain
   `KEY`, `TOKEN`, `SECRET` or `PASSWORD` are replaced with `«redacted»`.

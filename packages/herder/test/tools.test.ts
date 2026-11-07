@@ -150,6 +150,18 @@ describe("tools", () => {
     expect(event.rec.started).toHaveLength(0);
   });
 
+  it("session_list names the connected apps only when there are some", async () => {
+    const none = await tools({ ownerText: "x" }).call("session_list", {});
+    expect(none).not.toContain("Connected apps");
+    const some = await tools({ ownerText: "x" }, { apps: ["Gmail", "GitHub"] }).call(
+      "session_list",
+      {},
+    );
+    expect(some).toContain(
+      "Connected apps (agents other than Pi use them through their agentherd tools): Gmail, GitHub",
+    );
+  });
+
   it("session_list shows the models and session_start passes the chosen one", async () => {
     const dir = tmpdir();
     const models = [

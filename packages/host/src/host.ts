@@ -7,6 +7,7 @@ import {
   chooseModel,
   emptyModelSettings,
   Herd,
+  type JsonRpcMessage,
   type ModelRef,
   type ModelRole,
   type ModelService,
@@ -16,6 +17,7 @@ import {
   RESIDENT_CAPS,
   removeService,
   type SecretStore,
+  UnknownTokenError,
 } from "@agentherd/core";
 import {
   agentForModel,
@@ -27,7 +29,7 @@ import {
   MemoryWorker,
   memoryModel,
   modelChoices,
-  modelEnvFor,
+  modelLaunchFor,
   piModelEnv,
   placeModels,
   resolveModel,
@@ -43,6 +45,7 @@ import { Agents } from "./agents.ts";
 import type {
   AgentCheck,
   AgentView,
+  AppsView,
   HostApi,
   HostEvent,
   HostStatus,
@@ -60,10 +63,13 @@ import type {
   Tier,
   TranscriptView,
 } from "./api.ts";
+import { Apps, newComposioUserId } from "./apps.ts";
 import type { AgentDef, Fetchers } from "./catalog.ts";
 import { withCodexHome } from "./codex-home.ts";
 import { type CliConfig, readConfig, writeConfig } from "./config.ts";
+import { dshPatchArgs, writeDshPatch } from "./dsh-patch.ts";
 import { LocalEmbedder } from "./embedder.ts";
+import { mcpServerFor } from "./mcp-socket.ts";
 import { probeModels } from "./probe.ts";
 import { availableProfiles } from "./profiles.ts";
 import { RuntimeStore } from "./runtimes.ts";
@@ -113,6 +119,8 @@ export interface HostOptions {
   verify?: VerifyOptions;
   /** The DeepSeek Harness app's CLI (tests). */
   dshApp?: string;
+  /** The MCP socket agents reach the gateway on (mcp-socket.ts). Without it, agents get none. */
+  mcpSocket?: string;
 }
 
 export class Host implements HostApi {
@@ -139,6 +147,7 @@ export class Host implements HostApi {
   private stopped = false;
 
   private readonly agentList: Agents;
+  private readonly appList: Apps;
 
   constructor(opts: HostOptions) {
     this.opts = opts;
@@ -153,6 +162,38 @@ export class Host implements HostApi {
       onChange: () => this.agentsChanged(),
       log: (line) => this.log(line),
     });
+    this.appList = new Apps({
+      secrets: opts.secrets,
+      userId: () => this.composioUserId(),
+      emit: (data) => this.emit({ topic: "apps", data }),
+      log: (line) => this.log(line),
+    });
+  }
+
+  /** This AgentHerd's Composio user id, made the first time it is needed. */
+  private composioUserId(): string {
+    const config = this.config();
+    const known = config.apps?.composioUserId;
+    if (known !== undefined) return known;
+    const id = newComposioUserId();
+    writeConfig(this.opts.home, { ...config, apps: { ...config.apps, composioUserId: id } });
+    return id;
+  }
+
+  apps(search?: string): Promise<AppsView> {
+    return this.appList.view(search);
+  }
+
+  setComposioKey(key: string): Promise<AppsView> {
+    return this.appList.setKey(key);
+  }
+
+  connectApp(slug: string): Promise<{ url: string }> {
+    return this.appList.connect(slug);
+  }
+
+  disconnectApp(slug: string): Promise<AppsView> {
+    return this.appList.disconnect(slug);
   }
 
   onEvent(listener: (event: HostEvent) => void): () => void {
@@ -205,7 +246,14 @@ export class Host implements HostApi {
   /** Starts following tasks if a channel is bound. */
   async start(): Promise<void> {
     this.installNeededAgents();
+    void this.appList.load();
     await this.restartHerd();
+  }
+
+  /** One message from an agent's `agentherd` MCP server, for the running herd. */
+  mcp(token: string, msg: JsonRpcMessage): Promise<JsonRpcMessage | undefined> {
+    if (this.herd === undefined) throw new UnknownTokenError();
+    return this.herd.mcp(token, msg);
   }
 
   async stop(): Promise<void> {
@@ -250,21 +298,34 @@ export class Host implements HostApi {
       locale,
       profiles: this.herdProfiles(),
       ...(herder === undefined ? {} : { herder }),
+      ...(this.opts.mcpSocket === undefined
+        ? {}
+        : {
+            mcpServer: (token: string) => mcpServerFor(this.opts.mcpSocket as string, token),
+            apps: () => this.appList.appTools(),
+            appNames: () => this.appList.connectedNames(),
+          }),
       agentModels: {
         list: () =>
           modelChoices(
             this.settings(),
             this.profileList.map((p) => p.id),
           ),
-        envFor: (profileId, ref) => {
-          const env = modelEnvFor(
+        launchFor: (profileId, ref) => {
+          const launch = modelLaunchFor(
             this.settings(),
             this.opts.secrets,
             profileId,
             ref,
             this.opts.env,
           );
-          return profileId === "codex" ? withCodexHome(this.opts.home, env) : env;
+          const env =
+            profileId === "codex" ? withCodexHome(this.opts.home, launch.env) : launch.env;
+          if (launch.dshPatch === undefined) return { env };
+          return {
+            env,
+            args: dshPatchArgs(writeDshPatch(this.opts.home, launch.dshPatch)),
+          };
         },
         check: (ref) => this.checkModel(ref),
         next: (profileId, failed, tried) => this.nextModel(profileId, failed, tried),

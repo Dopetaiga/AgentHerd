@@ -9,6 +9,7 @@ import {
   type ContentBlock,
   client,
   methods,
+  type NewSessionResponse,
   ndJsonStream,
   type PermissionOption,
   PROTOCOL_VERSION,
@@ -75,6 +76,14 @@ interface Events {
 
 type Listener<T> = (event: T) => void;
 
+/** A stdio MCP server an agent starts for a session (ACP `McpServerStdio`). */
+export interface StdioMcpServer {
+  name: string;
+  command: string;
+  args: string[];
+  env: { name: string; value: string }[];
+}
+
 export interface AgentConnection {
   readonly profile: AgentProfile;
   readonly agentName: string;
@@ -83,14 +92,15 @@ export interface AgentConnection {
   /** Ways to sign in the agent offers (ACP `authMethods`); empty when it needs none. */
   readonly authMethods: { id: string; name: string; description?: string }[];
   readonly pid: number | undefined;
-  newSession(cwd: string): Promise<string>;
+  /** `mcpServers` are stdio MCP servers the agent starts for this session. */
+  newSession(cwd: string, mcpServers?: StdioMcpServer[]): Promise<string>;
   /** Whether the agent can open a session it saved earlier (ACP `loadSession`). */
   readonly loadsSessions: boolean;
   /**
    * Opens a session the agent saved earlier (ACP `session/load`), so it keeps its own context.
    * Only when `loadsSessions` is true.
    */
-  loadSession(sessionId: string, cwd: string): Promise<void>;
+  loadSession(sessionId: string, cwd: string, mcpServers?: StdioMcpServer[]): Promise<void>;
   /** Whether the agent takes image blocks in a prompt (ACP `promptCapabilities.image`). */
   readonly acceptsImages: boolean;
   /** Images go only to an agent that accepts them; others get the text alone. */
@@ -312,14 +322,12 @@ export async function startAgent(
     pid: child.pid,
     acceptsImages: init.agentCapabilities?.promptCapabilities?.image === true,
     loadsSessions: init.agentCapabilities?.loadSession === true,
-    async loadSession(sessionId, cwd) {
-      await whileAlive(
-        agent.request(methods.agent.session.load, { sessionId, cwd, mcpServers: [] }),
-      );
+    async loadSession(sessionId, cwd, mcpServers = []) {
+      await whileAlive(agent.request(methods.agent.session.load, { sessionId, cwd, mcpServers }));
     },
-    async newSession(cwd) {
-      const res = await whileAlive(
-        agent.request(methods.agent.session.new, { cwd, mcpServers: [] }),
+    async newSession(cwd, mcpServers = []) {
+      const res: NewSessionResponse = await whileAlive(
+        agent.request(methods.agent.session.new, { cwd, mcpServers }),
       );
       return res.sessionId;
     },

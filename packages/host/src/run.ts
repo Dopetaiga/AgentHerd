@@ -3,6 +3,7 @@
 import { FeishuChannel } from "@agentherd/channel-feishu";
 import { feishuSecrets, secretFile } from "./config.ts";
 import { Host } from "./host.ts";
+import { mcpSocketPath, serveMcp } from "./mcp-socket.ts";
 import { searchPath } from "./profiles.ts";
 import { type ApiServer, serveApi, socketPath } from "./server.ts";
 
@@ -23,8 +24,10 @@ export async function runHost(opts: RunHostOptions): Promise<RunningHost> {
   // An app opened from Finder gets a short PATH; find dsh/pi and let agents find `node` like a
   // terminal would.
   process.env.PATH = searchPath(process.env);
+  const mcpSocket = mcpSocketPath(opts.home);
   const host = new Host({
     home: opts.home,
+    mcpSocket,
     autoInstallAgents: true,
     memoryJobs: true,
     secrets: secretFile(opts.home),
@@ -39,12 +42,16 @@ export async function runHost(opts: RunHostOptions): Promise<RunningHost> {
   });
   const server = await serveApi(host, socketPath(opts.home));
   log(`[host] API on ${server.path}`);
+  // After serveApi: it refuses to start beside another host, which owns the MCP socket too.
+  const mcp = await serveMcp(mcpSocket, (token, msg) => host.mcp(token, msg));
+  log(`[host] agent MCP on ${mcp.path}`);
   await host.start();
   return {
     host,
     server,
     async stop() {
       await server.close();
+      await mcp.close();
       await host.stop();
     },
   };

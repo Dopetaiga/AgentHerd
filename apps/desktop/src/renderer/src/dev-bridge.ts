@@ -18,6 +18,7 @@
 
 import type {
   AgentView,
+  AppsView,
   HostEvent,
   HostStatus,
   MemoryView,
@@ -97,6 +98,19 @@ function installFakeBridge(): void {
 
   let setup: SetupState = { phase: "idle" };
   let memory: MemoryView = sampleMemory();
+  let apps: AppsView =
+    sim === "ready"
+      ? {
+          hasKey: true,
+          apps: [
+            { slug: "gmail", name: "Gmail", connected: true, connecting: false },
+            { slug: "github", name: "GitHub", connected: false, connecting: false },
+            { slug: "slack", name: "Slack", connected: false, connecting: false },
+            { slug: "notion", name: "Notion", connected: false, connecting: false },
+          ],
+        }
+      : { hasKey: false, apps: [] };
+  const appsChanged = (): void => emit({ topic: "apps", data: structuredClone(apps) });
 
   const emit = (event: HostEvent): void => {
     for (const l of eventListeners) l(event);
@@ -200,6 +214,51 @@ function installFakeBridge(): void {
   };
 
   const fake: RemoteHost = {
+    apps: (search) =>
+      delay({
+        ...apps,
+        apps: apps.apps.filter(
+          (a) => search === undefined || a.slug.includes(search.toLowerCase()),
+        ),
+      }),
+    setComposioKey: (key) => {
+      if (key.trim() === "") apps = { hasKey: false, apps: [] };
+      else if (key.trim() === "bad")
+        return delay({ ...apps, problem: "这个 Composio API Key 不能用：Invalid API key" });
+      else
+        apps = {
+          hasKey: true,
+          apps: [
+            { slug: "gmail", name: "Gmail", connected: false, connecting: false },
+            { slug: "github", name: "GitHub", connected: false, connecting: false },
+          ],
+        };
+      return delay(apps, 600);
+    },
+    connectApp: (slug) => {
+      apps = {
+        ...apps,
+        apps: apps.apps.map((a) => (a.slug === slug ? { ...a, connecting: true } : a)),
+      };
+      appsChanged();
+      setTimeout(() => {
+        apps = {
+          ...apps,
+          apps: apps.apps.map((a) =>
+            a.slug === slug ? { ...a, connecting: false, connected: true } : a,
+          ),
+        };
+        appsChanged();
+      }, 3000);
+      return delay({ url: "https://example.com/" });
+    },
+    disconnectApp: (slug) => {
+      apps = {
+        ...apps,
+        apps: apps.apps.map((a) => (a.slug === slug ? { ...a, connected: false } : a)),
+      };
+      return delay(apps);
+    },
     agents: () => delay(agents),
     installAgent: (id) => {
       const npm = id === "codex";

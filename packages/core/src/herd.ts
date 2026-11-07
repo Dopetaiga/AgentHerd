@@ -6,6 +6,7 @@
 import { join } from "node:path";
 import type { AgentProfile, Inbound, Mode, Rule } from "@agentherd/protocol";
 import { DEFAULT_LOCALE } from "@agentherd/protocol";
+import { approveAppCalls } from "./app-calls.ts";
 import { Board } from "./board.ts";
 import { type Clock, systemClock } from "./clock.ts";
 import {
@@ -27,17 +28,18 @@ import {
   type OwnerImage,
 } from "./herder-port.ts";
 import { Inbox } from "./inbox.ts";
+import { type JsonRpcMessage, McpGateway } from "./mcp-gateway.ts";
 import { OwnerCommands } from "./owner-commands.ts";
 import { Registry } from "./registry.ts";
 import { Relay, type RelayState } from "./relay.ts";
 import { Store, type TranscriptEntry } from "./store.ts";
-import { onAlarm, restage } from "./task-report.ts";
+import { applyReport, onAlarm, restage } from "./task-report.ts";
 import { TaskRunner, unfinished } from "./task-runner.ts";
 import type { Task } from "./tasks.ts";
 import { type CoreTexts, coreTexts } from "./texts.ts";
 import { Watchdog } from "./watchdog.ts";
 
-export type { AgentModels, HerdOptions, RunResult } from "./herd-context.ts";
+export type { AgentModels, HerdOptions, ModelLaunch, RunResult } from "./herd-context.ts";
 export { RELAY_IDLE_MINUTES, RELAY_KEY, type RelayState } from "./relay.ts";
 export { SESSION_IDLE_MINUTES } from "./task-runner.ts";
 
@@ -108,6 +110,17 @@ export class Herd {
       clock: this.clock,
       texts: this.texts,
       following: new Map<string, Following>(),
+      mcp: new McpGateway(
+        (taskId, report) => {
+          const f = this.ctx.following.get(taskId);
+          if (f !== undefined && !f.ended) applyReport(this.ctx, f, report);
+        },
+        {
+          ...(opts.apps === undefined ? {} : { apps: opts.apps }),
+          approve: (taskId, calls) => approveAppCalls(this.ctx, taskId, calls),
+          denied: (title) => this.texts.appDenied(title),
+        },
+      ),
       herder: () => this.herder,
       mode: () => this.mode,
     };
@@ -169,6 +182,7 @@ export class Herd {
       relayTaskId: () => this.relay()?.taskId,
       decisions: (limit) => this.store.recentDecisions(limit),
       models: () => this.opts.agentModels?.list() ?? [],
+      apps: () => this.opts.appNames?.() ?? [],
       checkModel: async (ref) => this.opts.agentModels?.check?.(ref) ?? { ok: true },
       startTask: async (profileId, cwd, title, prompt, model, images) => {
         const { taskId, turn } = await this.startTask(profileId, cwd, title, prompt, model, images);
@@ -206,6 +220,14 @@ export class Herd {
       getState: (key) => this.store.getState(key),
       setState: (key, value) => this.store.setState(key, value),
     };
+  }
+
+  /**
+   * One message from a task's `agentherd` MCP server. Throws `UnknownTokenError` for a token no
+   * running task holds.
+   */
+  mcp(token: string, msg: JsonRpcMessage): Promise<JsonRpcMessage | undefined> {
+    return this.ctx.mcp.handle(token, msg);
   }
 
   /** All tasks this Herd follows or followed. */

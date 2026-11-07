@@ -5,9 +5,11 @@ import {
   agentModelEnv,
   CODEX_KEY_ENV,
   codexCanRun,
+  DSH_KEY_ENV,
   isGptModel,
   modelChoices,
   modelEnvFor,
+  modelLaunchFor,
 } from "../src/agent-models.ts";
 import { PI_KEY_ENV, PI_MODEL_ENV, resolveModel } from "../src/models.ts";
 
@@ -46,10 +48,10 @@ describe("agent models", () => {
   it("lists which agents can run each model", () => {
     const choices = modelChoices(settings, ["dsh", "pi", "codex"]);
     expect(choices).toEqual([
-      { ref: "deepseek/deepseek-v4-pro", agents: ["pi"] },
-      { ref: "anthropic/claude-sonnet-4-5", agents: ["pi"] },
-      { ref: "gw/m1", agents: ["pi", "codex"] },
-      { ref: "gw/gpt-6.1-sol", agents: ["pi", "codex"] },
+      { ref: "deepseek/deepseek-v4-pro", agents: ["dsh", "pi"] },
+      { ref: "anthropic/claude-sonnet-4-5", agents: ["dsh", "pi"] },
+      { ref: "gw/m1", agents: ["dsh", "pi", "codex"] },
+      { ref: "gw/gpt-6.1-sol", agents: ["dsh", "pi", "codex"] },
     ]);
   });
 
@@ -92,7 +94,32 @@ describe("agent models", () => {
     expect(codex?.MODEL_PROVIDER).toBe("agentherd");
     expect(codex?.CODEX_CONFIG).not.toContain("k1");
     expect(codex?.[CODEX_KEY_ENV]).toBe("k1");
-    expect(agentModelEnv("dsh", model, "k1")).toBeUndefined();
+    expect(agentModelEnv("dsh", model, "k1")).toEqual({ [DSH_KEY_ENV]: "k1" });
+    expect(agentModelEnv("dsh", { ...model, api: "google-generative-ai" }, "k1")).toBeUndefined();
+  });
+
+  it("hands DSH the model as a patch overlay that holds no key", () => {
+    const store = secrets({ "model:gw": "sk-gw" });
+    const launch = modelLaunchFor(settings, store, "dsh", "gw/m1", {});
+    expect(launch.env).toEqual({ [DSH_KEY_ENV]: "sk-gw" });
+    expect(JSON.stringify(launch.dshPatch)).not.toContain("sk-gw");
+    expect(launch.dshPatch).toEqual([
+      {
+        id: "llm-pi-ai",
+        config: {
+          providers: {
+            agentherd: expect.objectContaining({
+              apiKeyEnv: DSH_KEY_ENV,
+              api: "openai-completions",
+              baseURL: "https://gw.example/v1",
+              models: [expect.objectContaining({ id: "m1" })],
+            }),
+          },
+        },
+      },
+      { id: "acp", config: { provider: "agentherd", model: "m1" } },
+    ]);
+    expect(modelLaunchFor(settings, store, "pi", "gw/m1", {}).dshPatch).toBeUndefined();
   });
 
   it("Codex runs any model of the owner's own services, but not built-ins without Responses", () => {

@@ -1,7 +1,7 @@
-import type { Item, Rule, ToolCallInfo } from "@agentherd/protocol";
+import type { AppHints, Item, Rule, ToolCallInfo } from "@agentherd/protocol";
 import { describe, expect, it } from "vitest";
 import { BODY_MAX_LINES, itemBody, itemView } from "../src/inbox.ts";
-import { AUTO_APPROVED, decide } from "../src/pipeline.ts";
+import { APP_READ, APP_WRITE, AUTO_APPROVED, decide } from "../src/pipeline.ts";
 
 const HOME = "/Users/me";
 
@@ -165,5 +165,81 @@ describe("item card", () => {
     );
     expect(body.split("\n")).toEqual(["echo hello > out.txt", "Reason: Needs a write."]);
     expect(itemBody(item({ command: "ls", rawInput: { justification: 3 } }))).toBe("ls");
+  });
+});
+
+describe("app calls (docs/spec/09-agent-tools.md §3)", () => {
+  const app = (hints?: AppHints, command = "GMAIL_SEND_EMAIL") =>
+    item({
+      kind: "app",
+      title: "Gmail: Send email",
+      command,
+      ...(hints ? { appHints: hints } : {}),
+    });
+  const none: AppHints = { readOnly: false, create: false, update: false, destructive: false };
+
+  it.each(["observe", "assist", "auto"] as const)("a read-only tool runs in %s", (mode) => {
+    const r = decide(app({ ...none, readOnly: true }, "GMAIL_FETCH_EMAILS"), {
+      mode,
+      rules: [],
+      home: HOME,
+    });
+    expect(r.apply).toBe(true);
+    expect(r.decision).toMatchObject({ action: "allow", reason: APP_READ });
+  });
+
+  it("a write that deletes nothing runs in assist, asks in observe", () => {
+    const write = app({ ...none, create: true });
+    expect(decide(write, { mode: "assist", rules: [], home: HOME })).toMatchObject({
+      apply: true,
+      decision: { action: "allow", reason: APP_WRITE },
+    });
+    expect(decide(write, { mode: "observe", rules: [], home: HOME })).toMatchObject({
+      apply: false,
+      decision: { action: "escalate" },
+    });
+  });
+
+  it("a destructive tool or one without hints asks the owner", () => {
+    const destructive = decide(app({ ...none, update: true, destructive: true }), {
+      mode: "assist",
+      rules: [],
+      home: HOME,
+    });
+    expect(destructive).toMatchObject({
+      apply: false,
+      decision: { action: "escalate", risk: "high" },
+    });
+    expect(decide(app(), { mode: "auto", rules: [], home: HOME })).toMatchObject({
+      apply: false,
+      decision: { action: "escalate" },
+    });
+    expect(decide(app(none), { mode: "auto", rules: [], home: HOME }).apply).toBe(false);
+  });
+
+  it("the owner's rules come first", () => {
+    const denyGmail: Rule = {
+      ...allowAll,
+      id: "r-g",
+      action: "deny",
+      match: { toolKind: "app", command: "GMAIL_*" },
+    };
+    const r = decide(app({ ...none, readOnly: true }, "GMAIL_FETCH_EMAILS"), {
+      mode: "assist",
+      rules: [denyGmail],
+      home: HOME,
+    });
+    expect(r).toMatchObject({ apply: true, decision: { action: "deny" }, ruleId: "r-g" });
+    const allowDelete: Rule = {
+      ...allowAll,
+      id: "r-d",
+      match: { toolKind: "app", command: "GMAIL_DELETE_*" },
+    };
+    const d = decide(app({ ...none, destructive: true }, "GMAIL_DELETE_MESSAGE"), {
+      mode: "assist",
+      rules: [allowDelete],
+      home: HOME,
+    });
+    expect(d).toMatchObject({ apply: true, decision: { action: "allow" }, ruleId: "r-d" });
   });
 });

@@ -35,6 +35,8 @@ export interface AgentProfile {
   command: string[];
   env: Record<string, string>;
   exporter: string | null;
+  /** `false`: start the agent without the `agentherd` MCP server (docs/spec/09-agent-tools.md). */
+  mcp?: boolean;
 }
 
 /** Channel-neutral description of what an agent wants to do. */
@@ -44,6 +46,16 @@ export interface ToolCallInfo {
   command?: string;
   paths: string[];
   rawInput?: unknown;
+  /** Kind "app" (command = the tool slug): the tool's hints from Composio, when it has any. */
+  appHints?: AppHints;
+}
+
+/** Composio tool hints (tags), docs/spec/09-agent-tools.md §3. */
+export interface AppHints {
+  readOnly: boolean;
+  create: boolean;
+  update: boolean;
+  destructive: boolean;
 }
 
 /** docs/spec/04-herder.md §3, "Output" */
