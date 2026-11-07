@@ -18,8 +18,10 @@ import {
   toStoredItem,
 } from "./store-rows.ts";
 import {
+  HERDER_LOG_TABLE_SQL,
   HERDER_TURNS_TABLE_SQL,
   LATEST_SCHEMA_VERSION,
+  LEGACY_HERDER_STATE_KEY,
   MESSAGE_TASKS_TABLE_SQL,
   SCHEMA_SQL,
   STATE_TABLE_SQL,
@@ -118,6 +120,13 @@ export class Store {
         if (!columns.some((c) => c.name === "workspace_json")) this.db.exec(TASK_WORKSPACE_SQL);
         this.db.exec(MESSAGE_TASKS_TABLE_SQL);
         this.db.prepare("UPDATE schema_version SET version = ?").run(7);
+      }
+      if (version < 8) {
+        this.transaction(() => {
+          this.db.exec(HERDER_LOG_TABLE_SQL);
+          this.moveLegacyHerderMessages();
+          this.db.prepare("UPDATE schema_version SET version = ?").run(8);
+        });
       }
     }
 
@@ -473,6 +482,51 @@ export class Store {
 
   deleteState(key: string): void {
     this.stmtDeleteState.run(key);
+  }
+
+  /** The Herder's whole conversation, oldest first (ADR 0045). */
+  herderLog(): unknown[] {
+    return this.db
+      .prepare("SELECT message_json FROM herder_log ORDER BY seq")
+      .all()
+      .map((row) => JSON.parse(row.message_json as string) as unknown);
+  }
+
+  /**
+   * Replaces the Herder's conversation from position `from` on: new messages are appended, and a
+   * turn that was rolled back or rewritten replaces what was saved of it.
+   */
+  writeHerderLog(from: number, messages: unknown[]): void {
+    this.transaction(() => {
+      this.db.prepare("DELETE FROM herder_log WHERE seq >= ?").run(from);
+      const insert = this.db.prepare("INSERT INTO herder_log(seq, message_json) VALUES (?, ?)");
+      for (const [i, message] of messages.entries()) insert.run(from + i, JSON.stringify(message));
+    });
+  }
+
+  /** Before schema version 8 the Herder kept the tail of its conversation in `state`. */
+  private moveLegacyHerderMessages(): void {
+    const row = this.db
+      .prepare("SELECT value_json FROM state WHERE key = ?")
+      .get(LEGACY_HERDER_STATE_KEY);
+    if (row === undefined) return;
+    const messages = JSON.parse(row.value_json as string) as unknown;
+    if (Array.isArray(messages)) {
+      const insert = this.db.prepare("INSERT INTO herder_log(seq, message_json) VALUES (?, ?)");
+      for (const [i, message] of messages.entries()) insert.run(i, JSON.stringify(message));
+    }
+    this.db.prepare("DELETE FROM state WHERE key = ?").run(LEGACY_HERDER_STATE_KEY);
+  }
+
+  private transaction(run: () => void): void {
+    this.db.exec("BEGIN");
+    try {
+      run();
+      this.db.exec("COMMIT");
+    } catch (error) {
+      this.db.exec("ROLLBACK");
+      throw error;
+    }
   }
 }
 

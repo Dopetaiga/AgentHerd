@@ -14,10 +14,17 @@ export {
   modelLaunchFor,
 } from "./agent-models.ts";
 export {
-  HERDER_STATE_KEY,
+  CONTEXT_STATE_KEY,
+  CONTEXT_WINDOW_MAX,
+  type ContextHooks,
+  FORCED_FOLD_AT,
+  FORCED_FOLD_TO,
+  HerderContext,
+  withoutContextMarks,
+} from "./context.ts";
+export {
   Herder,
   type HerderOptions,
-  MAX_SAVED_MESSAGES,
   MEMORY_REFRESH_MS,
   REVIEW_EVERY_TURNS,
   REVIEW_IDLE_MS,

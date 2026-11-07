@@ -1,7 +1,10 @@
 # References
 
 AgentHerd learns from these projects. It does not copy their code (see
-[ADR 0009](adr/0009-mit-license-reference-only.md)).
+[ADR 0009](adr/0009-mit-license-reference-only.md)), except two MIT parts it copied and owns:
+Pi's agent loop (`packages/herder-loop`, [ADR 0020](adr/0020-fork-pi-agent-loop-track-upstream.md))
+and acp-kernel from billion-context (`packages/context-kernel`,
+[ADR 0045](adr/0045-herder-context-folded-by-the-model.md)).
 
 | Project | License | What we take |
 | --- | --- | --- |
@@ -11,3 +14,4 @@ AgentHerd learns from these projects. It does not copy their code (see
 | [Feishu one-scan agent app](https://open.feishu.cn/document/mcp_open_tools/integrating-agents-with-feishu/overview) | — | `registerApp` in `@larksuiteoapi/node-sdk`: one scan returns App ID, App Secret and the owner's `open_id`; long connection for messages and card callbacks |
 | [botmux](https://github.com/deepcoldy/botmux), [cc-connect](https://github.com/chenhg5/cc-connect) | — | Setup experience for Feishu bots that bridge to coding agents |
 | [Pi](https://github.com/earendil-works/pi) | MIT | Agent core for the Herder (resident secretary session) and the Reviewer |
+| [billion-context](https://github.com/ranxianglei/billion-context), [acp-kernel](https://github.com/ranxianglei/acp-kernel) | MIT plus an attribution term | The Herder's context management: the model folds finished parts of its conversation into summaries it writes, and can search and unfold them. The kernel is copied into `packages/context-kernel` |

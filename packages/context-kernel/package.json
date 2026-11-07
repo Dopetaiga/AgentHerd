@@ -1,0 +1,17 @@
+{
+  "name": "@agentherd/context-kernel",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "exports": {
+    ".": "./src/index.ts",
+    "./wire": "./src/wire/index.ts",
+    "./panel": "./src/panel/index.ts",
+    "./persist": "./src/persist/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p .",
+    "test": "node --test --test-reporter=dot tests/*.test.ts"
+  }
+}

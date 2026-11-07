@@ -11,6 +11,7 @@
     "test": "vitest run --root ../.. packages/herder"
   },
   "dependencies": {
+    "@agentherd/context-kernel": "workspace:*",
     "@agentherd/core": "workspace:*",
     "@agentherd/herder-loop": "workspace:*",
     "@agentherd/rules": "workspace:*",

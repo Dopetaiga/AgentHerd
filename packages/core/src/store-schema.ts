@@ -70,7 +70,19 @@ export const MESSAGE_TASKS_TABLE_SQL = `CREATE TABLE IF NOT EXISTS message_tasks
   at TEXT NOT NULL
 );`;
 
-export const LATEST_SCHEMA_VERSION = 7;
+/**
+ * Schema 8: the Herder's whole conversation as the model saw it, one message per row, oldest
+ * first. Nothing is cut: old parts are folded into summaries the model writes (ADR 0045).
+ */
+export const HERDER_LOG_TABLE_SQL = `CREATE TABLE IF NOT EXISTS herder_log(
+  seq INTEGER PRIMARY KEY,
+  message_json TEXT NOT NULL
+);`;
+
+/** Where the Herder kept the tail of its conversation before schema version 8. */
+export const LEGACY_HERDER_STATE_KEY = "herder.messages";
+
+export const LATEST_SCHEMA_VERSION = 8;
 
 export const SCHEMA_SQL = `
 CREATE TABLE sessions(
@@ -129,4 +141,5 @@ ${MEMORY_TABLES_SQL}
 ${TASKS_TABLE_SQL}
 ${TASK_WORKSPACE_SQL}
 ${MESSAGE_TASKS_TABLE_SQL}
+${HERDER_LOG_TABLE_SQL}
 `;

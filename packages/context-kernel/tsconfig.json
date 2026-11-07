@@ -1,0 +1,11 @@
+{
+  "extends": "../../tsconfig.base.json",
+  // Like upstream, src is type-checked and the node:test suite in tests/ is not (UPSTREAM.md).
+  // test/ is ours: it runs that suite inside `pnpm test`.
+  "compilerOptions": {
+    "types": ["node"],
+    "lib": ["ES2023", "ES2024.Promise"],
+    "exactOptionalPropertyTypes": false
+  },
+  "include": ["src", "test"]
+}

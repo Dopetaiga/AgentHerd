@@ -48,3 +48,4 @@ Format and rules: [ADR 0001](0001-record-architecture-decisions.md).
 | [0042](0042-dsh-runs-the-owners-models.md) | DSH runs the owner's models through a `--patch` overlay; `envFor` becomes `launchFor` | Accepted |
 | [0043](0043-tasks-work-on-hidden-copies.md) | Tasks in a git project work on a hidden copy synced each turn; a project named once starts without asking; replies reach their task | Accepted |
 | [0044](0044-codex-runs-relay-models.md) | Codex runs any model of the owner's own OpenAI-compatible services, with its own CODEX_HOME | Accepted |
+| [0045](0045-herder-context-folded-by-the-model.md) | The Herder keeps its whole conversation and folds it itself with billion-context's kernel (copied into the repo) | Accepted |

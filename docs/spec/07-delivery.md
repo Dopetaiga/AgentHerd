@@ -60,3 +60,4 @@ Each milestone is split into plans under [`plans/`](../../plans/README.md).
 | E2E-REPORT-LONG | A task ends with a longer reply; one summary prompt is sent to the same session; its answer is the body and the full reply is attached; no second summary prompt | M2 | `packages/core/test/e2e/follow.e2e.test.ts` |
 | E2E-FOLD | A relayed agent message over `foldChars` is sent folded and complete | M2 | |
 | E2E-HERDER-NO-APPROVE | The Herder has no way to allow an item; a Herder tool call that matches the guard list goes to the owner | M2 | `packages/herder/test/e2e/herder.e2e.test.ts`, `packages/herder/test/herder.test.ts` |
+| E2E-HERDER-CONTEXT | The Herder folds earlier messages with `compress`; after a restart on the same `herd.db` the next request shows the summary instead of them, and the log still has them | M2 | `packages/herder/test/e2e/herder.e2e.test.ts` |

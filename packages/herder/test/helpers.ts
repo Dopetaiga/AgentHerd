@@ -23,6 +23,8 @@ export interface Recorded {
   turns: { role: string; text: string }[];
   alerts: { text: string; retry: boolean }[];
   state: Map<string, unknown>;
+  /** The saved Herder conversation (`herder_log`). */
+  log: unknown[];
 }
 
 export function task(id: string, title: string): Task {
@@ -69,6 +71,7 @@ export function fakeHost(
     turns: [],
     alerts: [],
     state: new Map(),
+    log: [],
   };
   const tasks = opts.tasks ?? [];
   const host: HerderHost = {
@@ -114,6 +117,11 @@ export function fakeHost(
     ...(opts.memory === undefined ? {} : { memory: opts.memory }),
     getState: <T>(key: string) => rec.state.get(key) as T | undefined,
     setState: (key, value) => void rec.state.set(key, structuredClone(value)),
+    herderLog: () => structuredClone(rec.log),
+    writeHerderLog: (from, messages) => {
+      rec.log.length = Math.min(rec.log.length, from);
+      rec.log.push(...structuredClone(messages));
+    },
   };
   return { host, rec };
 }

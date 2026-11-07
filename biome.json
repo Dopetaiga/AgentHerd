@@ -12,7 +12,9 @@
       "!plans",
       "!**/*.md",
       "!packages/herder-loop/src",
-      "!packages/herder-loop/test"
+      "!packages/herder-loop/test",
+      "!packages/context-kernel/src",
+      "!packages/context-kernel/tests"
     ]
   },
   "formatter": {

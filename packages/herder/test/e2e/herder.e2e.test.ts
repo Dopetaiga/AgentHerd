@@ -42,11 +42,10 @@ function profile(script: string): AgentProfile {
   };
 }
 
-async function setup(script: string) {
+async function setup(script: string, store = Store.open(":memory:")) {
   const faux = registerFauxProvider();
   fauxes.push(faux);
   const channel = new FakeChannel("owner");
-  const store = Store.open(":memory:");
   let herder: Herder | undefined;
   const herd = new Herd({
     home: dir,
@@ -205,5 +204,50 @@ describe("E2E-HERDER-NO-APPROVE", () => {
     await until(() => reports(channel).length === 2);
     expect(reports(channel)[0]?.body).toBe("tests passed");
     expect(store.recentDecisions().map((d) => d.source)).toEqual(["human"]);
+  });
+});
+
+describe("E2E-HERDER-CONTEXT (ADR 0045)", () => {
+  it("the whole conversation is stored, and the model's own fold holds after a restart", async () => {
+    const store = Store.open(join(dir, "context.db"));
+    const summary =
+      "主人让我整理三月的发票，附了一大段材料。我整理好并回复了，这件事办完了，没有要跟进的，也没提项目目录或模型。";
+    const first = await setup(ONE_TURN, store);
+    first.faux.setResponses([
+      fauxAssistantMessage("发票整理好了。"),
+      fauxAssistantMessage("第二件也好了。"),
+      fauxAssistantMessage(
+        [fauxToolCall("compress", { content: `m00002–m00003 三月发票\n${summary}` })],
+        { stopReason: "toolUse" },
+      ),
+      fauxAssistantMessage("收起来了。"),
+    ]);
+    await first.channel.say(`整理三月的发票 ${"甲".repeat(6000)}`);
+    await until(() => texts(first.channel).length === 1);
+    await first.channel.say(`第二件事 ${"乙".repeat(6000)}`);
+    await until(() => texts(first.channel).length === 2);
+    await first.channel.say("把发票那段收起来");
+    await until(() => texts(first.channel).length === 3);
+    await first.herder.idle();
+    await first.herd.stop();
+    herds = herds.filter((h) => h !== first.herd);
+    expect(JSON.stringify(store.herderLog())).toContain("甲甲甲");
+
+    const second = await setup(ONE_TURN, store);
+    const seen: string[] = [];
+    second.faux.setResponses([
+      (context) => {
+        seen.push(JSON.stringify(context.messages));
+        return fauxAssistantMessage("在。");
+      },
+    ]);
+    await second.channel.say("在吗");
+    await until(() => texts(second.channel).includes("在。"));
+    expect(seen[0]).not.toContain("甲甲甲");
+    expect(seen[0]).toContain(summary);
+    expect(seen[0]).toContain("乙乙乙");
+    await second.herd.stop();
+    herds = herds.filter((h) => h !== second.herd);
+    store.close();
   });
 });

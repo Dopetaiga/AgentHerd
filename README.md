@@ -93,3 +93,7 @@ pnpm --filter @agentherd/desktop start
 ## License
 
 [MIT](LICENSE)
+
+The Herder's context management uses [acp-kernel](https://github.com/ranxianglei/acp-kernel) from
+[billion-context](https://github.com/ranxianglei/billion-context) (MIT plus an attribution term),
+copied into [`packages/context-kernel`](packages/context-kernel/UPSTREAM.md).

@@ -119,7 +119,7 @@ All state is under `~/.agentherd/` (overridable by `AGENTHERD_HOME`):
 | Path | Content |
 | --- | --- |
 | `config.json` | Settings and agent profiles, without secrets |
-| `herd.db` | SQLite: sessions, items, decisions, rules |
+| `herd.db` | SQLite: sessions, tasks, items, decisions, rules, memory, the Herder's whole conversation (`herder_log`) |
 | `run/herd.sock` | Local API socket (not on Windows, see §4) |
 | `logs/` | Rotated logs. Secrets redacted. |
 | `backups/` | Copies of agent config files before each export |

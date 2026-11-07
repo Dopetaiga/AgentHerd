@@ -8,7 +8,7 @@ import {
   streamSimple,
 } from "@earendil-works/pi-ai/compat";
 import { afterEach, describe, expect, it } from "vitest";
-import { HERDER_STATE_KEY, Herder, type HerderOptions, IMAGE_SEEN_NOTE } from "../src/herder.ts";
+import { Herder, type HerderOptions, IMAGE_SEEN_NOTE } from "../src/herder.ts";
 import { fakeHost, task } from "./helpers.ts";
 
 let faux: FauxProviderRegistration[] = [];
@@ -17,12 +17,15 @@ afterEach(() => {
   faux = [];
 });
 
+/** Owner messages the model was sent; the opening line and fold summaries are user messages too. */
+function ownerMessages(messages: readonly { role: string; content: unknown }[]): number {
+  return messages.filter(
+    (m) => m.role === "user" && JSON.stringify(m.content).includes("[Owner's message]"),
+  ).length;
+}
+
 /** The user text of every request the model received. */
-function setup(
-  opts: Parameters<typeof fakeHost>[0] = {},
-  maxSavedMessages?: number,
-  extra: Partial<HerderOptions> = {},
-) {
+function setup(opts: Parameters<typeof fakeHost>[0] = {}, extra: Partial<HerderOptions> = {}) {
   const registration = registerFauxProvider();
   faux.push(registration);
   const { host, rec } = fakeHost(opts);
@@ -31,7 +34,6 @@ function setup(
       host,
       model: registration.getModel(),
       streamFn: streamSimple,
-      ...(maxSavedMessages === undefined ? {} : { maxSavedMessages }),
       sleep: async () => {},
       ...extra,
     });
@@ -82,7 +84,7 @@ describe("Herder", () => {
     await herder.idle();
     expect(seen[1]).toBe("later:0");
     expect(seen[2]).toContain(IMAGE_SEEN_NOTE.slice(0, 30));
-    expect(JSON.stringify(rec.state.get(HERDER_STATE_KEY))).not.toContain("iVBORw0K");
+    expect(JSON.stringify(rec.log)).not.toContain("iVBORw0K");
   });
 
   it("answers the owner with its final text", async () => {
@@ -124,7 +126,7 @@ describe("Herder", () => {
     expect(rec.alerts).toHaveLength(1);
     expect(rec.alerts[0]?.text).toContain("401 invalid key");
     expect(rec.alerts[0]?.retry).toBe(false);
-    expect(rec.state.get(HERDER_STATE_KEY)).toEqual([]);
+    expect(rec.log).toEqual([]);
     herder.ownerMessage("你好");
     await herder.idle();
     expect(rec.said[0]).toBe("好了。");
@@ -144,10 +146,13 @@ describe("Herder", () => {
 
   it("after the retries it runs on the next model and tells the owner", async () => {
     let fallbackModel: HerderOptions["model"] | undefined;
-    const { herder, rec, faux } = setup({}, undefined, {
-      modelRef: "a/one",
-      fallbacks: () => [{ ref: "b/two", model: fallbackModel as HerderOptions["model"] }],
-    });
+    const { herder, rec, faux } = setup(
+      {},
+      {
+        modelRef: "a/one",
+        fallbacks: () => [{ ref: "b/two", model: fallbackModel as HerderOptions["model"] }],
+      },
+    );
     fallbackModel = faux.getModel();
     const err = () => fauxAssistantMessage("", { stopReason: "error", errorMessage: "503 busy" });
     faux.setResponses([err(), err(), err(), err(), fauxAssistantMessage("换好了。")]);
@@ -158,7 +163,7 @@ describe("Herder", () => {
   });
 
   it("when every model fails the message is held and runs on 重试", async () => {
-    const { herder, rec, faux } = setup({}, undefined, { retryDelaysMs: [] });
+    const { herder, rec, faux } = setup({}, { retryDelaysMs: [] });
     faux.setResponses([
       fauxAssistantMessage("", { stopReason: "error", errorMessage: "Connection error." }),
       fauxAssistantMessage("第一条。"),
@@ -262,8 +267,7 @@ describe("Herder", () => {
     faux.setResponses([
       fauxAssistantMessage("记住了。"),
       (context) => {
-        const users = context.messages.filter((m) => m.role === "user");
-        return fauxAssistantMessage(`前面有 ${users.length - 1} 条`);
+        return fauxAssistantMessage(`前面有 ${ownerMessages(context.messages) - 1} 条`);
       },
     ]);
     herder.ownerMessage("我叫小王");
@@ -275,19 +279,124 @@ describe("Herder", () => {
     expect(rec.said).toEqual(["记住了。", "前面有 1 条"]);
   });
 
-  it("cuts the saved session at a user message", async () => {
-    const { herder, rec, faux } = setup({}, 3);
+  it("saves the whole conversation; nothing is cut (ADR 0045)", async () => {
+    const { herder, make, rec, faux } = setup();
+    const replies = Array.from({ length: 30 }, (_, i) => fauxAssistantMessage(`好${i}`));
     faux.setResponses([
       fauxAssistantMessage([fauxText("a"), fauxToolCall("session_list", {})], {
         stopReason: "toolUse",
       }),
-      fauxAssistantMessage("一"),
-      fauxAssistantMessage("二"),
+      ...replies,
+      (context) => {
+        return fauxAssistantMessage(`前面有 ${ownerMessages(context.messages) - 1} 条`);
+      },
     ]);
-    herder.ownerMessage("1");
-    herder.ownerMessage("2");
+    for (let i = 0; i < 30; i++) herder.ownerMessage(`第${i}条`);
     await herder.idle();
-    const saved = rec.state.get(HERDER_STATE_KEY) as { role: string }[];
-    expect(saved.map((m) => m.role)).toEqual(["user", "assistant"]);
+    const roles = (rec.log as { role: string }[]).map((m) => m.role);
+    expect(roles.slice(0, 5)).toEqual(["user", "assistant", "toolResult", "assistant", "user"]);
+    expect(roles.filter((r) => r === "user")).toHaveLength(30);
+    await herder.stop();
+    const again = make();
+    again.ownerMessage("几条了？");
+    await again.idle();
+    expect(rec.said.at(-1)).toBe("前面有 30 条");
+  });
+});
+
+describe("Herder context (ADR 0045)", () => {
+  const SUMMARY =
+    "主人让我整理三月的发票，附了一大段材料。我整理好并回复了，这件事办完了，没有要跟进的，也没提项目目录或模型。";
+
+  it("the model folds a finished part itself, and the fold holds after a restart", async () => {
+    const { herder, make, rec, faux } = setup();
+    const seen: string[] = [];
+    faux.setResponses([
+      fauxAssistantMessage("发票整理好了。"),
+      fauxAssistantMessage("第二件也好了。"),
+      fauxAssistantMessage(
+        [fauxToolCall("compress", { content: `m00002–m00003 三月发票\n${SUMMARY}` })],
+        { stopReason: "toolUse" },
+      ),
+      fauxAssistantMessage("收起来了。"),
+      (context) => {
+        seen.push(JSON.stringify(context.messages));
+        return fauxAssistantMessage("在。");
+      },
+    ]);
+    herder.ownerMessage(`整理三月的发票 ${"甲".repeat(6000)}`);
+    await herder.idle();
+    herder.ownerMessage(`第二件事 ${"乙".repeat(6000)}`);
+    await herder.idle();
+    herder.ownerMessage("把发票那段收起来");
+    await herder.idle();
+    expect(rec.said).toEqual(["发票整理好了。", "第二件也好了。", "收起来了。"]);
+    expect(rec.audits.find((a) => a.type === "herder.context.compress")?.data).toMatchObject({
+      blocks: 1,
+    });
+    expect(JSON.stringify(rec.log)).toContain("甲甲甲"); // the log keeps everything
+    await herder.stop();
+    const again = make();
+    again.ownerMessage("在吗");
+    await again.idle();
+    expect(seen[0]).not.toContain("甲甲甲");
+    expect(seen[0]).toContain(SUMMARY);
+    expect(seen[0]).toContain("乙乙乙");
+  });
+
+  it("ref tags the model copies into its reply never reach the owner", async () => {
+    const { herder, rec, faux } = setup();
+    faux.setResponses([
+      fauxAssistantMessage('<acp tokens="3" type="text">m00003</acp>\n现在没有任务在跑。'),
+    ]);
+    herder.ownerMessage("现在什么情况？");
+    await herder.idle();
+    expect(rec.said).toEqual(["现在没有任务在跑。"]);
+  });
+
+  it("a request too long for the model folds old turns and runs once more", async () => {
+    const { make, rec, faux } = setup();
+    for (let i = 0; i < 6; i++) {
+      rec.log.push(
+        {
+          role: "user",
+          content: [{ type: "text", text: `第${i}件事 ${"字".repeat(3000)}` }],
+          timestamp: 1,
+        },
+        fauxAssistantMessage(`第${i}件办好了`),
+      );
+    }
+    const herder = make();
+    const seen: string[] = [];
+    faux.setResponses([
+      fauxAssistantMessage("", {
+        stopReason: "error",
+        errorMessage: "prompt is too long: 140000 tokens > 128000 maximum",
+      }),
+      (context) => {
+        seen.push(JSON.stringify(context.messages));
+        return fauxAssistantMessage("好了。");
+      },
+    ]);
+    herder.ownerMessage("继续");
+    await herder.idle();
+    expect(rec.said).toEqual(["好了。"]);
+    expect(rec.alerts).toEqual([]);
+    expect(rec.audits.map((a) => a.type)).toContain("herder.context.overflow");
+    expect(seen[0]).not.toContain(`第0件事 ${"字".repeat(200)}`);
+    expect(seen[0]).toContain(`第5件事 ${"字".repeat(3000)}`);
+  });
+
+  it("a turn that only looked at its context is still retried after a connection error", async () => {
+    const { herder, rec, faux } = setup();
+    faux.setResponses([
+      fauxAssistantMessage([fauxToolCall("acp_status", {})], { stopReason: "toolUse" }),
+      fauxAssistantMessage("", { stopReason: "error", errorMessage: "Connection error." }),
+      fauxAssistantMessage("在的。"),
+    ]);
+    herder.ownerMessage("在吗");
+    await herder.idle();
+    expect(rec.said).toEqual(["在的。"]);
+    expect(rec.alerts).toEqual([]);
   });
 });
