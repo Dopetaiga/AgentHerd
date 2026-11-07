@@ -50,9 +50,9 @@ await import(${JSON.stringify(BIN)});
 
 const models: AgentModels = {
   list: () => [{ ref: "svc/fast", agents: ["mock"] }],
-  envFor: (profileId, ref) => {
+  launchFor: (profileId, ref) => {
     if (profileId !== "mock" || ref !== "svc/fast") throw new Error(`cannot run ${ref}`);
-    return { TEST_MODEL: ref };
+    return { env: { TEST_MODEL: ref } };
   },
 };
 
@@ -150,7 +150,7 @@ await import(${JSON.stringify(BIN)});
           { ref: "svc/broken", agents: ["mock"] },
           { ref: "svc/good", agents: ["mock", "dead"] },
         ],
-        envFor: (_p, ref) => ({ TEST_MODEL: ref }),
+        launchFor: (_p, ref) => ({ env: { TEST_MODEL: ref } }),
         ...(next === undefined ? {} : { next }),
       },
     });

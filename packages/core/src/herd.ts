@@ -39,7 +39,7 @@ import type { Task } from "./tasks.ts";
 import { type CoreTexts, coreTexts } from "./texts.ts";
 import { Watchdog } from "./watchdog.ts";
 
-export type { AgentModels, HerdOptions, RunResult } from "./herd-context.ts";
+export type { AgentModels, HerdOptions, ModelLaunch, RunResult } from "./herd-context.ts";
 export { RELAY_IDLE_MINUTES, RELAY_KEY, type RelayState } from "./relay.ts";
 export { SESSION_IDLE_MINUTES } from "./task-runner.ts";
 

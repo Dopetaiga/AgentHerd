@@ -45,3 +45,4 @@ Format and rules: [ADR 0001](0001-record-architecture-decisions.md).
 | [0039](0039-tasks-kept-and-continued.md) | Tasks are kept in herd.db across restarts; an ended task can be continued (Pi reopens its own session) | Accepted |
 | [0040](0040-ask-before-continuing-cut-off-tasks.md) | After a restart the Herder asks whether to continue tasks the stop cut off | Accepted |
 | [0041](0041-agent-tools-through-a-local-mcp-gateway.md) | Agents get herd_report and the owner's Composio apps through a local stdio MCP gateway; app calls go through approvals | Accepted |
+| [0042](0042-dsh-runs-the-owners-models.md) | DSH runs the owner's models through a `--patch` overlay; `envFor` becomes `launchFor` | Accepted |

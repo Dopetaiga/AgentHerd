@@ -30,13 +30,57 @@ export function agentForModel(ref: string | undefined, agentIds: readonly string
   return first;
 }
 
+/** DSH reads the key from this variable, named in the provider it gets through `--patch`. */
+export const DSH_KEY_ENV = "AGENTHERD_DSH_KEY";
+export const DSH_PROVIDER = "agentherd";
+/** The wire APIs DSH's pi-ai providers speak (dsh-llm-pi-ai config schema). */
+const DSH_APIS: readonly string[] = [
+  "openai-completions",
+  "openai-responses",
+  "anthropic-messages",
+];
+
+/**
+ * The patch overlay (`dsh --patch <file>`) that makes `dsh acp` use the model: one provider named
+ * "agentherd" in place of the profile's providers, and the ACP route pointed at it. It holds no
+ * key; DSH reads that from `DSH_KEY_ENV`.
+ */
+export function dshModelPatch(model: Model<Api>): unknown[] {
+  return [
+    {
+      id: "llm-pi-ai",
+      config: {
+        providers: {
+          [DSH_PROVIDER]: {
+            displayName: "AgentHerd",
+            apiKeyEnv: DSH_KEY_ENV,
+            api: model.api,
+            baseURL: model.baseUrl,
+            ...(model.headers === undefined ? {} : { headers: model.headers }),
+            models: [
+              {
+                id: model.id,
+                name: model.name,
+                input: model.input,
+                ...(model.contextWindow > 0 ? { contextWindow: model.contextWindow } : {}),
+                ...(model.maxTokens > 0 ? { maxTokens: model.maxTokens } : {}),
+              },
+            ],
+          },
+        },
+      },
+    },
+    { id: "acp", config: { provider: DSH_PROVIDER, model: model.id } },
+  ];
+}
+
 /**
  * The env that makes an agent use a model, or `undefined` when the agent cannot use it.
  * - pi: any pi-ai model, through the bridge's model extension (verified with Pi 1.5.0).
  * - codex: GPT models on OpenAI-style endpoints, as a custom provider in `CODEX_CONFIG` (read by
  *   codex-acp). Codex speaks only the Responses API; an endpoint without it fails the first turn
  *   and the task moves to Pi (ADR 0031).
- * DSH keeps its own settings.
+ * - dsh: OpenAI- and Anthropic-style models; the key goes in env, the model in `dshModelPatch`.
  */
 export function agentModelEnv(
   agentId: string,
@@ -65,6 +109,9 @@ export function agentModelEnv(
         MODEL_PROVIDER: CODEX_PROVIDER,
         [CODEX_KEY_ENV]: key ?? "none",
       };
+    case "dsh":
+      if (!DSH_APIS.includes(model.api)) return undefined;
+      return { [DSH_KEY_ENV]: key ?? "none" };
     default:
       return undefined;
   }
@@ -111,6 +158,26 @@ export function modelEnvFor(
   ref: string,
   env?: Record<string, string>,
 ): Record<string, string> {
+  return modelLaunchFor(settings, secrets, agentId, ref, env).env;
+}
+
+export interface AgentLaunch {
+  env: Record<string, string>;
+  /** For DSH: the `--patch` overlay that selects the model (`dshModelPatch`). */
+  dshPatch?: unknown[];
+}
+
+/**
+ * What running `agentId` with the model `ref` ("service/model") takes.
+ * @throws When the model is not in the list, has no key, or the agent cannot run it.
+ */
+export function modelLaunchFor(
+  settings: ModelSettings,
+  secrets: SecretStore,
+  agentId: string,
+  ref: string,
+  env?: Record<string, string>,
+): AgentLaunch {
   const { serviceId, model: id } = parseModelRef(ref);
   const service = settings.services.find((s) => s.id === serviceId);
   if (service === undefined || !service.models.includes(id)) {
@@ -123,5 +190,5 @@ export function modelEnvFor(
   }
   const out = agentModelEnv(agentId, model, key);
   if (out === undefined) throw new Error(`agent "${agentId}" cannot run model "${ref}"`);
-  return out;
+  return agentId === "dsh" ? { env: out, dshPatch: dshModelPatch(model) } : { env: out };
 }
