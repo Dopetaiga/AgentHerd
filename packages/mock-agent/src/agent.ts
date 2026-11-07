@@ -12,6 +12,7 @@ import {
   type StopReason,
   type ToolCallUpdate,
 } from "@agentclientprotocol/sdk";
+import { callTool } from "./mcp-call.ts";
 import type { Expectation, Script, ScriptToolCall, Step } from "./script.ts";
 
 export interface MockAgentOptions {
@@ -125,6 +126,19 @@ export function createMockAgent(script: Script, options: MockAgentOptions = {}):
         case "stderr":
           log(step.text);
           break;
+        case "mcp_call": {
+          const server = sessions.get(sessionId)?.mcpServers[0];
+          const text =
+            server === undefined
+              ? "error: no MCP server"
+              : await callTool(server, step.tool, step.arguments);
+          log(`mcp_call ${step.tool}: ${text}`);
+          await client.notify(methods.client.session.update, {
+            sessionId,
+            update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text } },
+          });
+          break;
+        }
         case "tool_call":
           await client.notify(methods.client.session.update, {
             sessionId,
