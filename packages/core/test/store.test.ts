@@ -440,7 +440,7 @@ describe("Store (herder_log)", () => {
     store.close();
   });
 
-  it("moves the tail a version-6 database kept in state into the log", () => {
+  it("moves the tail a version-7 database kept in state into the log", () => {
     const dir = mkdtempSync(join(tmpdir(), "agentherd-core-"));
     const dbPath = join(dir, "herd.db");
     const old = Store.open(dbPath);
@@ -448,7 +448,7 @@ describe("Store (herder_log)", () => {
     old.close();
     const raw = new DatabaseSync(dbPath);
     raw.exec("DROP TABLE herder_log");
-    raw.exec("UPDATE schema_version SET version = 6");
+    raw.exec("UPDATE schema_version SET version = 7");
     raw.close();
     const migrated = Store.open(dbPath);
     expect(migrated.herderLog()).toEqual([m("a"), m("b")]);

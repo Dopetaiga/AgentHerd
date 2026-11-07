@@ -100,7 +100,7 @@ The Herder may add, never rewrite.
 | Sessions | `session_start(project, name, profile?, ownerText, addedContext, model?)` (name: the task's short name, shown on the board and every report, [ADR 0034](../adr/0034-herder-names-tasks.md)) (model: `service/model` the agent can run, picked by the Herder, [ADR 0025](../adr/0025-herder-picks-model-per-task.md)), `session_prompt(sessionId, text, name?)` (name renames the task), `session_cancel(sessionId)` (stops the running turn), `session_end(sessionId)` (closes the task when the owner says it is finished; the case memory is written then), `session_list()` (also lists models, the agents that can run each, and the owner's model guide, [ADR 0026](../adr/0026-model-guide-for-the-herder.md)) |
 | Owner | `ask(text, options)` (AgentHerd adds 「其他」), `project_find(name)`, `notify(text)`, `relay_start(sessionId)`, `relay_end()` |
 | Read | `task_get`, `task_list`, `session_transcript`, `decisions_list`, `read`, `grep`, `list`, `git_log`, `git_diff` (read tools only inside known project directories) |
-| Context | `compress`, `decompress`, `search_context`, `acp_status`: fold finished parts of its own conversation, find and show them again ([ADR 0041](../adr/0041-herder-context-folded-by-the-model.md)) |
+| Context | `compress`, `decompress`, `search_context`, `acp_status`: fold finished parts of its own conversation, find and show them again ([ADR 0045](../adr/0045-herder-context-folded-by-the-model.md)) |
 
 There is no tool to approve an item, write files or run shell commands. Every Herder tool call
 is checked by the guard list first; a match goes to the owner instead of running. Every call is
@@ -126,7 +126,7 @@ it knows what happened without repeating it.
   back. The window is the model's, at most 128,000 tokens. At 90 % of it AgentHerd folds the oldest
   whole turns itself (never the current one); a "context too long" error folds about half and
   retries once
-  ([ADR 0041](../adr/0041-herder-context-folded-by-the-model.md)).
+  ([ADR 0045](../adr/0045-herder-context-folded-by-the-model.md)).
 - Tasks are saved in `herd.db` and come back after a restart as ended tasks. `session_prompt` to an
   ended task starts its agent again in the same folder with the same model; Pi reopens its own
   session, other agents get the earlier conversation as text ([ADR 0039](../adr/0039-tasks-kept-and-continued.md)).
@@ -147,14 +147,15 @@ an alarm.
 | Source | How AgentHerd gets it |
 | --- | --- |
 | Session state (`working`, `waiting-approval`, `idle`, `error`, `ended`) | ACP events ([03-agents.md](03-agents.md)) |
-| Agent report | MCP tool `herd_report`, offered in `session/new` |
+| Agent report | MCP tool `herd_report` of the `agentherd` server, offered in `session/new` and `session/load` ([09-agent-tools.md](09-agent-tools.md)) |
 | Final reply | The agent's last message when the task's turn ends |
 | Watchdog | Timer, every `watchdogSeconds` (default 60) |
 
 `herd_report(state, summary, changes?, tests?, risks?, links?)`, with `state` one of
 `progress`, `waiting`, `ready`, `blocked`, `failed`, `dropped`. `summary` ≤ 600 characters.
 `progress` only updates the board; the other states end or pause the task and wake the Herder.
-Without `herd_report`, the stage comes from the stop reason and session state.
+Without `herd_report`, the stage comes from the stop reason and session state. A report holds
+for the turn it came in; the next prompt starts without one.
 
 ### Stages
 

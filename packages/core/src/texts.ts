@@ -24,6 +24,16 @@ export interface CoreTexts {
   manyMatches(query: string, list: string): string;
   noRelay: string;
   queued: string;
+  /** Project column of a task started without a project folder. */
+  noProject: string;
+  /** After a turn: files the task changed that the owner had changed too (ADR 0043). */
+  workspaceConflict(files: string[]): string;
+  /** Button under `workspaceConflict`. */
+  useTaskVersion: string;
+  /** After the owner pressed `useTaskVersion`. */
+  tookTaskVersion(files: string[]): string;
+  /** The task's changes could not be copied into the project folder. */
+  workspaceSyncFailed(message: string): string;
   unknownAgent(agent: string, known: string): string;
   notDirectory(path: string): string;
   taskEnded: string;
@@ -46,6 +56,10 @@ export interface CoreTexts {
   exited(code: string): string;
   // Automatic decisions in the report.
   byRule(allowed: boolean, ruleId: string | undefined, what: string): string;
+  /** An app call that writes, run without asking (docs/spec/09-agent-tools.md §3). */
+  appWrite(title: string): string;
+  /** The tool result an agent gets when the owner denied an app call. */
+  appDenied(title: string): string;
   // Items.
   allow: string;
   deny: string;
@@ -58,6 +72,10 @@ export interface CoreTexts {
   turnEnded: string;
   agentStoppedWaiting: string;
   agentherdStopped: string;
+  /** Sent when AgentHerd stops while tasks are still working. */
+  stoppingTasks(titles: string[]): string;
+  /** Sent on start, when there is no Herder to ask, for tasks the last stop or crash cut off. */
+  interruptedTasks(titles: string[]): string;
   noRuleMatched: string;
   massDelete: string;
   guardHit: (reason: string) => string;
@@ -132,6 +150,12 @@ const zh: CoreTexts = {
   noRelay: "现在没有在转接。",
   imageAttached: (path) => `[主人发来一张图片，已保存在 ${path}]`,
   fileAttached: (name, path) => `[主人发来一个文件「${name}」，已保存在 ${path}]`,
+  noProject: "无项目",
+  workspaceConflict: (f) =>
+    `这些文件你和任务都改了，保留了你的版本，任务的改动没有放进去：\n${f.map((x) => `· ${x}`).join("\n")}`,
+  useTaskVersion: "用任务的版本",
+  tookTaskVersion: (f) => `已换成任务的版本：\n${f.map((x) => `· ${x}`).join("\n")}`,
+  workspaceSyncFailed: (m) => `任务的改动没能放进项目文件夹：${m}`,
   queued: "已排队：Agent 这一轮结束后会收到这条消息。",
   unknownAgent: (a, known) => `没有叫"${a}"的 Agent。可用的有：${known}。`,
   notDirectory: (p) => `不是一个目录：${p}`,
@@ -149,6 +173,8 @@ const zh: CoreTexts = {
   repeatedToolCall: (n, label) => `同一个工具调用重复了 ${n} 次：${label}`,
   quiet: (m) => `Agent 已经 ${m} 分钟没有动静`,
   exited: (code) => `Agent 进程退出了（代码 ${code}）`,
+  appWrite: (t) => `已自动执行：${t}`,
+  appDenied: (t) => `The owner did not allow ${t}.`,
   byRule: (allowed, id, what) =>
     `${allowed ? "已按规则批准" : "已按规则拒绝"}${id === undefined ? "" : ` ${id}`}：${what}`,
   allow: "批准",
@@ -161,6 +187,10 @@ const zh: CoreTexts = {
   turnEnded: "Agent 这一轮已结束",
   agentStoppedWaiting: "Agent 不再等待",
   agentherdStopped: "AgentHerd 已停止",
+  stoppingTasks: (t) =>
+    `AgentHerd 正在停止，下面的任务还没做完，会被中断：\n${t.map((x) => `· ${x}`).join("\n")}`,
+  interruptedTasks: (t) =>
+    `AgentHerd 上次停止时，下面的任务还没做完，已经中断：\n${t.map((x) => `· ${x}`).join("\n")}`,
   noRuleMatched: "没有规则自动处理这个请求",
   massDelete: "一次删除大量文件，需要你确认",
   guardHit: (reason) => `碰到保护名单：${reason}`,
@@ -229,6 +259,12 @@ const en: CoreTexts = {
   noRelay: "No relay is active.",
   imageAttached: (path) => `[The owner sent an image, saved at ${path}]`,
   fileAttached: (name, path) => `[The owner sent a file "${name}", saved at ${path}]`,
+  noProject: "no project",
+  workspaceConflict: (f) =>
+    `You and the task both changed these files. Your version was kept; the task's changes were not put in:\n${f.map((x) => `- ${x}`).join("\n")}`,
+  useTaskVersion: "Use the task's version",
+  tookTaskVersion: (f) => `Now the task's version:\n${f.map((x) => `- ${x}`).join("\n")}`,
+  workspaceSyncFailed: (m) => `The task's changes could not be put into the project folder: ${m}`,
   queued: "Queued: the agent gets this when its turn ends.",
   unknownAgent: (a, known) => `Unknown agent "${a}". Known: ${known}.`,
   notDirectory: (p) => `Not a directory: ${p}`,
@@ -246,6 +282,8 @@ const en: CoreTexts = {
   repeatedToolCall: (n, label) => `the same tool call ran ${n} times: ${label}`,
   quiet: (m) => `no event from the agent for ${m} minutes`,
   exited: (code) => `the agent exited (code ${code})`,
+  appWrite: (t) => `Ran on its own: ${t}`,
+  appDenied: (t) => `The owner did not allow ${t}.`,
   byRule: (allowed, id, what) =>
     `${allowed ? "Allowed" : "Denied"} by rule${id === undefined ? "" : ` ${id}`}: ${what}`,
   allow: "Allow",
@@ -258,6 +296,10 @@ const en: CoreTexts = {
   turnEnded: "the agent's turn ended",
   agentStoppedWaiting: "the agent stopped waiting",
   agentherdStopped: "AgentHerd stopped",
+  stoppingTasks: (t) =>
+    `AgentHerd is stopping. These tasks are not finished and will be interrupted:\n${t.map((x) => `- ${x}`).join("\n")}`,
+  interruptedTasks: (t) =>
+    `These tasks were still working when AgentHerd last stopped and were interrupted:\n${t.map((x) => `- ${x}`).join("\n")}`,
   noRuleMatched: "no rule matched",
   massDelete: "deletes a lot at once; needs your confirmation",
   guardHit: (reason) => `guard list: ${reason}`,

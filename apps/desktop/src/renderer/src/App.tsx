@@ -45,7 +45,7 @@ const HEADERS: Record<Page, { title: string; hint: string }> = {
   },
   agents: { title: "Agent", hint: "替你干活的编程 Agent；在飞书里用 /run 开任务" },
   models: { title: "模型", hint: "管理模型服务和 Key，选审查用的模型" },
-  settings: { title: "设置", hint: "飞书、工作模式、字体大小、电源和数据目录" },
+  settings: { title: "设置", hint: "飞书、应用连接、工作模式、字体大小、电源和数据目录" },
 };
 
 function Sidebar() {

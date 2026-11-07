@@ -1,4 +1,4 @@
-// The Herder's context (ADR 0041): the whole conversation is kept, and the model folds parts it no
+// The Herder's context (ADR 0045): the whole conversation is kept, and the model folds parts it no
 // longer needs into summaries it writes itself. The engine is our fork of billion-context's
 // acp-kernel (packages/context-kernel); this file adapts it to the Herder's pi messages.
 

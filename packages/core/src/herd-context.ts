@@ -1,6 +1,6 @@
 // Shared state and small helpers for the parts of the Herd (see herd.ts).
 
-import type { AgentConnection } from "@agentherd/acp-client";
+import type { AgentConnection, StdioMcpServer } from "@agentherd/acp-client";
 import type {
   AgentProfile,
   Channel,
@@ -16,12 +16,14 @@ import type { Board } from "./board.ts";
 import type { Clock, Timer } from "./clock.ts";
 import type { HerderFactory, HerderPort, OwnerImage } from "./herder-port.ts";
 import type { Inbox } from "./inbox.ts";
+import type { AppTools, HerdReport, McpGateway } from "./mcp-gateway.ts";
 import type { Completer, Embedder } from "./memory-store.ts";
 import type { Registry } from "./registry.ts";
 import type { Store } from "./store.ts";
 import type { Task } from "./tasks.ts";
 import type { CoreTexts } from "./texts.ts";
 import type { Watchdog } from "./watchdog.ts";
+import type { TaskWorkspace, Workspaces } from "./workspace.ts";
 
 export interface HerdOptions {
   /** AgentHerd home (`AGENTHERD_HOME` or `~/.agentherd`). `herd.db` lives here. */
@@ -33,6 +35,16 @@ export interface HerdOptions {
   mode: Mode;
   profiles: AgentProfile[];
   clock?: Clock;
+  /**
+   * On start, end tasks an earlier run left running and tell the owner (docs/spec/03-agents.md
+   * "Restarts"). Default true; false for a one-off run that may share herd.db with a host.
+   */
+  closeStaleTasks?: boolean;
+  /**
+   * Run each task in a git project in a copy of its own, synced with the project folder every turn
+   * (ADR 0043). Default true; false runs agents in the folder itself (`agentherd run`).
+   */
+  taskCopies?: boolean;
   remindMinutes?: number;
   extraGuards?: ExtraGuard[];
   /** Values to redact everywhere (secrets from env). */
@@ -56,14 +68,38 @@ export interface HerdOptions {
   embedder?: Embedder;
   /** A cheap model the Herder uses to rank past cases. */
   memoryComplete?: Completer;
+  /**
+   * The stdio MCP server that reaches this Herd's gateway with the given task token
+   * (docs/spec/09-agent-tools.md §1). Without it, agents get no MCP servers.
+   */
+  mcpServer?: (token: string) => StdioMcpServer;
+  /** The owner's connected apps, if any (docs/spec/09-agent-tools.md §3). Read on every call. */
+  apps?: () => AppTools | undefined;
+  /** Names of the owner's connected apps, for the Herder (e.g. ["Gmail"]). */
+  appNames?: () => string[];
+}
+
+/** How an agent's launch changes to run one model: env added, arguments appended. */
+export interface ModelLaunch {
+  env: Record<string, string>;
+  args?: string[];
+}
+
+/** The agent's profile with a model's launch applied. */
+export function withModel(profile: AgentProfile, launch: ModelLaunch): AgentProfile {
+  return {
+    ...profile,
+    command: [...profile.command, ...(launch.args ?? [])],
+    env: { ...profile.env, ...launch.env },
+  };
 }
 
 /** The owner's models and how an agent runs one (ADR 0025). Supplied by the host. */
 export interface AgentModels {
   /** Models in the owner's list ("service/model"), with the profile ids that can run each. */
   list(): { ref: string; agents: string[] }[];
-  /** The env that makes the agent use the model. Throws when it cannot. */
-  envFor(profileId: string, ref: string): Record<string, string>;
+  /** The env and extra arguments that make the agent use the model. Throws when it cannot. */
+  launchFor(profileId: string, ref: string): ModelLaunch;
   /** Whether the model answers now (a short test call, may be cached). */
   check?(ref: string): Promise<{ ok: true } | { ok: false; message: string }>;
   /**
@@ -82,7 +118,10 @@ export interface AgentModels {
 export interface Following {
   task: Task;
   profile: AgentProfile;
+  /** Where the agent runs: the task's copy, its folder, or its scratch folder. */
   cwd: string;
+  /** Where the task works and how it syncs with the project (ADR 0043). */
+  workspace?: TaskWorkspace;
   alarm: boolean;
   finished: boolean;
   /** The session was in `error` at some point; the task stays failed. */
@@ -99,6 +138,8 @@ export interface Following {
   needsHistory?: boolean;
   /** Set while an ended task is being started again. */
   reopening?: Promise<void>;
+  /** The agent's last `herd_report` in the current turn. */
+  report?: HerdReport;
   /** Text and tool calls of the current turn. */
   turn: { text: string; toolCalls: number };
   /** Reply text since the last tool call, not yet in the transcript. */
@@ -141,6 +182,9 @@ export interface HerdContext {
   readonly clock: Clock;
   readonly texts: CoreTexts;
   readonly following: Map<string, Following>;
+  /** Task tokens and answers for the agents' `agentherd` MCP server. */
+  readonly mcp: McpGateway;
+  readonly workspaces: Workspaces;
   /** The current Herder, if any. It can change at runtime. */
   herder(): HerderPort | undefined;
   /** The current mode. It can change at runtime. */
@@ -154,7 +198,7 @@ export interface HerdContext {
 export interface TaskOps {
   startTask(
     profileId: string,
-    cwd: string,
+    cwd: string | undefined,
     ownerText: string,
     prompt?: string,
     model?: string,
@@ -163,6 +207,8 @@ export interface TaskOps {
   promptTask(taskId: string, text: string, images?: OwnerImage[]): Promise<RunResult>;
   interruptTask(taskId: string, text: string, images?: OwnerImage[]): Promise<RunResult>;
   endTask(taskId: string, why: string): Promise<void>;
+  /** Puts the task's version of the files both it and the owner changed into the project. */
+  takeTaskVersion(taskId: string): Promise<void>;
 }
 
 /** All tasks the Herd follows or followed, as copies. */
@@ -184,6 +230,7 @@ export function saveTask(ctx: HerdContext, f: Following): void {
       ...(f.endedAt === undefined ? {} : { endedAt: f.endedAt }),
       ...(f.endedWhy === undefined ? {} : { endedWhy: f.endedWhy }),
       ...(f.agentSessionId === undefined ? {} : { agentSessionId: f.agentSessionId }),
+      ...(f.workspace === undefined ? {} : { workspace: f.workspace }),
     });
   } catch (error) {
     ctx.store.audit("task.save-error", { taskId: f.task.id, message: (error as Error).message });
@@ -200,17 +247,24 @@ export async function say(
   text: string,
   taskLabel?: string,
   tone?: TextTone,
+  taskId?: string,
 ): Promise<void> {
   const view: TextView = { kind: "text", text };
   if (taskLabel !== undefined) view.taskLabel = taskLabel;
   if (tone !== undefined) view.tone = tone;
-  await send(ctx, view);
+  await send(ctx, view, taskId);
 }
 
-/** Sends a view; a failure is audited, never thrown. */
-export async function send(ctx: HerdContext, view: View): Promise<void> {
+/**
+ * Sends a view; a failure is audited, never thrown. A message about a task (a report, a relay
+ * view, or `taskId` given) is remembered, so the owner's reply to it goes to that task (ADR 0043).
+ */
+export async function send(ctx: HerdContext, view: View, taskId?: string): Promise<void> {
   try {
-    await ctx.opts.channel.send(view);
+    const ref = await ctx.opts.channel.send(view);
+    const about =
+      taskId ?? (view.kind === "report" || view.kind === "relay" ? view.taskId : undefined);
+    if (about !== undefined && typeof ref?.id === "string") ctx.store.linkMessage(ref.id, about);
   } catch (error) {
     ctx.store.audit("send.error", { kind: view.kind, message: (error as Error).message });
   }

@@ -1,4 +1,4 @@
-# ADR 0041: The Herder keeps its whole conversation and folds it itself (billion-context's kernel)
+# ADR 0045: The Herder keeps its whole conversation and folds it itself (billion-context's kernel)
 
 - Status: Accepted
 - Date: 2026-11-08

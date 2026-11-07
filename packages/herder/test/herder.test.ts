@@ -42,7 +42,9 @@ function setup(opts: Parameters<typeof fakeHost>[0] = {}, extra: Partial<HerderO
 
 describe("Herder", () => {
   it("an owner's image reaches the model once and goes with the task it starts", async () => {
-    const { herder, rec, faux } = setup();
+    const { herder, rec, faux } = setup({
+      models: [{ ref: "site/default", agents: ["mock"] }],
+    });
     const image = { mimeType: "image/png", data: "iVBORw0K", path: "/h/attachments/a.png" };
     const seen: string[] = [];
     faux.setResponses([
@@ -62,7 +64,7 @@ describe("Herder", () => {
           { stopReason: "toolUse" },
         );
       },
-      (context) => {
+      () => {
         return fauxAssistantMessage("开始了。");
       },
       (context) => {
@@ -277,7 +279,7 @@ describe("Herder", () => {
     expect(rec.said).toEqual(["记住了。", "前面有 1 条"]);
   });
 
-  it("saves the whole conversation; nothing is cut (ADR 0041)", async () => {
+  it("saves the whole conversation; nothing is cut (ADR 0045)", async () => {
     const { herder, make, rec, faux } = setup();
     const replies = Array.from({ length: 30 }, (_, i) => fauxAssistantMessage(`好${i}`));
     faux.setResponses([
@@ -302,7 +304,7 @@ describe("Herder", () => {
   });
 });
 
-describe("Herder context (ADR 0041)", () => {
+describe("Herder context (ADR 0045)", () => {
   const SUMMARY =
     "主人让我整理三月的发票，附了一大段材料。我整理好并回复了，这件事办完了，没有要跟进的，也没提项目目录或模型。";
 

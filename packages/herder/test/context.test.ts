@@ -1,4 +1,4 @@
-// The Herder's context over the forked kernel (ADR 0041): refs, folds the model writes, the forced
+// The Herder's context over the forked kernel (ADR 0045): refs, folds the model writes, the forced
 // fold, overflow, restarts and the fallback when the engine fails.
 
 import type { CompressionState } from "@agentherd/context-kernel";

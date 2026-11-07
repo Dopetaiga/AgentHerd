@@ -54,6 +54,11 @@ async function setup(script: string, store = Store.open(":memory:")) {
     binding: { channelId: "fake", ownerId: "owner", data: {} },
     mode: "assist",
     profiles: [profile(script)],
+    agentModels: {
+      list: () => [{ ref: "test/default", agents: ["mock"] }],
+      launchFor: () => ({ env: {} }),
+      check: async () => ({ ok: true }),
+    },
     store,
     boardDebounceMs: 10,
     herder: (host) => {
@@ -202,7 +207,7 @@ describe("E2E-HERDER-NO-APPROVE", () => {
   });
 });
 
-describe("E2E-HERDER-CONTEXT (ADR 0041)", () => {
+describe("E2E-HERDER-CONTEXT (ADR 0045)", () => {
   it("the whole conversation is stored, and the model's own fold holds after a restart", async () => {
     const store = Store.open(join(dir, "context.db"));
     const summary =

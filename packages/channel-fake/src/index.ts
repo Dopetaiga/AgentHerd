@@ -75,6 +75,11 @@ export class FakeChannel implements Channel {
     await this.deliver({ kind: "message", text, from });
   }
 
+  /** Sends a text message that replies to one AgentHerd sent. */
+  async reply(to: MessageRef, text: string, from = this.ownerId): Promise<void> {
+    await this.deliver({ kind: "message", text, from, replyTo: to });
+  }
+
   /** Messages whose current view has the given kind. */
   ofKind<K extends View["kind"]>(kind: K): (SentMessage & { view: Extract<View, { kind: K }> })[] {
     return this.messages.filter((m) => m.view.kind === kind) as (SentMessage & {

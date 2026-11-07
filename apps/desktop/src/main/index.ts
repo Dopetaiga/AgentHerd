@@ -9,7 +9,7 @@ import type { HostEvent, HostMethod } from "@agentherd/host/api";
 import { HOST_METHODS } from "@agentherd/host/api";
 import { connectHost, type HostClient, socketPath } from "@agentherd/host/server";
 import { app, BrowserWindow, ipcMain, nativeTheme, powerSaveBlocker, shell } from "electron";
-import { ensureHost, stopOwnedHost } from "./host-process.ts";
+import { ensureHost, ownsHost, stopOwnedHost } from "./host-process.ts";
 
 app.setName("AgentHerd");
 app.setAboutPanelOptions({ applicationName: "AgentHerd", copyright: "MIT License" });
@@ -170,8 +170,11 @@ app.on("window-all-closed", () => {
   if (process.platform !== "darwin" || process.env.AGENTHERD_CAPTURE !== undefined) app.quit();
 });
 
-app.on("before-quit", () => {
+app.on("before-quit", (event) => {
   quitting = true;
   client?.close();
-  stopOwnedHost();
+  if (!ownsHost()) return;
+  // Let the host stop its tasks and tell the owner first; quit again once it is gone.
+  event.preventDefault();
+  void stopOwnedHost().finally(() => app.quit());
 });

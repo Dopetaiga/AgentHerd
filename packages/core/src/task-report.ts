@@ -2,6 +2,7 @@
 
 import type { AgentConnection } from "@agentherd/acp-client";
 import { type Following, firstLine, type HerdContext } from "./herd-context.ts";
+import type { HerdReport } from "./mcp-gateway.ts";
 import {
   REPORT_MAX_CHARS,
   reportBody,
@@ -18,6 +19,21 @@ export function setReport(ctx: HerdContext, f: Following, text: string): void {
   ctx.board.changed();
 }
 
+/**
+ * An agent's `herd_report` (docs/spec/09-agent-tools.md §2): its state sets the stage, its
+ * summary the board line.
+ */
+export function applyReport(ctx: HerdContext, f: Following, report: HerdReport): void {
+  f.report = report;
+  ctx.store.audit("task.herd_report", {
+    taskId: f.task.id,
+    state: report.state,
+    summary: report.summary,
+  });
+  setReport(ctx, f, report.summary);
+  restage(ctx, f);
+}
+
 /** Recomputes the stage of a task from its session; updates the board if it changed. */
 export function restage(ctx: HerdContext, f: Following): void {
   const row = ctx.registry.get(f.task.id);
@@ -27,6 +43,7 @@ export function restage(ctx: HerdContext, f: Following): void {
     session: f.failed ? "error" : row.state,
     openItems: row.state === "waiting-approval" ? 1 : 0,
     alarm: f.alarm,
+    report: f.report?.state,
     finished: f.finished,
   });
   if (stage === f.task.stage) return;
@@ -72,7 +89,9 @@ export async function sendReport(
   restage(ctx, f);
   const view = reportView(f.task, body, ctx.clock.now(), ctx.texts);
   try {
-    await ctx.opts.channel.send(view);
+    const ref = await ctx.opts.channel.send(view);
+    // A reply to the report goes to the task (ADR 0043).
+    if (typeof ref?.id === "string") ctx.store.linkMessage(ref.id, f.task.id);
     ctx.store.audit("report.sent", { taskId: f.task.id, summarized: body.summarized });
   } catch (error) {
     ctx.store.audit("report.error", { taskId: f.task.id, message: (error as Error).message });
@@ -93,12 +112,13 @@ export async function onAlarm(ctx: HerdContext, alarm: Alarm): Promise<void> {
   ctx.store.audit("watchdog.alarm", { ...alarm });
   setReport(ctx, f, ctx.texts.watchdog(alarm.detail));
   try {
-    await ctx.opts.channel.send({
+    const ref = await ctx.opts.channel.send({
       kind: "text",
       taskLabel: f.task.title,
       text: ctx.texts.watchdog(alarm.detail),
       tone: "alarm",
     });
+    if (typeof ref?.id === "string") ctx.store.linkMessage(ref.id, f.task.id);
   } catch (error) {
     ctx.store.audit("watchdog.error", { message: (error as Error).message });
   }

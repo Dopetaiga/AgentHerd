@@ -8,8 +8,8 @@ import type { AgentTool, AgentToolResult } from "@agentherd/herder-loop";
 import { arr, obj, opt, str } from "@earendil-works/pi-schema";
 import { agentForModel } from "./agent-models.ts";
 import { lessonsText, ownerPrefsText, pastLessons } from "./memory.ts";
-import { TIERS, type TierPlacement, tiersText } from "./model-guide.ts";
-import { findProjects, foundText } from "./project-find.ts";
+import { placeModels, TIERS, type TierPlacement, tiersText } from "./model-guide.ts";
+import { findProjects, foundText, nameKey } from "./project-find.ts";
 import { composeTaskPrompt, HERDER_LABEL } from "./prompt.ts";
 
 /** What the current Herder turn is about. */
@@ -27,30 +27,65 @@ export interface TurnContext {
   asked: boolean;
   notified: boolean;
   /**
-   * Folders the owner typed or picked with a button this turn. session_start runs only in one of
-   * them (ADR 0035): a folder from earlier turns or the Herder's own guess is never used.
+   * Folders the owner typed or picked with a button this turn, and the one project project_find
+   * matched by a name in the owner's words (ADR 0043). session_start runs only in one of them
+   * (ADR 0035): a folder from earlier turns or the Herder's own guess is never used.
    */
   pickedDirs: string[];
 }
 
 /** The answer that lets the owner type their own (ADR 0035). */
+/** Whether the owner's words name the project (case, `-`, `_` and spaces ignored). */
+export function namedBy(typed: string, name: string): boolean {
+  const key = nameKey(name.trim().replace(/^.*[\\/]/, ""));
+  return key !== "" && nameKey(typed).includes(key);
+}
+
 export function otherOption(locale: string): string {
   return locale === "en" ? "Other" : "其他";
 }
 
-const PATH_RE = /(?:^|[\s"'`(（「:：])((?:~|\/)[^\s"'`)）」，。；;,!?！？]*)/g;
+// `~`, `/` or a Windows drive (`C:\`) starts a path; it ends at whitespace or punctuation.
+const PATH_RE = /(?:^|[\s"'`(（「：])((?:~|\/|[A-Za-z]:[\\/])[^\s"'`)）」，。；;,!?！？]*)/g;
+
+function homePath(raw: string): boolean {
+  return raw === "~" || raw.startsWith("~/") || raw.startsWith("~\\");
+}
 
 /** Absolute and `~/` paths in the owner's words, resolved. */
 export function pathsIn(text: string, home: string): string[] {
   const out: string[] = [];
   for (const m of text.matchAll(PATH_RE)) {
     const raw = (m[1] ?? "").replace(/[.:：]+$/, "");
-    if (raw === "" || raw === "/") continue;
-    const dir =
-      raw === "~" || raw.startsWith("~/") ? resolve(join(home, raw.slice(1))) : resolve(raw);
+    if (raw === "" || raw === "/" || !(homePath(raw) || isAbsolute(raw))) continue;
+    const dir = homePath(raw) ? resolve(join(home, raw.slice(1))) : resolve(raw);
     if (!out.includes(dir)) out.push(dir);
   }
   return out;
+}
+
+/**
+ * The folders an answer to `ask` picks: the whole answer when it is one path (a button can
+ * hold a path with spaces, like `项目 2`), and the paths in it.
+ */
+export function pathsInAnswer(answer: string, home: string): string[] {
+  const whole = answer.trim();
+  const out = homePath(whole)
+    ? [resolve(join(home, whole.slice(1)))]
+    : isAbsolute(whole)
+      ? [resolve(whole)]
+      : [];
+  for (const p of pathsIn(answer, home)) if (!out.includes(p)) out.push(p);
+  return out;
+}
+
+/** Same folder; Windows and macOS paths ignore case. */
+export function samePath(
+  a: string,
+  b: string,
+  platform: NodeJS.Platform = process.platform,
+): boolean {
+  return platform === "linux" ? a === b : a.toLowerCase() === b.toLowerCase();
 }
 
 function ok(text: string): AgentToolResult<undefined> {
@@ -79,7 +114,7 @@ export function findTasks(tasks: Task[], query: string): Task[] {
 /** A directory from an absolute path or `~/path`. Names go through project_find and the owner. */
 export function resolveProject(host: HerderHost, project: string): string {
   const p = project.trim();
-  if (p === "~" || p.startsWith("~/")) return resolve(join(host.userHome, p.slice(1)));
+  if (homePath(p)) return resolve(join(host.userHome, p.slice(1)));
   if (isAbsolute(p)) return resolve(p);
   throw new Error(
     `"${p}" is not a path; call project_find with the name and ask the owner to pick the folder`,
@@ -101,6 +136,15 @@ function oneTask(host: HerderHost, query: string): Task {
   throw new Error(
     `several open tasks match "${query}": ${matches.map((t) => t.id.slice(0, 8)).join(", ")}`,
   );
+}
+
+/** The owner's connected apps, when there are any. */
+function appLines(host: HerderHost): string[] {
+  const apps = host.apps?.() ?? [];
+  if (apps.length === 0) return [];
+  return [
+    `Connected apps (agents other than Pi use them through their agentherd tools): ${apps.join(", ")}`,
+  ];
 }
 
 /** Ended tasks listed by session_list, newest first. */
@@ -130,10 +174,12 @@ function taskLine(t: Task): string {
 }
 
 const sessionStartSchema = obj({
-  project: str({
-    description:
-      "Project folder: an absolute or ~/ path the owner typed or picked this turn (find it with project_find and ask)",
-  }),
+  project: opt(
+    str({
+      description:
+        "Project folder: an absolute or ~/ path the owner typed or picked this turn, or the one project_find matched. Omit for work that needs no project.",
+    }),
+  ),
   profile: opt(
     str({
       description:
@@ -149,7 +195,7 @@ const sessionStartSchema = obj({
   model: opt(
     str({
       description:
-        "Model name from session_list (e.g. deepseek-v4-pro); AgentHerd uses the first service offering it that answers. service/model picks one service. Omit to use the agent's own settings.",
+        "Model name from session_list (e.g. deepseek-v4-pro); AgentHerd uses the first service offering it that answers. service/model picks one service. Omit to select from AgentHerd's configured models in tier order.",
     }),
   ),
 });
@@ -204,6 +250,7 @@ export function herderTools(
           "Models (name: services offering it, in order of preference):",
           ...modelLines(host, modelTiers),
           `Relay: ${host.relayTaskId()?.slice(0, 8) ?? "none"}`,
+          ...appLines(host),
         ];
         return ok(lines.join("\n"));
       },
@@ -229,7 +276,7 @@ export function herderTools(
       execute: async (
         _id: string,
         args: {
-          project: string;
+          project?: string;
           name: string;
           profile?: string;
           ownerText: string;
@@ -247,18 +294,34 @@ export function herderTools(
         if (named !== undefined && !ids.includes(named)) {
           throw new Error(`unknown profile "${named}"`);
         }
-        const asked = args.model?.trim() || undefined;
-        const picked =
-          asked === undefined ? undefined : await pickService(host, asked, named, modelTiers?.());
-        const model = picked?.ref;
+        const models = host
+          .models()
+          .filter((m) =>
+            named === undefined ? m.agents.includes(agentForModel(m.ref, ids)) : true,
+          );
+        const tiers = modelTiers?.() ?? placeModels(modelsByName(models).map((m) => m.name));
+        const preferred = TIERS.flatMap((tier) => tiers[tier]).find((entry) =>
+          models.some(
+            (m) =>
+              m.ref.slice(m.ref.indexOf("/") + 1) === entry.model &&
+              (named === undefined ? m.agents.length > 0 : m.agents.includes(named)),
+          ),
+        );
+        const asked = args.model?.trim() || preferred?.model;
+        if (asked === undefined) {
+          throw new Error("no configured model can run this task; configure models in AgentHerd");
+        }
+        const picked = await pickService(host, asked, named, tiers, models);
+        const model = picked.ref;
         const profile = named ?? agentForModel(model, ids);
-        const cwd = resolveProject(host, args.project);
-        if (!t.pickedDirs.includes(cwd)) {
+        const given = args.project?.trim() || undefined;
+        const cwd = given === undefined ? undefined : resolveProject(host, given);
+        if (cwd !== undefined && !t.pickedDirs.some((d) => samePath(d, cwd))) {
           throw new Error(
             `the owner did not pick ${cwd} in this message; call project_find and ask the owner to pick the folder`,
           );
         }
-        if (!isDirectory(cwd)) throw new Error(`${cwd} is not a directory`);
+        if (cwd !== undefined && !isDirectory(cwd)) throw new Error(`${cwd} is not a directory`);
         const lessons =
           host.memory === undefined
             ? []
@@ -281,7 +344,6 @@ export function herderTools(
           t.images.length === 0
             ? await host.startTask(profile, cwd, title, prompt, model)
             : await host.startTask(profile, cwd, title, prompt, model, t.images);
-        const using = model === undefined ? "its own model settings" : model;
         const switched =
           picked?.switched === undefined
             ? ""
@@ -290,8 +352,9 @@ export function herderTools(
           lessons.length === 0
             ? ""
             : `\nGave the agent ${lessons.length} past record(s): ${lessons.map((l) => l.abstract).join("; ")}`;
+        const where = cwd === undefined ? "a folder of its own (no project)" : cwd;
         return ok(
-          `started task ${taskId.slice(0, 8)} in ${cwd} with ${profile}, ${using}${switched}${gave}`,
+          `started task ${taskId.slice(0, 8)} in ${where} with ${profile}, ${model}${switched}${gave}`,
         );
       },
     },
@@ -372,10 +435,19 @@ export function herderTools(
       name: "project_find",
       label: "Find a project",
       description:
-        "Finds project folders (git repositories under the owner's home) by name. Then ask the owner to pick one; never pick yourself.",
+        "Finds project folders (git repositories under the owner's home) by name. One project with the name the owner used: start there. Otherwise ask the owner to pick; never pick yourself.",
       parameters: findSchema,
       execute: async (_id: string, args: { name: string }) => {
-        return ok(foundText(args.name, findProjects(host.userHome, args.name)));
+        const found = findProjects(host.userHome, args.name);
+        const t = turn();
+        const only = found.exact.length === 1 ? found.exact[0] : undefined;
+        // Only a name the owner typed this turn picks a folder by itself (ADR 0043).
+        const unique =
+          only !== undefined && t.kind !== "event" && namedBy(t.typedText, args.name)
+            ? only
+            : undefined;
+        if (unique !== undefined) t.pickedDirs.push(unique);
+        return ok(foundText(args.name, found, unique));
       },
     },
     {
@@ -488,9 +560,10 @@ async function pickService(
   host: HerderHost,
   asked: string,
   profile: string | undefined,
-  tiers?: TierPlacement,
+  tiers: TierPlacement | undefined,
+  models: ReturnType<HerderHost["models"]>,
 ): Promise<PickedModel> {
-  const runnable = fallbackOrder(host.models(), asked, profile, tiers);
+  const runnable = fallbackOrder(models, asked, profile, tiers);
   const failures: string[] = [];
   for (const ref of runnable) {
     const check = await host.checkModel(ref);
@@ -505,7 +578,7 @@ async function pickService(
 
 function modelLines(host: HerderHost, modelTiers?: () => TierPlacement): string[] {
   const models = modelsByName(host.models());
-  if (models.length === 0) return ["(none; agents use their own settings)"];
+  if (models.length === 0) return ["(none; configure models in AgentHerd before starting a task)"];
   const lines = models.map(
     (m) =>
       `- ${m.name}: ${m.services.join(", ")}${m.agents.length === 0 ? " (no agent can run it)" : ""}`,

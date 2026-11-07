@@ -15,6 +15,7 @@ export {
   type SessionUpdateEvent,
   STDERR_LINES,
   type StartOptions,
+  type StdioMcpServer,
   startAgent,
 } from "./connection.ts";
 export { type PermissionAnswer, ToolCallTracker, toAcpOutcome, toToolCallInfo } from "./mapping.ts";

@@ -6,6 +6,7 @@
 import { join } from "node:path";
 import type { AgentProfile, Inbound, Mode, Rule } from "@agentherd/protocol";
 import { DEFAULT_LOCALE } from "@agentherd/protocol";
+import { approveAppCalls } from "./app-calls.ts";
 import { Board } from "./board.ts";
 import { type Clock, systemClock } from "./clock.ts";
 import {
@@ -27,17 +28,19 @@ import {
   type OwnerImage,
 } from "./herder-port.ts";
 import { Inbox } from "./inbox.ts";
+import { type JsonRpcMessage, McpGateway } from "./mcp-gateway.ts";
 import { OwnerCommands } from "./owner-commands.ts";
 import { Registry } from "./registry.ts";
 import { Relay, type RelayState } from "./relay.ts";
 import { Store, type TranscriptEntry } from "./store.ts";
-import { onAlarm, restage } from "./task-report.ts";
+import { applyReport, onAlarm, restage } from "./task-report.ts";
 import { TaskRunner, unfinished } from "./task-runner.ts";
 import type { Task } from "./tasks.ts";
 import { type CoreTexts, coreTexts } from "./texts.ts";
 import { Watchdog } from "./watchdog.ts";
+import { Workspaces } from "./workspace.ts";
 
-export type { AgentModels, HerdOptions, RunResult } from "./herd-context.ts";
+export type { AgentModels, HerdOptions, ModelLaunch, RunResult } from "./herd-context.ts";
 export { RELAY_IDLE_MINUTES, RELAY_KEY, type RelayState } from "./relay.ts";
 export { SESSION_IDLE_MINUTES } from "./task-runner.ts";
 
@@ -108,6 +111,18 @@ export class Herd {
       clock: this.clock,
       texts: this.texts,
       following: new Map<string, Following>(),
+      mcp: new McpGateway(
+        (taskId, report) => {
+          const f = this.ctx.following.get(taskId);
+          if (f !== undefined && !f.ended) applyReport(this.ctx, f, report);
+        },
+        {
+          ...(opts.apps === undefined ? {} : { apps: opts.apps }),
+          approve: (taskId, calls) => approveAppCalls(this.ctx, taskId, calls),
+          denied: (title) => this.texts.appDenied(title),
+        },
+      ),
+      workspaces: new Workspaces(opts.home),
       herder: () => this.herder,
       mode: () => this.mode,
     };
@@ -120,8 +135,10 @@ export class Herd {
       if (f !== undefined) restage(this.ctx, f);
     });
     // Tasks from before a restart stay on the board and can be continued (ADR 0039).
-    const crashed = this.runner.restore();
-    const stopped = this.store.getState<string[]>(INTERRUPTED_STATE) ?? [];
+    // `agentherd run` beside a running host must not end or ask about that host's tasks.
+    const closeStale = opts.closeStaleTasks !== false;
+    const crashed = this.runner.restore(undefined, closeStale);
+    const stopped = closeStale ? (this.store.getState<string[]>(INTERRUPTED_STATE) ?? []) : [];
     this.interrupted = [...new Set([...stopped, ...crashed])].filter((id) =>
       this.ctx.following.has(id),
     );
@@ -167,6 +184,7 @@ export class Herd {
       relayTaskId: () => this.relay()?.taskId,
       decisions: (limit) => this.store.recentDecisions(limit),
       models: () => this.opts.agentModels?.list() ?? [],
+      apps: () => this.opts.appNames?.() ?? [],
       checkModel: async (ref) => this.opts.agentModels?.check?.(ref) ?? { ok: true },
       startTask: async (profileId, cwd, title, prompt, model, images) => {
         const { taskId, turn } = await this.startTask(profileId, cwd, title, prompt, model, images);
@@ -208,6 +226,14 @@ export class Herd {
     };
   }
 
+  /**
+   * One message from a task's `agentherd` MCP server. Throws `UnknownTokenError` for a token no
+   * running task holds.
+   */
+  mcp(token: string, msg: JsonRpcMessage): Promise<JsonRpcMessage | undefined> {
+    return this.ctx.mcp.handle(token, msg);
+  }
+
   /** All tasks this Herd follows or followed. */
   tasks(): Task[] {
     return allTasks(this.ctx);
@@ -233,10 +259,25 @@ export class Herd {
     if (this.started) return;
     this.started = true;
     // Agents are not running after a restart, so an old relay points at nothing.
+    const relay = this.relays.stored();
     this.relays.reset();
     await this.opts.channel.start(this.opts.binding, (inbound) => this.handle(inbound));
     this.store.audit("herd.started", { mode: this.mode, channel: this.opts.channel.id });
+    await this.endOldRelay(relay?.taskId);
     await this.askToResume();
+    if (this.opts.closeStaleTasks !== false) {
+      void this.runner.cleanupWorkspaces().catch((error: Error) => {
+        this.store.audit("workspace.error", { step: "cleanup", message: error.message });
+      });
+    }
+  }
+
+  /** A relay the last run left open points at an agent that is gone: show it ended. */
+  private async endOldRelay(taskId: string | undefined): Promise<void> {
+    if (taskId === undefined || !this.interrupted.includes(taskId)) return;
+    const task = this.ctx.following.get(taskId)?.task;
+    if (task === undefined) return;
+    await send(this.ctx, { kind: "relay", taskId, taskLabel: task.title, active: false });
   }
 
   /**
@@ -247,14 +288,19 @@ export class Herd {
   private async askToResume(): Promise<void> {
     const ids = this.interrupted;
     this.interrupted = [];
+    if (ids.length === 0) return;
     this.store.setState(INTERRUPTED_STATE, []);
-    if (ids.length === 0 || this.herder === undefined) return;
     const tasks = ids
       .map((id) => this.ctx.following.get(id)?.task)
       .filter((t): t is Task => t !== undefined)
       .slice(0, RESUME_ASK_MAX);
     if (tasks.length === 0) return;
     const t = this.texts;
+    if (this.herder === undefined) {
+      // Nobody could act on an answer, but the owner still learns what was cut off.
+      await say(this.ctx, t.interruptedTasks(tasks.map((task) => task.title)));
+      return;
+    }
     const options =
       tasks.length === 1
         ? [t.resumeYes, t.resumeNo]
@@ -292,7 +338,7 @@ export class Herd {
    */
   startTask(
     profileId: string,
-    cwd: string,
+    cwd: string | undefined,
     ownerText: string,
     prompt: string = ownerText,
     model?: string,
@@ -321,6 +367,11 @@ export class Herd {
     return this.runner.endTask(taskId, why);
   }
 
+  /** Puts the task's version of the files both it and the owner changed into the project. */
+  takeTaskVersion(taskId: string): Promise<void> {
+    return this.runner.takeTaskVersion(taskId);
+  }
+
   async stop(): Promise<void> {
     await this.herder?.stop();
     this.board.stop();
@@ -330,6 +381,10 @@ export class Herd {
     const cut = [...this.ctx.following.values()]
       .filter((f) => !f.ended && unfinished(f))
       .map((f) => f.task.id);
+    if (cut.length > 0 && this.started) {
+      const titles = cut.map((id) => this.ctx.following.get(id)?.task.title ?? id);
+      await say(this.ctx, this.texts.stoppingTasks(titles));
+    }
     for (const f of this.ctx.following.values()) {
       if (!f.ended) await this.endTask(f.task.id, this.texts.agentherdStopped);
     }

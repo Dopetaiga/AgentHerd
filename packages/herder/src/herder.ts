@@ -25,7 +25,14 @@ import {
   ownerMessagePrompt,
   systemPrompt,
 } from "./prompt.ts";
-import { herderTools, otherOption, pathsIn, resolveProject, type TurnContext } from "./tools.ts";
+import {
+  herderTools,
+  otherOption,
+  pathsIn,
+  pathsInAnswer,
+  resolveProject,
+  type TurnContext,
+} from "./tools.ts";
 
 export interface HerderOptions {
   host: HerderHost;
@@ -93,7 +100,7 @@ export class Herder implements HerderPort {
   private lastOwnerImages: OwnerImage[] = [];
   /** Whether the model reads images; otherwise it gets where they are saved. */
   private readonly seesImages: boolean;
-  /** The whole conversation and its folds (ADR 0041). */
+  /** The whole conversation and its folds (ADR 0045). */
   private readonly context: HerderContext;
   /** The log as last written to the store, to write only what changed. */
   private saved: AgentMessage[];
@@ -257,7 +264,10 @@ export class Herder implements HerderPort {
         asked: false,
         notified: false,
         // A picked button is a folder the owner chose; their earlier words may name one too.
-        pickedDirs: pathsIn(`${this.lastOwnerText}\n ${job.answer}`, this.host.userHome),
+        pickedDirs: [
+          ...pathsInAnswer(job.answer, this.host.userHome),
+          ...pathsIn(this.lastOwnerText, this.host.userHome),
+        ],
       };
       if (!job.recorded) this.host.recordTurn("answer", job.answer);
       prompt = ownerAnswerPrompt(
@@ -473,7 +483,7 @@ export class Herder implements HerderPort {
   }
 
   /**
-   * Saves the whole conversation (nothing is cut, ADR 0041): the messages from the first one that
+   * Saves the whole conversation (nothing is cut, ADR 0045): the messages from the first one that
    * changed since the last save, and the folds.
    */
   private save(): void {

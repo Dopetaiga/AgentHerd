@@ -8,7 +8,7 @@ export interface Recorded {
   asked: { text: string; options: string[] }[];
   started: {
     profileId: string;
-    cwd: string;
+    cwd: string | undefined;
     title: string;
     prompt: string;
     model?: string;
@@ -51,6 +51,8 @@ export function fakeHost(
     failing?: string[];
     profiles?: { id: string; name: string }[];
     memory?: MemoryStore;
+    apps?: string[];
+    userHome?: string;
   } = {},
 ): {
   host: HerderHost;
@@ -75,13 +77,14 @@ export function fakeHost(
   const host: HerderHost = {
     locale: "zh-CN",
     texts: CORE_TEXTS["zh-CN"],
-    userHome: "/Users/me",
+    userHome: opts.userHome ?? "/Users/me",
     profiles: () => opts.profiles ?? [{ id: "mock", name: "Mock" }],
     tasks: () => tasks,
     openTasks: () => tasks.filter((t) => !(opts.ended ?? []).includes(t.id)),
     relayTaskId: () => undefined,
     decisions: () => [],
     models: () => opts.models ?? [],
+    apps: () => opts.apps ?? [],
     checkModel: async (ref) =>
       opts.failing?.includes(ref) ? { ok: false, message: "down" } : { ok: true },
     startTask: async (profileId, cwd, title, prompt, model, images) => {

@@ -22,12 +22,15 @@ import {
   HERDER_TURNS_TABLE_SQL,
   LATEST_SCHEMA_VERSION,
   LEGACY_HERDER_STATE_KEY,
+  MESSAGE_TASKS_TABLE_SQL,
   SCHEMA_SQL,
   STATE_TABLE_SQL,
+  TASK_WORKSPACE_SQL,
   TASKS_TABLE_SQL,
   TRANSCRIPT_TABLE_SQL,
 } from "./store-schema.ts";
 import type { Task } from "./tasks.ts";
+import type { TaskWorkspace } from "./workspace.ts";
 
 export type { AuditRow, DecisionRow, SessionRow, StoredItem } from "./store-rows.ts";
 
@@ -113,10 +116,16 @@ export class Store {
         this.db.prepare("UPDATE schema_version SET version = ?").run(6);
       }
       if (version < 7) {
+        const columns = this.db.prepare("PRAGMA table_info(tasks)").all();
+        if (!columns.some((c) => c.name === "workspace_json")) this.db.exec(TASK_WORKSPACE_SQL);
+        this.db.exec(MESSAGE_TASKS_TABLE_SQL);
+        this.db.prepare("UPDATE schema_version SET version = ?").run(7);
+      }
+      if (version < 8) {
         this.transaction(() => {
           this.db.exec(HERDER_LOG_TABLE_SQL);
           this.moveLegacyHerderMessages();
-          this.db.prepare("UPDATE schema_version SET version = ?").run(7);
+          this.db.prepare("UPDATE schema_version SET version = ?").run(8);
         });
       }
     }
@@ -408,8 +417,9 @@ export class Store {
     this.db
       .prepare(
         `INSERT OR REPLACE INTO tasks(id, title, project, cwd, profile_id, agent, model, stage, last_report,
-          started_at, updated_at, ended_at, ended_why, failed, agent_session_id, automatic_decisions_json)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          started_at, updated_at, ended_at, ended_why, failed, agent_session_id, automatic_decisions_json,
+          workspace_json)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         t.task.id,
@@ -428,7 +438,23 @@ export class Store {
         t.failed ? 1 : 0,
         t.agentSessionId ?? null,
         r(JSON.stringify(t.task.automaticDecisions)),
+        t.workspace === undefined ? null : JSON.stringify(t.workspace),
       );
+  }
+
+  /** Remembers that a message the owner can reply to is about a task (ADR 0043). */
+  linkMessage(messageId: string, taskId: string, at = new Date()): void {
+    this.db
+      .prepare("INSERT OR REPLACE INTO message_tasks(message_id, task_id, at) VALUES (?, ?, ?)")
+      .run(messageId, taskId, at.toISOString());
+  }
+
+  /** The task a message is about, if AgentHerd sent it for one. */
+  taskOfMessage(messageId: string): string | undefined {
+    const row = this.db
+      .prepare("SELECT task_id FROM message_tasks WHERE message_id = ?")
+      .get(messageId);
+    return row === undefined ? undefined : String(row.task_id);
   }
 
   /** The `limit` most recently updated tasks, newest first. */
@@ -458,7 +484,7 @@ export class Store {
     this.stmtDeleteState.run(key);
   }
 
-  /** The Herder's whole conversation, oldest first (ADR 0041). */
+  /** The Herder's whole conversation, oldest first (ADR 0045). */
   herderLog(): unknown[] {
     return this.db
       .prepare("SELECT message_json FROM herder_log ORDER BY seq")
@@ -478,7 +504,7 @@ export class Store {
     });
   }
 
-  /** Before schema version 7 the Herder kept the tail of its conversation in `state`. */
+  /** Before schema version 8 the Herder kept the tail of its conversation in `state`. */
   private moveLegacyHerderMessages(): void {
     const row = this.db
       .prepare("SELECT value_json FROM state WHERE key = ?")
@@ -514,6 +540,8 @@ export interface StoredTask {
   endedWhy?: string;
   /** The agent's own session id, used to load the session again when the agent supports it. */
   agentSessionId?: string;
+  /** Where the task's agent works (ADR 0043). Tasks saved before schema 7 have none. */
+  workspace?: TaskWorkspace;
 }
 
 function toStoredTask(r: Record<string, unknown>): StoredTask {
@@ -538,6 +566,9 @@ function toStoredTask(r: Record<string, unknown>): StoredTask {
   if (typeof r.ended_at === "string") t.endedAt = r.ended_at;
   if (typeof r.ended_why === "string") t.endedWhy = r.ended_why;
   if (typeof r.agent_session_id === "string") t.agentSessionId = r.agent_session_id;
+  if (typeof r.workspace_json === "string") {
+    t.workspace = JSON.parse(r.workspace_json) as TaskWorkspace;
+  }
   return t;
 }
 

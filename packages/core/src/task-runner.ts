@@ -1,7 +1,8 @@
 // Task lifecycle: start an agent, run prompts one turn at a time, end the task.
 
 import { randomUUID } from "node:crypto";
-import { type AgentConnection, startAgent } from "@agentherd/acp-client";
+import { existsSync } from "node:fs";
+import { type AgentConnection, type StdioMcpServer, startAgent } from "@agentherd/acp-client";
 import type { AgentProfile } from "@agentherd/protocol";
 import {
   type Following,
@@ -10,7 +11,9 @@ import {
   type RunResult,
   saveTask,
   say,
+  send,
   type TaskOps,
+  withModel,
 } from "./herd-context.ts";
 import type { OwnerImage } from "./herder-port.ts";
 import { CASE_JOB } from "./memory-store.ts";
@@ -21,6 +24,7 @@ import type { TranscriptEntry } from "./store.ts";
 import { askSummary, flushReply, sendReport, setReport } from "./task-report.ts";
 import { projectName, taskTitle } from "./tasks.ts";
 import type { CoreTexts } from "./texts.ts";
+import type { TaskWorkspace } from "./workspace.ts";
 
 export const SESSION_IDLE_MINUTES = 60;
 /** At most this many models are tried for one task before it fails. */
@@ -29,6 +33,18 @@ export const MAX_MODEL_SWITCHES = 3;
 export const TASKS_RESTORED = 50;
 /** Characters of the earlier conversation given to an agent that could not open its session. */
 export const HISTORY_MAX_CHARS = 8000;
+/** Target of the 「用任务的版本」 button, followed by the task id (ADR 0043). */
+export const WORKSPACE_TARGET = "workspace:";
+
+/**
+ * The `agentherd` MCP server for a new or loaded session, with a fresh token for the task
+ * (docs/spec/09-agent-tools.md §1). None when the host has no gateway or the profile opts out.
+ */
+function mcpServers(ctx: HerdContext, f: Following): StdioMcpServer[] {
+  const make = ctx.opts.mcpServer;
+  if (make === undefined || f.profile.mcp === false) return [];
+  return [make(ctx.mcp.register(f.task.id))];
+}
 
 export class TaskRunner {
   private readonly ctx: HerdContext;
@@ -47,7 +63,7 @@ export class TaskRunner {
    */
   async startTask(
     profileId: string,
-    cwd: string,
+    cwd: string | undefined,
     ownerText: string,
     prompt: string = ownerText,
     model?: string,
@@ -56,19 +72,23 @@ export class TaskRunner {
     const { ctx } = this;
     const found = ctx.opts.profiles.find((p) => p.id === profileId);
     if (found === undefined) throw new Error(`unknown agent profile "${profileId}"`);
+    model = await this.configuredModel(profileId, model);
     let profile = found;
     if (model !== undefined) {
       if (ctx.opts.agentModels === undefined) throw new Error("no model list to choose from");
-      const env = ctx.opts.agentModels.envFor(profileId, model);
-      profile = { ...found, env: { ...found.env, ...env } };
+      profile = withModel(found, ctx.opts.agentModels.launchFor(profileId, model));
     }
     const sessionId = randomUUID();
+    const workspace = await this.workspaceFor(sessionId, cwd);
     const now = ctx.clock.now().toISOString();
     const f: Following = {
       task: {
         id: sessionId,
         title: taskTitle(ownerText),
-        project: projectName(cwd),
+        project:
+          workspace.kind === "scratch"
+            ? ctx.texts.noProject
+            : projectName(workspace.project ?? workspace.cwd),
         agent: model === undefined ? profile.name : `${profile.name} · ${model}`,
         ...(model === undefined ? {} : { model }),
         stage: "queued",
@@ -78,7 +98,8 @@ export class TaskRunner {
         automaticDecisions: [],
       },
       profile,
-      cwd,
+      cwd: workspace.cwd,
+      workspace,
       alarm: false,
       finished: false,
       failed: false,
@@ -89,13 +110,13 @@ export class TaskRunner {
       busy: false,
     };
     ctx.following.set(sessionId, f);
-    ctx.registry.add(sessionId, profile.id, cwd);
+    ctx.registry.add(sessionId, profile.id, f.cwd);
     ctx.board.changed();
 
     try {
-      const connection = await startAgent(profile, { cwd });
+      const connection = await startAgent(profile, { cwd: f.cwd });
       f.connection = connection;
-      f.agentSessionId = await connection.newSession(cwd);
+      f.agentSessionId = await connection.newSession(f.cwd, mcpServers(ctx, f));
     } catch (error) {
       const message = (error as Error).message;
       await f.connection?.close().catch(() => {});
@@ -113,6 +134,144 @@ export class TaskRunner {
     this.listen(f, f.connection, f.agentSessionId);
     this.started(f, model);
     return { taskId: sessionId, turn: this.ops.promptTask(sessionId, prompt, images) };
+  }
+
+  /** Hosts with a model list never launch an agent with its native defaults. */
+  private async configuredModel(profileId: string, asked?: string): Promise<string | undefined> {
+    const models = this.ctx.opts.agentModels;
+    // Bare core integrations without a model provider retain their existing contract.
+    if (models === undefined) {
+      if (asked !== undefined) throw new Error("no model list to choose from");
+      return undefined;
+    }
+    if (asked !== undefined) {
+      if (!models.list().some((m) => m.ref === asked && m.agents.includes(profileId))) {
+        throw new Error(`cannot run ${asked} with ${profileId}: not in the configured model list`);
+      }
+      return asked;
+    }
+    for (const choice of models.list()) {
+      if (!choice.agents.includes(profileId)) continue;
+      if (models.check !== undefined && !(await models.check(choice.ref)).ok) continue;
+      return choice.ref;
+    }
+    throw new Error(
+      `no configured model available for ${profileId}; configure a model in AgentHerd`,
+    );
+  }
+
+  /**
+   * Where a new task works (ADR 0043): a copy of a git project, the folder itself, or a scratch
+   * folder. A copy that cannot be made falls back to the folder itself.
+   */
+  private async workspaceFor(taskId: string, cwd: string | undefined): Promise<TaskWorkspace> {
+    const { ctx } = this;
+    try {
+      return await ctx.workspaces.create(taskId, cwd, { inplace: ctx.opts.taskCopies === false });
+    } catch (error) {
+      ctx.store.audit("workspace.error", {
+        taskId,
+        step: "create",
+        message: (error as Error).message,
+      });
+      if (cwd === undefined) throw error;
+      return { kind: "inplace", cwd, project: cwd };
+    }
+  }
+
+  /** Before a turn: the owner's newer changes go into the task's copy. */
+  private async syncIn(f: Following): Promise<void> {
+    const ws = f.workspace;
+    if (ws?.kind !== "copy" || ws.root === undefined || !existsSync(ws.root)) return;
+    try {
+      await this.ctx.workspaces.beforeTurn(ws);
+    } catch (error) {
+      this.ctx.store.audit("workspace.error", {
+        taskId: f.task.id,
+        step: "before-turn",
+        message: (error as Error).message,
+      });
+    }
+  }
+
+  /**
+   * After a turn: the task's changes go into the project folder.
+   * @returns files both changed, whose task version was not put in.
+   */
+  private async syncOut(f: Following): Promise<string[]> {
+    const { ctx } = this;
+    const ws = f.workspace;
+    if (ws?.kind !== "copy" || ws.root === undefined || !existsSync(ws.root)) return [];
+    try {
+      const { applied, conflicts } = await ctx.workspaces.afterTurn(ws, f.task.id);
+      if (applied.length > 0 || conflicts.length > 0) {
+        ctx.store.audit("workspace.synced", { taskId: f.task.id, applied, conflicts });
+      }
+      saveTask(ctx, f);
+      return conflicts;
+    } catch (error) {
+      const message = (error as Error).message;
+      ctx.store.audit("workspace.error", { taskId: f.task.id, step: "after-turn", message });
+      await say(ctx, ctx.texts.workspaceSyncFailed(message), f.task.title, "error", f.task.id);
+      return [];
+    }
+  }
+
+  /** Tells the owner which files kept their version, with a button for the task's. */
+  private async tellConflicts(f: Following, files: string[]): Promise<void> {
+    if (files.length === 0) return;
+    const { ctx } = this;
+    await send(
+      ctx,
+      {
+        kind: "text",
+        text: ctx.texts.workspaceConflict(files),
+        taskLabel: f.task.title,
+        tone: "alarm",
+        target: `${WORKSPACE_TARGET}${f.task.id}`,
+        options: [{ action: "take-task", label: ctx.texts.useTaskVersion }],
+      },
+      f.task.id,
+    );
+  }
+
+  /** The owner chose the task's version of the files both changed. */
+  async takeTaskVersion(taskId: string): Promise<void> {
+    const { ctx } = this;
+    const f = ctx.following.get(taskId);
+    const ws = f?.workspace;
+    if (f === undefined || ws === undefined || (ws.conflicts ?? []).length === 0) return;
+    const files = await ctx.workspaces.takeTask(ws);
+    saveTask(ctx, f);
+    ctx.store.audit("workspace.took-task", { taskId, files });
+    await say(ctx, ctx.texts.tookTaskVersion(files), f.task.title, undefined, taskId);
+  }
+
+  /** At the end of a task: copies back what is left and removes its copy. */
+  private async closeWorkspace(f: Following): Promise<void> {
+    const ws = f.workspace;
+    if (ws?.kind !== "copy") return;
+    await this.tellConflicts(f, await this.syncOut(f));
+    try {
+      await this.ctx.workspaces.remove(ws);
+    } catch (error) {
+      this.ctx.store.audit("workspace.error", {
+        taskId: f.task.id,
+        step: "remove",
+        message: (error as Error).message,
+      });
+    }
+  }
+
+  /** Copies an earlier run left (a crash or a kill): their changes go back, then they go. */
+  async cleanupWorkspaces(): Promise<void> {
+    for (const f of [...this.ctx.following.values()]) {
+      const root = f.workspace?.root;
+      if (!f.ended || f.reopening !== undefined || root === undefined || !existsSync(root)) {
+        continue;
+      }
+      await this.closeWorkspace(f);
+    }
   }
 
   private started(f: Following, asked: string | undefined): void {
@@ -156,9 +315,12 @@ export class TaskRunner {
     return f.reopening === undefined ? queue() : f.reopening.then(queue);
   }
 
-  /** Loads saved tasks as ended tasks, so they show and can be continued (ADR 0039). */
-  /** @returns ids of tasks that were still working when AgentHerd went away without stopping. */
-  restore(limit = TASKS_RESTORED): string[] {
+  /**
+   * Loads saved tasks as ended tasks, so they show and can be continued (ADR 0039). With
+   * `closeStale`, tasks and sessions an earlier run left open are ended now.
+   * @returns ids of tasks that were still working when AgentHerd went away without stopping.
+   */
+  restore(limit = TASKS_RESTORED, closeStale = true): string[] {
     const { ctx } = this;
     const crashed: string[] = [];
     const now = ctx.clock.now().toISOString();
@@ -187,10 +349,15 @@ export class TaskRunner {
         queue: [],
         busy: false,
         ...(saved.agentSessionId === undefined ? {} : { agentSessionId: saved.agentSessionId }),
+        ...(saved.workspace === undefined ? {} : { workspace: saved.workspace }),
       };
       ctx.following.set(saved.task.id, f);
-      if (saved.endedAt !== undefined) continue;
-      // AgentHerd stopped without ending the task (a crash): end it now.
+      if (saved.endedAt !== undefined || !closeStale) continue;
+      // AgentHerd stopped without ending the task (a crash or a kill): end it now.
+      const session = ctx.store.getSession(f.task.id);
+      if (session !== undefined && session.state !== "ended") {
+        ctx.store.upsertSession({ ...session, state: "ended", updatedAt: now });
+      }
       if (unfinished(f)) {
         crashed.push(f.task.id);
         f.task.stage = "failed";
@@ -224,25 +391,38 @@ export class TaskRunner {
   private async reopen(f: Following): Promise<void> {
     const { ctx } = this;
     const taskId = f.task.id;
-    const model = f.task.model;
     const errors: string[] = [];
+    if (f.workspace !== undefined) {
+      // A fresh copy of the project as it is now, in the same folder as before (ADR 0043).
+      try {
+        f.workspace = await ctx.workspaces.create(taskId, undefined, { previous: f.workspace });
+        f.cwd = f.workspace.cwd;
+      } catch (error) {
+        ctx.store.audit("workspace.error", {
+          taskId,
+          step: "reopen",
+          message: (error as Error).message,
+        });
+      }
+    }
     for (const base of this.reopenCandidates(f)) {
       try {
+        const model = await this.configuredModel(base.id, f.task.model);
         let profile = base;
         if (model !== undefined) {
           if (ctx.opts.agentModels === undefined) throw new Error("no model list to choose from");
-          const env = ctx.opts.agentModels.envFor(base.id, model);
-          profile = { ...base, env: { ...base.env, ...env } };
+          profile = withModel(base, ctx.opts.agentModels.launchFor(base.id, model));
         }
         const connection = await startAgent(profile, { cwd: f.cwd });
         let sessionId: string | undefined;
         if (
           connection.loadsSessions &&
+          (ctx.opts.agentModels === undefined || f.task.model !== undefined) &&
           f.agentSessionId !== undefined &&
           base.id === f.profile.id
         ) {
           try {
-            await connection.loadSession(f.agentSessionId, f.cwd);
+            await connection.loadSession(f.agentSessionId, f.cwd, mcpServers(ctx, f));
             sessionId = f.agentSessionId;
           } catch (error) {
             ctx.store.audit("task.load-failed", { taskId, message: (error as Error).message });
@@ -251,7 +431,7 @@ export class TaskRunner {
         const loaded = sessionId !== undefined;
         if (sessionId === undefined) {
           try {
-            sessionId = await connection.newSession(f.cwd);
+            sessionId = await connection.newSession(f.cwd, mcpServers(ctx, f));
           } catch (error) {
             await connection.close().catch(() => {});
             throw error;
@@ -269,6 +449,7 @@ export class TaskRunner {
         f.needsHistory = !loaded;
         // A continued task does not switch models on its first turn: it already did work.
         f.turnsEnded = Math.max(f.turnsEnded ?? 0, 1);
+        if (model !== undefined) f.task.model = model;
         f.task.agent = model === undefined ? profile.name : `${profile.name} · ${model}`;
         ctx.registry.add(taskId, profile.id, f.cwd);
         this.listen(f, connection, sessionId);
@@ -330,6 +511,8 @@ export class TaskRunner {
     await ctx.inbox.expireSession(taskId, why);
     await connection?.close();
     if (f.connection === connection) delete f.connection;
+    ctx.mcp.revoke(taskId);
+    await this.closeWorkspace(f);
     ctx.registry.set(taskId, "ended");
     ctx.store.audit("task.ended", { taskId, why });
     this.queueCase(f, why);
@@ -451,8 +634,8 @@ export class TaskRunner {
       if (next === undefined) return false;
       const base = ctx.opts.profiles.find((p) => p.id === next.profileId);
       if (base === undefined) return false;
-      ref = next.model;
-      profile = { ...base, env: { ...base.env, ...models.envFor(base.id, ref) } };
+      ref = (await this.configuredModel(base.id, next.model)) as string;
+      profile = withModel(base, models.launchFor(base.id, ref));
     } catch {
       return false;
     }
@@ -464,7 +647,7 @@ export class TaskRunner {
     try {
       const connection = await startAgent(profile, { cwd: f.cwd });
       f.connection = connection;
-      f.agentSessionId = await connection.newSession(f.cwd);
+      f.agentSessionId = await connection.newSession(f.cwd, mcpServers(ctx, f));
     } catch (error) {
       ctx.store.audit("task.model-switch-failed", {
         taskId: f.task.id,
@@ -502,6 +685,9 @@ export class TaskRunner {
     if (connection === undefined || agentSessionId === undefined) {
       throw new Error(`task ${sessionId} has no session`);
     }
+    await this.syncIn(f);
+    // A herd_report speaks for the turn it came in; the next turn starts without one.
+    delete f.report;
     f.turn = { text: "", toolCalls: 0 };
     f.pending = "";
     // Read before this prompt is added, so the history holds only the earlier conversation.
@@ -528,6 +714,8 @@ export class TaskRunner {
       f.turnsEnded = (f.turnsEnded ?? 0) + 1;
       flushReply(ctx, f);
       ctx.store.audit("turn.ended", { sessionId, stopReason });
+      // The owner reads the report with the task's changes already in the project folder.
+      const conflicts = await this.syncOut(f);
       ctx.registry.set(sessionId, "idle");
       await ctx.inbox.expireSession(sessionId, ctx.texts.turnEnded);
       const reply = f.turn.text;
@@ -538,6 +726,7 @@ export class TaskRunner {
       } else {
         await sendReport(ctx, f, reply, () => askSummary(ctx, connection, agentSessionId, f));
       }
+      await this.tellConflicts(f, conflicts);
       return { sessionId, stopReason };
     } catch (error) {
       // Ending a task closes its agent, which fails the running turn; report why it ended, not
@@ -547,8 +736,10 @@ export class TaskRunner {
       flushReply(ctx, f);
       ctx.store.addTranscript(sessionId, "note", message);
       if (await this.switchModel(f, message)) return this.runTurn(f, text, images);
+      const conflicts = await this.syncOut(f);
       if (ctx.registry.get(sessionId)?.state !== "ended") ctx.registry.set(sessionId, "error");
       await sendReport(ctx, f, ctx.texts.failedBody(message), null);
+      await this.tellConflicts(f, conflicts);
       await this.ops.endTask(sessionId, ctx.texts.turnFailed);
       throw error;
     }

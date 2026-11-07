@@ -47,7 +47,8 @@ export interface HerderHost {
    */
   startTask(
     profileId: string,
-    cwd: string,
+    /** The owner's project folder; undefined for a task that needs none (a scratch folder). */
+    cwd: string | undefined,
     title: string,
     prompt: string,
     model?: string,
@@ -65,6 +66,8 @@ export interface HerderHost {
   /** A red card from the Herder (ADR 0037); `retry` adds a 「重试」 button that calls {@link HerderPort.retry}. */
   alert(text: string, retry: boolean): Promise<void>;
   ask(text: string, options: string[]): Promise<void>;
+  /** Names of the owner's connected apps; agents other than Pi use them (docs/spec/09-agent-tools.md §3). */
+  apps?(): string[];
   audit(type: string, data: Record<string, unknown>): void;
   /** Keeps a line of the Herder's conversation with the owner (`herder_turns`). */
   recordTurn(role: HerderTurnRole, text: string, taskId?: string): void;
@@ -76,7 +79,7 @@ export interface HerderHost {
   readonly memoryComplete?: Completer;
   getState<T>(key: string): T | undefined;
   setState(key: string, value: unknown): void;
-  /** The Herder's whole conversation as the model saw it, oldest first (ADR 0041). */
+  /** The Herder's whole conversation as the model saw it, oldest first (ADR 0045). */
   herderLog(): unknown[];
   /** Replaces the saved conversation from position `from` on with `messages`. */
   writeHerderLog(from: number, messages: unknown[]): void;

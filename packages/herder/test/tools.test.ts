@@ -1,4 +1,6 @@
+import { mkdirSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { placeModels, type TierPlacement } from "../src/model-guide.ts";
 import { CONTEXT_LABEL, composeTaskPrompt, OWNER_LABEL, quoteAgent } from "../src/prompt.ts";
@@ -6,6 +8,7 @@ import {
   findTasks,
   herderTools,
   isVerbatim,
+  namedBy,
   resolveProject,
   type TurnContext,
 } from "../src/tools.ts";
@@ -16,7 +19,10 @@ function tools(
   opts: Parameters<typeof fakeHost>[0] = {},
   modelTiers?: () => TierPlacement,
 ) {
-  const { host, rec } = fakeHost(opts);
+  const { host, rec } = fakeHost({
+    models: [{ ref: "site/default", agents: ["mock"] }],
+    ...opts,
+  });
   const ctx: TurnContext = {
     kind: "owner",
     ownerText: "",
@@ -24,7 +30,7 @@ function tools(
     images: [],
     asked: false,
     notified: false,
-    pickedDirs: [tmpdir(), "/does/not/exist"],
+    pickedDirs: [tmpdir(), resolve("/does/not/exist")],
     ...turn,
   };
   const byName = new Map(herderTools(host, () => ctx, modelTiers).map((t) => [t.name, t]));
@@ -69,8 +75,8 @@ describe("findTasks and resolveProject", () => {
 
   it("resolves ~ and absolute paths; a bare name must go through project_find", () => {
     const { host } = fakeHost({});
-    expect(resolveProject(host, "~/code")).toBe("/Users/me/code");
-    expect(resolveProject(host, "/tmp/x/")).toBe("/tmp/x");
+    expect(resolveProject(host, "~/code")).toBe(resolve("/Users/me/code"));
+    expect(resolveProject(host, "/tmp/x/")).toBe(resolve("/tmp/x"));
     expect(() => resolveProject(host, "site")).toThrow(/project_find/);
   });
 });
@@ -150,6 +156,18 @@ describe("tools", () => {
     expect(event.rec.started).toHaveLength(0);
   });
 
+  it("session_list names the connected apps only when there are some", async () => {
+    const none = await tools({ ownerText: "x" }).call("session_list", {});
+    expect(none).not.toContain("Connected apps");
+    const some = await tools({ ownerText: "x" }, { apps: ["Gmail", "GitHub"] }).call(
+      "session_list",
+      {},
+    );
+    expect(some).toContain(
+      "Connected apps (agents other than Pi use them through their agentherd tools): Gmail, GitHub",
+    );
+  });
+
   it("session_list shows the models and session_start passes the chosen one", async () => {
     const dir = tmpdir();
     const models = [
@@ -193,9 +211,127 @@ describe("tools", () => {
       profile: "mock",
       ownerText: "修一下构建",
     });
-    expect(rec.started[1]?.model).toBeUndefined();
+    expect(rec.started[1]?.model).toBe("deepseek/deepseek-v4-pro");
     expect(rec.started).toHaveLength(2);
   });
+
+  it("selects an omitted model in tier order and checks services before other models", async () => {
+    const models = [
+      { ref: "site/quick-flash", agents: ["mock"] },
+      { ref: "site/preferred", agents: ["mock"] },
+      { ref: "backup/preferred", agents: ["mock"] },
+      { ref: "site/next", agents: ["mock"] },
+    ];
+    const tiers = () =>
+      placeModels(["quick-flash", "preferred", "next"], {
+        strong: ["preferred", "next"],
+      });
+    const start = { name: "修构建", project: tmpdir(), ownerText: "修一下构建" };
+    for (const [failing, expected] of [
+      [[], "site/preferred"],
+      [["site/preferred"], "backup/preferred"],
+      [["site/preferred", "backup/preferred"], "site/next"],
+      [["site/preferred", "backup/preferred", "site/next"], "site/quick-flash"],
+    ] as const) {
+      const { call, rec } = tools(
+        { ownerText: "修一下构建" },
+        { models, failing: [...failing] },
+        tiers,
+      );
+      const out = await call("session_start", start);
+      expect(rec.started[0]?.model).toBe(expected);
+      expect(out).toContain(expected);
+    }
+    const down = tools(
+      { ownerText: "修一下构建" },
+      {
+        models,
+        failing: models.map((m) => m.ref),
+      },
+      tiers,
+    );
+    await expect(down.call("session_start", start)).rejects.toThrow(/no model answers/);
+    expect(down.rec.started).toEqual([]);
+  });
+
+  it("uses name-rule tiers without a tier callback and preserves automatic agent allocation", async () => {
+    const { call, rec } = tools(
+      { ownerText: "修一下构建" },
+      {
+        models: [
+          { ref: "site/quick-flash", agents: ["pi"] },
+          { ref: "site/gpt-6.1-sol", agents: ["pi", "codex"] },
+        ],
+        profiles: [
+          { id: "pi", name: "Pi" },
+          { id: "codex", name: "Codex" },
+        ],
+      },
+    );
+    await call("session_start", {
+      name: "修构建",
+      project: tmpdir(),
+      ownerText: "修一下构建",
+      model: "  ",
+    });
+    expect(rec.started[0]?.model).toBe("site/gpt-6.1-sol");
+    expect(rec.started[0]?.profileId).toBe("codex");
+  });
+
+  it("skips default models incompatible with automatic agent allocation", async () => {
+    const { call, rec } = tools(
+      { ownerText: "fix it" },
+      {
+        models: [
+          { ref: "anthropic/claude-opus-5", agents: ["dsh"] },
+          { ref: "relay/gpt-6.1-sol", agents: ["codex", "dsh"] },
+        ],
+        profiles: [
+          { id: "codex", name: "Codex" },
+          { id: "dsh", name: "DSH" },
+        ],
+      },
+    );
+    await call("session_start", { name: "fix", project: tmpdir(), ownerText: "fix it" });
+    expect(rec.started[0]?.model).toBe("relay/gpt-6.1-sol");
+    expect(rec.started[0]?.profileId).toBe("codex");
+  });
+
+  it("limits omitted-model selection to the named agent's configured models", async () => {
+    const { call, rec } = tools(
+      { ownerText: "修一下构建" },
+      {
+        models: [
+          { ref: "site/gpt-6.1-sol", agents: ["pi", "codex"] },
+          { ref: "site/other", agents: ["dsh"] },
+        ],
+        profiles: [{ id: "dsh", name: "DSH" }],
+      },
+    );
+    await call("session_start", {
+      name: "修构建",
+      project: tmpdir(),
+      ownerText: "修一下构建",
+      profile: "dsh",
+    });
+    expect(rec.started[0]?.model).toBe("site/other");
+    expect(rec.started[0]?.profileId).toBe("dsh");
+  });
+
+  it.each([{ models: [] }, { models: [{ ref: "site/model", agents: [] }] }])(
+    "refuses to start without a configured runnable model (%j)",
+    async ({ models }) => {
+      const { call, rec } = tools({ ownerText: "修一下构建" }, { models });
+      await expect(
+        call("session_start", {
+          name: "修构建",
+          project: tmpdir(),
+          ownerText: "修一下构建",
+        }),
+      ).rejects.toThrow(/no .*model/);
+      expect(rec.started).toEqual([]);
+    },
+  );
 
   it("merges a model offered by several services and moves on when one fails", async () => {
     const dir = tmpdir();
@@ -226,7 +362,7 @@ describe("tools", () => {
     const dir = tmpdir();
     const models = [
       { ref: "site/gpt-6.1-sol", agents: ["pi", "codex"] },
-      { ref: "deepseek/deepseek-v4-pro", agents: ["pi"] },
+      { ref: "deepseek/deepseek-v4-pro", agents: ["pi", "dsh"] },
     ];
     const profiles = [
       { id: "dsh", name: "DeepSeek Harness" },
@@ -239,7 +375,7 @@ describe("tools", () => {
     await call("session_start", { ...base, model: "deepseek-v4-pro" });
     await call("session_start", base);
     await call("session_start", { ...base, profile: "dsh" });
-    expect(rec.started.map((s) => s.profileId)).toEqual(["codex", "pi", "pi", "dsh"]);
+    expect(rec.started.map((s) => s.profileId)).toEqual(["codex", "pi", "codex", "dsh"]);
     expect(rec.started[0]?.model).toBe("site/gpt-6.1-sol");
   });
 
@@ -285,7 +421,7 @@ describe("tools", () => {
     expect(await withModels.call("session_list", {})).toMatch(/Strong.*claude-opus-5/);
     names = ["deepseek-flash"];
     expect(await withModels.call("session_list", {})).toMatch(/Fast.*deepseek-flash/);
-    const none = tools({}, {}, () => placeModels(names));
+    const none = tools({}, { models: [] }, () => placeModels(names));
     expect(await none.call("session_list", {})).not.toContain("Model tiers");
   });
 
@@ -369,10 +505,71 @@ describe("session_start folder check (ADR 0035)", () => {
     expect(rec.started).toEqual([]);
   });
 
+  it.runIf(process.platform === "win32")(
+    "accepts a picked folder in another case on Windows",
+    async () => {
+      const dir = tmpdir();
+      const { call, rec } = tools({ ownerText: "看看 issue", pickedDirs: [dir.toUpperCase()] });
+      await call("session_start", { name: "看 issue", project: dir, ownerText: "看看 issue" });
+      expect(rec.started).toHaveLength(1);
+    },
+  );
+
   it("ask always ends with 其他 and records the question", async () => {
     const { call, rec } = tools({});
     await call("ask", { question: "哪个？", options: ["/a", "其他"] });
     expect(rec.asked[0]?.options).toEqual(["/a", "其他"]);
     expect(rec.turns.at(-1)?.role).toBe("ask");
+  });
+});
+
+describe("projects without asking (ADR 0043)", () => {
+  function home(): string {
+    const dir = mkdtempSync(join(tmpdir(), "ah-home-"));
+    mkdirSync(join(dir, "code", "pi-desktop", ".git"), { recursive: true });
+    return dir;
+  }
+
+  it("namedBy finds the name in the owner's words, case and dashes ignored", () => {
+    expect(namedBy("看看 Pi Desktop 的 issue", "pi-desktop")).toBe(true);
+    expect(namedBy("看看 issue", "pi-desktop")).toBe(false);
+    expect(namedBy("anything", " ")).toBe(false);
+  });
+
+  it("a unique project the owner named starts without asking", async () => {
+    const userHome = home();
+    const dir = join(userHome, "code", "pi-desktop");
+    const { call, rec, ctx } = tools(
+      { typedText: "pi-desktop 看看 issue", ownerText: "pi-desktop 看看 issue", pickedDirs: [] },
+      { userHome },
+    );
+    const found = await call("project_find", { name: "pi-desktop" });
+    expect(found).toContain("without asking");
+    expect(ctx.pickedDirs).toEqual([dir]);
+    await call("session_start", { name: "看 issue", project: dir, ownerText: "看看 issue" });
+    expect(rec.started).toHaveLength(1);
+  });
+
+  it("a name the owner did not type still needs their pick", async () => {
+    const userHome = home();
+    const dir = join(userHome, "code", "pi-desktop");
+    const { call, ctx } = tools(
+      { typedText: "看看那个桌面项目", ownerText: "看看那个桌面项目", pickedDirs: [] },
+      { userHome },
+    );
+    const found = await call("project_find", { name: "pi-desktop" });
+    expect(found).not.toContain("without asking");
+    expect(ctx.pickedDirs).toEqual([]);
+    await expect(
+      call("session_start", { name: "看", project: dir, ownerText: "看" }),
+    ).rejects.toThrow(/did not pick/);
+  });
+
+  it("work without a project starts in a folder of its own", async () => {
+    const { call, rec } = tools({ ownerText: "写个脚本", pickedDirs: [] });
+    const out = await call("session_start", { name: "写脚本", ownerText: "写个脚本" });
+    expect(out).toContain("no project");
+    expect(rec.started).toHaveLength(1);
+    expect(rec.started[0]?.cwd).toBeUndefined();
   });
 });

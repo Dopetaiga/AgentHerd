@@ -197,6 +197,25 @@ export interface ModelTiersView {
   custom: boolean;
 }
 
+/** One app in 设置 → 应用连接 (docs/spec/09-agent-tools.md §3). */
+export interface AppView {
+  slug: string;
+  name: string;
+  logo?: string;
+  connected: boolean;
+  /** Waiting for the owner to finish signing in. */
+  connecting: boolean;
+}
+
+/** The owner's apps through their own Composio key. The key itself never leaves the host. */
+export interface AppsView {
+  hasKey: boolean;
+  /** Something the owner should know (bad key, failed sign-in), in Chinese. */
+  problem?: string;
+  /** Connected apps first. */
+  apps: AppView[];
+}
+
 export interface HostApi {
   status(): HostStatus;
   tasks(): TasksView;
@@ -236,6 +255,13 @@ export interface HostApi {
   removeAgent(id: string): AgentView[];
   /** Starts the agent in an empty folder, opens a session and closes it. */
   verifyAgent(id: string): Promise<AgentCheck>;
+  /** The owner's apps; `search` looks in all of Composio's apps. */
+  apps(search?: string): Promise<AppsView>;
+  /** Checks and saves the Composio API key; "" removes it. A bad key is not saved. */
+  setComposioKey(key: string): Promise<AppsView>;
+  /** A sign-in link for the app; when it is done an "apps" event comes. */
+  connectApp(slug: string): Promise<{ url: string }>;
+  disconnectApp(slug: string): Promise<AppsView>;
 }
 
 export type HostMethod = keyof HostApi;
@@ -268,6 +294,10 @@ export const HOST_METHODS: readonly HostMethod[] = [
   "cancelInstall",
   "removeAgent",
   "verifyAgent",
+  "apps",
+  "setComposioKey",
+  "connectApp",
+  "disconnectApp",
 ];
 
 export type HostEvent =
@@ -275,7 +305,8 @@ export type HostEvent =
   | { topic: "tasks"; data: TasksView }
   | { topic: "models"; data: ModelsView }
   | { topic: "setup"; data: SetupState }
-  | { topic: "agents"; data: AgentView[] };
+  | { topic: "agents"; data: AgentView[] }
+  | { topic: "apps"; data: AppsView };
 
 /** The same API, asynchronous, as seen by a client. */
 export type RemoteHost = {

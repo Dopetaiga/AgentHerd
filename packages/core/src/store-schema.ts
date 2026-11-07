@@ -60,19 +60,29 @@ export const TASKS_TABLE_SQL = `CREATE TABLE IF NOT EXISTS tasks(
 );
 CREATE INDEX IF NOT EXISTS tasks_updated ON tasks(updated_at);`;
 
+/** Schema 7: where each task's agent works (ADR 0043). */
+export const TASK_WORKSPACE_SQL = "ALTER TABLE tasks ADD COLUMN workspace_json TEXT;";
+
+/** Schema 7: the task a message the owner can reply to is about (ADR 0043). */
+export const MESSAGE_TASKS_TABLE_SQL = `CREATE TABLE IF NOT EXISTS message_tasks(
+  message_id TEXT PRIMARY KEY,
+  task_id TEXT NOT NULL,
+  at TEXT NOT NULL
+);`;
+
 /**
- * The Herder's whole conversation as the model saw it, one message per row, oldest first. Nothing
- * is cut: old parts are folded into summaries the model writes (ADR 0041).
+ * Schema 8: the Herder's whole conversation as the model saw it, one message per row, oldest
+ * first. Nothing is cut: old parts are folded into summaries the model writes (ADR 0045).
  */
 export const HERDER_LOG_TABLE_SQL = `CREATE TABLE IF NOT EXISTS herder_log(
   seq INTEGER PRIMARY KEY,
   message_json TEXT NOT NULL
 );`;
 
-/** Where the Herder kept the tail of its conversation before schema version 7. */
+/** Where the Herder kept the tail of its conversation before schema version 8. */
 export const LEGACY_HERDER_STATE_KEY = "herder.messages";
 
-export const LATEST_SCHEMA_VERSION = 7;
+export const LATEST_SCHEMA_VERSION = 8;
 
 export const SCHEMA_SQL = `
 CREATE TABLE sessions(
@@ -129,5 +139,7 @@ ${TRANSCRIPT_TABLE_SQL}
 ${HERDER_TURNS_TABLE_SQL}
 ${MEMORY_TABLES_SQL}
 ${TASKS_TABLE_SQL}
+${TASK_WORKSPACE_SQL}
+${MESSAGE_TASKS_TABLE_SQL}
 ${HERDER_LOG_TABLE_SQL}
 `;

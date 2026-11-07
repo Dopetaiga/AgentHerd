@@ -3,7 +3,7 @@
 This package is a copy of `kernel/` from [billion-context](https://github.com/ranxianglei/billion-context)
 (`acp-kernel` 0.0.185, MIT with an attribution term, see [LICENSE](LICENSE)). AgentHerd owns the
 copy: it is not an npm dependency, and we change it when the Herder needs it
-([ADR 0041](../../docs/adr/0041-herder-context-folded-by-the-model.md)). The Herder uses it through
+([ADR 0045](../../docs/adr/0045-herder-context-folded-by-the-model.md)). The Herder uses it through
 `packages/herder/src/context.ts`.
 
 Base: master (6945a354d4565602007f0c0ae8607b035110afc7), 2026-11-07

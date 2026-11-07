@@ -33,6 +33,9 @@ An agent is a profile in configuration, not a package:
 }
 ```
 
+A profile may add `"mcp": false` to start the agent without AgentHerd's `agentherd` MCP
+server ([09-agent-tools.md](09-agent-tools.md)).
+
 | Agent | Command | Status |
 | --- | --- | --- |
 | DeepSeek Harness | `dsh acp` | Tested 2026-11-04: `initialize` returns `deepseek-harness-acp`, session `close`/`list`/`resume`. Asks over `session/request_permission` only when a command needs more than its sandbox mode allows; see [DSH approvals](#dsh-approvals). Built-in profile `dsh` (found via `AGENTHERD_DSH`, `PATH`, or the app bundle); end-to-end run with Feishu passed 2026-11-04 |
@@ -47,7 +50,7 @@ The desktop app ships built-in profiles for these and lets the user add any ACP 
 | ACP | AgentHerd |
 | --- | --- |
 | `initialize` → `agentCapabilities` | Stored per profile; the UI hides actions the agent does not support |
-| `session/new` (with `cwd`, `mcpServers`), `session/prompt` | Start a task (the Herder's `session_start`). `mcpServers` carries AgentHerd's `herd_report` tool where the agent supports MCP **(verify, Q14)** |
+| `session/new` (with `cwd`, `mcpServers`), `session/prompt` | Start a task (the Herder's `session_start`). `mcpServers` carries the stdio server `agentherd` with `herd_report` ([09-agent-tools.md](09-agent-tools.md)); `session/load` carries it too |
 | `session/update` notifications (message chunks, tool calls, plan) | Session state, progress messages, loop detection |
 | `session/request_permission` (tool call + options) | An item that needs a decision ([04-herder.md](04-herder.md)) |
 | Answer with the selected `optionId`, or `cancelled` | Apply the decision. `allow` / `deny` map to the agent's `allow_once` / `reject_once` options; "Always do this" creates an AgentHerd rule, never the agent's `allow_always` |
@@ -78,6 +81,19 @@ Tested 2026-11-04 with DSH 0.0.1 ACP (`/Applications/DeepSeek Harness.app/.../ru
   shows the justification.
 - DSH writes two harmless stderr lines: `Node.js environment variables are disabled because
   this process is invoked by other apps.` and `Got response to unknown request null`.
+- Model ([ADR 0042](../adr/0042-dsh-runs-the-owners-models.md)): tasks use a model from the
+  owner's AgentHerd list, never DSH's native default. Without an explicit choice, AgentHerd
+  selects an available configured model; without one, it refuses to start. The host writes `<home>/run/dsh-model-<hash>.json`, a patch overlay with one provider
+  `agentherd` (`llm-pi-ai`) and the `acp` route pointed at it, appends `--patch <file>` to the
+  command, and passes the key in `AGENTHERD_DSH_KEY`. Only `openai-completions`,
+  `openai-responses` and `anthropic-messages` models run in DSH.
+
+All Host-managed task agents use AgentHerd's configured models. The Herder chooses an
+available model in the owner's tier order when none is specified. Direct starts choose an
+available model compatible with the requested profile. Continued legacy tasks without a model
+also select from this list; tasks with a saved model keep it only while it remains configured
+and compatible. Automatic switches cannot leave the list. An empty or unusable list stops the
+task before an agent starts, rather than using the agent's native defaults.
 
 ### Pi
 
@@ -119,6 +135,13 @@ dependencies (the platform CLI build, over 100 MB). An owner's own `CODEX_PATH` 
 A task runs with a model from the owner's list: the Herder picks it and the agent gets it through
 env (Pi, Codex; see [ADR 0025](../adr/0025-herder-picks-model-per-task.md)). When Codex does not
 start or its first turn breaks before acting, the task moves to Pi with the same model.
+Codex can run GPT models on any OpenAI-style service and every model of the owner's own
+OpenAI-compatible services (relays usually offer the Responses API for all their models); other
+built-in providers without Responses stay with Pi ([ADR 0044](../adr/0044-codex-runs-relay-models.md),
+`codexCanRun` in `packages/herder/src/agent-models.ts`). Without a model named by the owner the
+default stays GPT → Codex. These runs get `CODEX_HOME=<home>/run/codex-<hash>` whose
+`config.toml` names the `agentherd` provider (no key): Codex 0.166 refuses a turn whose provider
+differs from its global config's (`packages/host/src/codex-home.ts`).
 
 验证 starts the agent in an empty temporary folder, runs `initialize` and `session/new`, and
 reports its name and version, a needed sign-in, or the error. Local API: `agents()`,
@@ -127,6 +150,24 @@ reports its name and version, a needed sign-in, or the error. Local API: `agents
 How each agent asks the user a question over ACP (permission request, or a message that ends
 the turn) is open **(verify, Q03)**.
 
+### Task folders
+
+The `cwd` a task's agent gets ([ADR 0043](../adr/0043-tasks-work-on-hidden-copies.md),
+`packages/core/src/workspace.ts`):
+
+| Project | `cwd` |
+| --- | --- |
+| A git project | A hidden copy `~/.agentherd/worktrees/<project>-<hash>/<task id8>` (`git worktree add --detach` of a snapshot of the owner's working tree; `node_modules`/`.venv`/`venv` linked, `.env*` copied) |
+| A folder that is not a git project | That folder |
+| None | An empty folder `~/.agentherd/tasks/<task id8>` |
+
+- At each turn start the owner's changes since the last sync go into the copy; at each turn end
+  the task's changes go into the owner's folder as uncommitted edits. A file both changed
+  differently keeps the owner's version; the owner gets one message with 「用任务的版本」.
+- The copy is removed when the task ends and made again (from `refs/agentherd/tasks/<id>`) when
+  it is continued. No branch is created and the owner's git index is never touched.
+- `agentherd run` runs in the given folder.
+
 ### Session states
 
 `starting`, `working`, `waiting-approval`, `idle` (turn ended), `looping`, `error`, `ended`.
@@ -134,9 +175,20 @@ the turn) is open **(verify, Q03)**.
 
 ### Restarts
 
-Agent processes are children of the core. If the core stops, its agent sessions stop. On the
-next start, sessions whose agent supports `session/load` or `resume` can be reopened; the
-others are marked `ended`.
+Agent processes are children of the core. If the core stops, its agent sessions stop.
+
+- **Stopping** (quit, restart, `SIGINT`/`SIGTERM`; the desktop app asks its host to stop
+  instead of killing it): before the agents are closed the owner gets one message listing the
+  unfinished tasks; they end with "AgentHerd 已停止".
+- **Next start**: every task and session still open in `herd.db` (left by a crash or a hard
+  kill) is marked ended, and a relay that pointed at one is shown as ended. The Herder asks
+  whether to continue the tasks the stop or crash cut off
+  ([ADR 0040](../adr/0040-ask-before-continuing-cut-off-tasks.md)); without a Herder the owner
+  gets one message listing them instead. Task copies left behind are removed.
+- The tasks stay on the board and `session_prompt` continues them
+  ([ADR 0039](../adr/0039-tasks-kept-and-continued.md)).
+- `agentherd run` beside a running host neither ends nor asks about anything: the open tasks
+  may be that host's.
 
 ## 2. Rule export
 

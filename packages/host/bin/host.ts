@@ -4,6 +4,11 @@
 
 import { agentherdHome, runHost } from "../src/index.ts";
 
+/** The message port of an Electron utility process; absent under plain Node. */
+interface ParentPort {
+  on(event: "message", listener: (message: { data: unknown }) => void): void;
+}
+
 const running = await runHost({ home: agentherdHome() });
 let stopping = false;
 const stop = () => {
@@ -13,3 +18,9 @@ const stop = () => {
 };
 process.on("SIGINT", stop);
 process.on("SIGTERM", stop);
+// The desktop app asks by message: on Windows a killed process gets no signal, it just dies.
+const parentPort = (process as { parentPort?: ParentPort }).parentPort;
+parentPort?.on("message", (message) => {
+  const data = message.data as { type?: unknown } | null;
+  if (data?.type === "stop") stop();
+});

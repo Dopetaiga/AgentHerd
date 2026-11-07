@@ -10,6 +10,7 @@ import type { OwnerImage } from "./herder-port.ts";
 import { HERDER_RETRY_TARGET } from "./herder-port.ts";
 import { forgetMemory, memoryListText, restoreMemory } from "./memory-commands.ts";
 import type { Relay } from "./relay.ts";
+import { WORKSPACE_TARGET } from "./task-runner.ts";
 import type { Task } from "./tasks.ts";
 import { taskTitle } from "./tasks.ts";
 
@@ -40,6 +41,9 @@ export class OwnerCommands {
         if (this.asks.has(inbound.target))
           return await this.onAskAnswer(inbound.target, inbound.action);
         if (inbound.target === HERDER_RETRY_TARGET) return ctx.herder()?.retry?.();
+        if (inbound.target.startsWith(WORKSPACE_TARGET)) {
+          return await this.tasks.takeTaskVersion(inbound.target.slice(WORKSPACE_TARGET.length));
+        }
         if (inbound.action === "relay") return await this.relay.start(inbound.target);
         if (inbound.action === "end-relay") return await this.relay.end("ended by you");
         await ctx.inbox.handle(inbound);
@@ -48,7 +52,10 @@ export class OwnerCommands {
       const text = [inbound.text, ...this.saveFiles(inbound.files ?? [])]
         .filter((t) => t !== "")
         .join("\n");
-      await this.onOwnerMessage(text, this.saveImages(inbound.images ?? []));
+      // A reply to a task's message goes to that task (ADR 0043).
+      const replyTask =
+        inbound.replyTo === undefined ? undefined : ctx.store.taskOfMessage(inbound.replyTo.id);
+      await this.onOwnerMessage(text, this.saveImages(inbound.images ?? []), replyTask);
     } catch (error) {
       ctx.store.audit("inbound.error", { message: (error as Error).message });
     }
@@ -101,7 +108,11 @@ export class OwnerCommands {
     });
   }
 
-  private async onOwnerMessage(text: string, images: OwnerImage[] = []): Promise<void> {
+  private async onOwnerMessage(
+    text: string,
+    images: OwnerImage[] = [],
+    replyTask?: string,
+  ): Promise<void> {
     const { ctx } = this;
     const command = parseCommand(text);
     const relay = this.relay.current();
@@ -156,14 +167,16 @@ export class OwnerCommands {
         await say(ctx, restoreMemory(ctx.store.memory, command.target, ctx.texts));
         return;
       case "text": {
-        if (relay === undefined) {
+        const taskId =
+          replyTask !== undefined && ctx.following.has(replyTask) ? replyTask : relay?.taskId;
+        if (taskId === undefined) {
           await this.toHerder(command.text, images);
           return;
         }
-        const f = ctx.following.get(relay.taskId);
-        ctx.store.audit("relay.message", { taskId: relay.taskId });
+        const f = ctx.following.get(taskId);
+        ctx.store.audit(taskId === relay?.taskId ? "relay.message" : "reply.message", { taskId });
         if (f?.busy === true) await say(ctx, ctx.texts.queued);
-        void this.tasks.promptTask(relay.taskId, command.text, images).catch(() => {});
+        void this.tasks.promptTask(taskId, command.text, images).catch(() => {});
         return;
       }
     }
