@@ -154,7 +154,9 @@ export function AppsSection() {
       }
     >
       <Group>
-        {(!hasKey || editingKey) && (
+        {/* Until the host answers, nothing is known: do not ask for a key it may already have. */}
+        {view === undefined && <Row description="正在读取…" />}
+        {view !== undefined && (!hasKey || editingKey) && (
           <>
             {!hasKey && (
               <Row
