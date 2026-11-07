@@ -1,0 +1,154 @@
+# 09. Agent tools and apps
+
+Applied ADRs: [0019](../adr/0019-relay-verbatim-board-and-reports.md),
+[0029](../adr/0029-only-mass-deletes-ask-the-owner.md),
+[0041](../adr/0041-agent-tools-through-a-local-mcp-gateway.md).
+
+AgentHerd gives every task one MCP server, `agentherd`. Through it the agent reports progress
+(`herd_report`) and, when the owner has connected apps, uses them (Gmail, Slack, GitHub …)
+through [Composio](https://composio.dev) with the owner's own Composio key.
+
+```mermaid
+flowchart LR
+  A["Agent (ACP)"] -- "stdio MCP" --> S["agentherd-mcp<br/>(relay script)"]
+  S -- "local socket + task token" --> G["Gateway (host)"]
+  G -- "herd_report" --> C["Core: board, stages"]
+  G -- "app call" --> P["Approval pipeline"]
+  P -- "allowed" --> X["Composio<br/>(x-api-key)"]
+  P -- "ask" --> O["Owner (card)"]
+```
+
+## 1. Gateway
+
+### How an agent gets it
+
+- `session/new` and `session/load` carry
+  `mcpServers: [{ name: "agentherd", command, args, env }]` (stdio). `command`/`args` run
+  `agentherd-mcp.js` with the host's Node (`process.execPath`, `ELECTRON_RUN_AS_NODE=1` in the
+  app). `env` has `AGENTHERD_MCP_SOCKET` (the gateway socket) and `AGENTHERD_MCP_TOKEN`.
+- A profile with `mcp: false` gets `mcpServers: []` as before. The Pi bridge ignores
+  `mcpServers` (Pi has no MCP); Pi tasks keep the stop-reason fallback and have no apps.
+- The relay script does no MCP itself: it reads newline-delimited JSON-RPC from stdin, sends each
+  message to the socket with the token, and writes the answers to stdout. When the socket closes
+  it exits.
+
+### Socket and token
+
+- The gateway socket sits next to the host socket: `<home>/run/mcp.sock` (mode 600, directory
+  700) or the named pipe `\\.\pipe\agentherd-mcp-<hash of home>` on Windows. No TCP listener.
+- The token is 32 random bytes per task, made when the task's session starts and dropped when the
+  task ends. A message with an unknown token is answered with a JSON-RPC error and closes the
+  connection. The token is never written to the audit log or the transcript.
+
+### MCP subset
+
+| Method | Answer |
+| --- | --- |
+| `initialize` | `protocolVersion` as asked (fallback `2025-06-18`), `capabilities: { tools: {} }`, server info `agentherd` |
+| `notifications/initialized`, other notifications | Ignored |
+| `ping` | `{}` |
+| `tools/list` | `herd_report` plus the app tools (§3), one page |
+| `tools/call` | §2 / §3; errors are tool results with `isError: true`, not JSON-RPC errors |
+| anything else | JSON-RPC error `-32601` |
+
+## 2. `herd_report`
+
+Input as in [04-herder.md §2](04-herder.md): `state` (`progress`, `waiting`, `ready`, `blocked`,
+`failed`, `dropped`), `summary` (≤ 600 characters, longer is cut), optional `changes`, `tests`,
+`risks`, `links` (strings). The gateway validates it, hands it to the core for the task the token
+belongs to, and answers `"reported"`. The core treats it as the agent report source of 04-herder
+§2.
+
+## 3. Apps through Composio
+
+### Setup (desktop app, 设置 → 应用连接)
+
+1. The owner pastes a Composio API key (from platform.composio.dev). The host checks it with one
+   API call and stores it in `secrets.json` under `composio`; the UI can replace or remove it, never
+   read it.
+2. The app lists toolkits with their state (`已连接` / `未连接`), from the Composio session's
+   toolkit list. A search field finds more toolkits.
+3. **连接** asks Composio for an authorization link for that toolkit and opens it in the browser;
+   the app polls until the connection is active (or 5 minutes pass). **断开** deletes the connected
+   account.
+4. `apps.composioUserId` in `config.json` is made once (`agentherd-<16 hex>`) and used as the
+   Composio `user_id` for every call.
+
+### Composio session
+
+The host keeps one Composio tool-router session (REST v3.1,
+`POST https://backend.composio.dev/api/v3.1/tool_router/session`) for the user id, created on
+first use and again after a connection changes or the key changes. Its config:
+
+- `manage_connections.enable: false` (connecting is done in the app),
+- `workbench.enable: false` (no remote code sandbox),
+- toolkits: the connected ones.
+
+The gateway is an MCP client of the session's hosted MCP endpoint (`mcp.url`, header
+`x-api-key`). `tools/list` returns Composio's tools (search, schema and execute meta tools) after
+`herd_report`; `tools/call` for them is forwarded after the approval step below. Without a key, or
+when Composio cannot be reached, only `herd_report` is listed; a call then gets an error result
+saying why.
+
+### Approval
+
+Before a call is forwarded the gateway finds the app tools it would run: the tool itself, or
+for an execute meta tool (`COMPOSIO_MULTI_EXECUTE_TOOL`) each `tool_slug` in its arguments. Search
+and schema meta tools run no app tool and are forwarded directly. For each app tool it reads the
+tool's hints (Composio tool tags `readOnlyHint`, `destructiveHint`, …; cached per slug for a
+day) and makes one item per call. When one call runs several app tools, the item lists them all
+and is decided by the strictest of them (owner > approved):
+
+| Field | Value |
+| --- | --- |
+| `kind` | `permission` |
+| `toolCall.kind` | `app` |
+| `toolCall.title` | `<toolkit name>: <tool name>`, e.g. `Gmail: Send Email` |
+| `toolCall.command` | the tool slug, e.g. `GMAIL_SEND_EMAIL` |
+| `toolCall.rawInput` | the arguments |
+| `toolCall.appHints` | the hints |
+
+The pipeline (04-herder §3) decides with these steps, after mass delete and `extraGuards`:
+
+| Tool | `assist` / `auto` | `observe` |
+| --- | --- | --- |
+| `readOnlyHint` | approved | approved |
+| `destructiveHint`, or no hints known | owner | owner |
+| any other (create, update, send) | approved, in the audit log and the report | owner |
+
+Owner rules apply as for commands: a rule with `toolKind: "app"` and a `command` glob on the slug
+(`GMAIL_SEND_*`) allows or denies. "Always do this" on an app card creates such a rule for that
+slug. A denied call is answered with an error result `"The owner did not allow <title>."`; the
+agent continues.
+
+The card shows the title, the toolkit and the arguments as JSON, at most 20 lines, after
+redaction (06-security §2).
+
+### What the Herder knows
+
+- `session_list` gains a line `已连接的应用：Gmail、GitHub` (or nothing without a key).
+- When the owner's request needs an app, the Herder starts the task with an agent that is not Pi
+  and adds `可用应用：…（通过 agentherd 工具）` to `addedContext`.
+- The Herder has no app tools.
+
+## 4. Failure behavior
+
+| Case | Behavior |
+| --- | --- |
+| Relay script cannot reach the socket | It exits with an error; the agent reports the MCP server failed; the task runs without it |
+| Token unknown or task ended | JSON-RPC error, connection closed |
+| Composio returns an error (bad key, quota, app error) | Error result with Composio's message; key problems also show in 设置 |
+| Composio unreachable | Error result; `tools/list` shows only `herd_report` |
+| The owner does not answer an app card | As any item (04-herder §3); the call waits |
+| The gateway crashes | No error path forwards a call: an open app call ends with an error result |
+
+## 5. Tests
+
+- Gateway: `initialize`/`tools/list`/`tools/call`/`ping`, unknown method, bad token, socket per
+  platform; the relay script end to end with a fake socket.
+- `herd_report` reaches the core and changes the stage (e2e with the mock agent calling the tool).
+- Approval: hints → decision table above in every mode; rules on `app`; multi-execute with mixed
+  tools makes one item decided by the strictest.
+- Composio client with a fake `fetch`: session config, key check, connect link, disconnect,
+  hosted MCP forwarding, errors.
+- `session/new` and `session/load` carry the server; `mcp: false` and the Pi bridge do not break.
