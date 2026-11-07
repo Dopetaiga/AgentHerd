@@ -123,7 +123,9 @@ export function composioClient(key: string, fetchFn: Fetch = fetch): ComposioCli
     request(fetchFn, key, method, path, body);
   return {
     async checkKey() {
-      await call("GET", "/auth/session/info");
+      // Not /auth/session/info: it refuses project keys ("Project API key is not allowed for this
+      // endpoint"), which are the keys owners copy from the dashboard.
+      await call("GET", "/toolkits?limit=1");
     },
     async createSession(userId, toolkits) {
       const body = {

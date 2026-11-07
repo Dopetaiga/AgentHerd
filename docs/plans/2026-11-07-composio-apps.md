@@ -105,7 +105,7 @@ export class ComposioError extends Error { status: number; slug?: string }
 export interface ComposioToolkit { slug: string; name: string; logo?: string; description?: string; noAuth: boolean;
   account?: { id: string; status: string } }
 export interface ComposioClient {
-  checkKey(): Promise<void>;                                  // GET /auth/session/info; 401 → ComposioError
+  checkKey(): Promise<void>;                                  // GET /toolkits?limit=1 (project keys may not call /auth/session/info); 401 → ComposioError
   createSession(userId: string, toolkits: string[]): Promise<{ id: string; mcpUrl: string }>;
   toolkits(sessionId: string, opts?: { search?: string; connected?: boolean }): Promise<ComposioToolkit[]>; // follows next_cursor, ≤ 4 pages
   link(sessionId: string, toolkit: string): Promise<{ url: string; accountId: string }>;
