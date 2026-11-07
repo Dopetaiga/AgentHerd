@@ -9,7 +9,7 @@ import { arr, obj, opt, str } from "@earendil-works/pi-schema";
 import { agentForModel } from "./agent-models.ts";
 import { lessonsText, ownerPrefsText, pastLessons } from "./memory.ts";
 import { TIERS, type TierPlacement, tiersText } from "./model-guide.ts";
-import { findProjects, foundText } from "./project-find.ts";
+import { findProjects, foundText, nameKey } from "./project-find.ts";
 import { composeTaskPrompt, HERDER_LABEL } from "./prompt.ts";
 
 /** What the current Herder turn is about. */
@@ -27,13 +27,20 @@ export interface TurnContext {
   asked: boolean;
   notified: boolean;
   /**
-   * Folders the owner typed or picked with a button this turn. session_start runs only in one of
-   * them (ADR 0035): a folder from earlier turns or the Herder's own guess is never used.
+   * Folders the owner typed or picked with a button this turn, and the one project project_find
+   * matched by a name in the owner's words (ADR 0043). session_start runs only in one of them
+   * (ADR 0035): a folder from earlier turns or the Herder's own guess is never used.
    */
   pickedDirs: string[];
 }
 
 /** The answer that lets the owner type their own (ADR 0035). */
+/** Whether the owner's words name the project (case, `-`, `_` and spaces ignored). */
+export function namedBy(typed: string, name: string): boolean {
+  const key = nameKey(name.trim().replace(/^.*[\\/]/, ""));
+  return key !== "" && nameKey(typed).includes(key);
+}
+
 export function otherOption(locale: string): string {
   return locale === "en" ? "Other" : "其他";
 }
@@ -167,10 +174,12 @@ function taskLine(t: Task): string {
 }
 
 const sessionStartSchema = obj({
-  project: str({
-    description:
-      "Project folder: an absolute or ~/ path the owner typed or picked this turn (find it with project_find and ask)",
-  }),
+  project: opt(
+    str({
+      description:
+        "Project folder: an absolute or ~/ path the owner typed or picked this turn, or the one project_find matched. Omit for work that needs no project.",
+    }),
+  ),
   profile: opt(
     str({
       description:
@@ -267,7 +276,7 @@ export function herderTools(
       execute: async (
         _id: string,
         args: {
-          project: string;
+          project?: string;
           name: string;
           profile?: string;
           ownerText: string;
@@ -290,13 +299,14 @@ export function herderTools(
           asked === undefined ? undefined : await pickService(host, asked, named, modelTiers?.());
         const model = picked?.ref;
         const profile = named ?? agentForModel(model, ids);
-        const cwd = resolveProject(host, args.project);
-        if (!t.pickedDirs.some((d) => samePath(d, cwd))) {
+        const given = args.project?.trim() || undefined;
+        const cwd = given === undefined ? undefined : resolveProject(host, given);
+        if (cwd !== undefined && !t.pickedDirs.some((d) => samePath(d, cwd))) {
           throw new Error(
             `the owner did not pick ${cwd} in this message; call project_find and ask the owner to pick the folder`,
           );
         }
-        if (!isDirectory(cwd)) throw new Error(`${cwd} is not a directory`);
+        if (cwd !== undefined && !isDirectory(cwd)) throw new Error(`${cwd} is not a directory`);
         const lessons =
           host.memory === undefined
             ? []
@@ -328,8 +338,9 @@ export function herderTools(
           lessons.length === 0
             ? ""
             : `\nGave the agent ${lessons.length} past record(s): ${lessons.map((l) => l.abstract).join("; ")}`;
+        const where = cwd === undefined ? "a folder of its own (no project)" : cwd;
         return ok(
-          `started task ${taskId.slice(0, 8)} in ${cwd} with ${profile}, ${using}${switched}${gave}`,
+          `started task ${taskId.slice(0, 8)} in ${where} with ${profile}, ${using}${switched}${gave}`,
         );
       },
     },
@@ -410,10 +421,19 @@ export function herderTools(
       name: "project_find",
       label: "Find a project",
       description:
-        "Finds project folders (git repositories under the owner's home) by name. Then ask the owner to pick one; never pick yourself.",
+        "Finds project folders (git repositories under the owner's home) by name. One project with the name the owner used: start there. Otherwise ask the owner to pick; never pick yourself.",
       parameters: findSchema,
       execute: async (_id: string, args: { name: string }) => {
-        return ok(foundText(args.name, findProjects(host.userHome, args.name)));
+        const found = findProjects(host.userHome, args.name);
+        const t = turn();
+        const only = found.exact.length === 1 ? found.exact[0] : undefined;
+        // Only a name the owner typed this turn picks a folder by itself (ADR 0043).
+        const unique =
+          only !== undefined && t.kind !== "event" && namedBy(t.typedText, args.name)
+            ? only
+            : undefined;
+        if (unique !== undefined) t.pickedDirs.push(unique);
+        return ok(foundText(args.name, found, unique));
       },
     },
     {

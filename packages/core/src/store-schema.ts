@@ -60,7 +60,17 @@ export const TASKS_TABLE_SQL = `CREATE TABLE IF NOT EXISTS tasks(
 );
 CREATE INDEX IF NOT EXISTS tasks_updated ON tasks(updated_at);`;
 
-export const LATEST_SCHEMA_VERSION = 6;
+/** Schema 7: where each task's agent works (ADR 0043). */
+export const TASK_WORKSPACE_SQL = "ALTER TABLE tasks ADD COLUMN workspace_json TEXT;";
+
+/** Schema 7: the task a message the owner can reply to is about (ADR 0043). */
+export const MESSAGE_TASKS_TABLE_SQL = `CREATE TABLE IF NOT EXISTS message_tasks(
+  message_id TEXT PRIMARY KEY,
+  task_id TEXT NOT NULL,
+  at TEXT NOT NULL
+);`;
+
+export const LATEST_SCHEMA_VERSION = 7;
 
 export const SCHEMA_SQL = `
 CREATE TABLE sessions(
@@ -117,4 +127,6 @@ ${TRANSCRIPT_TABLE_SQL}
 ${HERDER_TURNS_TABLE_SQL}
 ${MEMORY_TABLES_SQL}
 ${TASKS_TABLE_SQL}
+${TASK_WORKSPACE_SQL}
+${MESSAGE_TASKS_TABLE_SQL}
 `;

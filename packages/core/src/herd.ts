@@ -38,6 +38,7 @@ import { TaskRunner, unfinished } from "./task-runner.ts";
 import type { Task } from "./tasks.ts";
 import { type CoreTexts, coreTexts } from "./texts.ts";
 import { Watchdog } from "./watchdog.ts";
+import { Workspaces } from "./workspace.ts";
 
 export type { AgentModels, HerdOptions, ModelLaunch, RunResult } from "./herd-context.ts";
 export { RELAY_IDLE_MINUTES, RELAY_KEY, type RelayState } from "./relay.ts";
@@ -121,6 +122,7 @@ export class Herd {
           denied: (title) => this.texts.appDenied(title),
         },
       ),
+      workspaces: new Workspaces(opts.home),
       herder: () => this.herder,
       mode: () => this.mode,
     };
@@ -261,6 +263,11 @@ export class Herd {
     this.store.audit("herd.started", { mode: this.mode, channel: this.opts.channel.id });
     await this.endOldRelay(relay?.taskId);
     await this.askToResume();
+    if (this.opts.closeStaleTasks !== false) {
+      void this.runner.cleanupWorkspaces().catch((error: Error) => {
+        this.store.audit("workspace.error", { step: "cleanup", message: error.message });
+      });
+    }
   }
 
   /** A relay the last run left open points at an agent that is gone: show it ended. */
@@ -329,7 +336,7 @@ export class Herd {
    */
   startTask(
     profileId: string,
-    cwd: string,
+    cwd: string | undefined,
     ownerText: string,
     prompt: string = ownerText,
     model?: string,
@@ -356,6 +363,11 @@ export class Herd {
   /** Closes the agent of a task. The task stays on the board. */
   endTask(taskId: string, why: string): Promise<void> {
     return this.runner.endTask(taskId, why);
+  }
+
+  /** Puts the task's version of the files both it and the owner changed into the project. */
+  takeTaskVersion(taskId: string): Promise<void> {
+    return this.runner.takeTaskVersion(taskId);
   }
 
   async stop(): Promise<void> {

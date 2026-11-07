@@ -6,7 +6,7 @@ other message, its relayed replies were long, and an error silently dropped the 
 
 Applied ADRs: [0035](../adr/0035-herder-finds-projects-owner-picks.md),
 [0036](../adr/0036-message-cards-by-kind.md), [0037](../adr/0037-herder-retries-and-never-drops.md),
-[0038](../adr/0038-herder-memory.md).
+[0038](../adr/0038-herder-memory.md), [0043](../adr/0043-tasks-work-on-hidden-copies.md).
 
 ## 1. Finding the project
 
@@ -19,11 +19,14 @@ Rules:
 - A tool `project_find(name)` searches git repositories by folder name under the owner's home
   (skips `Library`, `node_modules`, hidden folders; depth 4; result cached 60 s). Matching is
   case-, `-`/`_`- and space-insensitive.
-- The Herder always lets the owner pick with buttons, even for one match. The owner never has to
-  type a path, except after 「其他」.
+- One exact match whose name is in the owner's own words this turn: the Herder starts there
+  without asking (ADR 0043); `project_find` adds it to `TurnContext.pickedDirs`. Otherwise the
+  Herder lets the owner pick with buttons. The owner never has to type a path, except after 「其他」.
+- Work that needs no project starts without one, in an empty folder of its own.
 
 | Search result | Buttons |
 | --- | --- |
+| 1 exact match named in the owner's words | None: the task starts there |
 | 1–3 exact matches | Their full paths + 「其他」 |
 | More than 3 exact | The 3 changed most recently + 「其他」 |
 | No exact, some similar names | Up to 3 similar + 「其他」 |
@@ -31,8 +34,8 @@ Rules:
 
 - 「其他」 means the owner's next message is the answer. A new name searches again; a path is used.
 - Every Herder question offers its options + 「其他」.
-- Code check in `session_start`: `cwd` must be a folder the owner typed in this turn or picked by
-  a button in this turn (`TurnContext.pickedDirs`). Anything else is rejected with "ask the owner
+- Code check in `session_start`: `cwd` must be a folder the owner typed in this turn, picked by
+  a button in this turn, or the one match above (`TurnContext.pickedDirs`). Anything else is rejected with "ask the owner
   with project_find + ask". Recent folders are no longer offered as guesses.
   - A typed folder is an absolute path (`/…`, or `C:\…` / `C:/…` on Windows) or `~/…` (`~\…`);
     it ends at whitespace or punctuation.
