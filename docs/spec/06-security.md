@@ -17,9 +17,11 @@ a mistake with the user's shell. This spec lists the rules that keep that power 
 
 ## 2. Secrets
 
-- App Secret and model keys live in `<home>/secrets.json`, mode 600 inside the mode 700
-  `~/.agentherd`, held by the host process; the UI can replace or remove a key but never read it
-  back. The guard list already blocks agents from reading `~/.agentherd`.
+- App Secret, model keys and the owner's Composio API key (`composio`, 09-agent-tools §3) live in
+  `<home>/secrets.json`, mode 600 inside the mode 700 `~/.agentherd`, held by the host process;
+  the UI can replace or remove a key but never read it back. The Composio key goes only to
+  Composio: never to an agent, the Herder, a card or the audit log. The guard list already blocks
+  agents from reading `~/.agentherd`.
 - Logs, `herd.db`, cards and model prompts are passed through a redaction step: known secret
   formats (API keys, tokens, private keys) and values of variables whose names contain
   `KEY`, `TOKEN`, `SECRET` or `PASSWORD` are replaced with `«redacted»`.

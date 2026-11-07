@@ -45,6 +45,7 @@ import { Agents } from "./agents.ts";
 import type {
   AgentCheck,
   AgentView,
+  AppsView,
   HostApi,
   HostEvent,
   HostStatus,
@@ -62,6 +63,7 @@ import type {
   Tier,
   TranscriptView,
 } from "./api.ts";
+import { Apps, newComposioUserId } from "./apps.ts";
 import type { AgentDef, Fetchers } from "./catalog.ts";
 import { type CliConfig, readConfig, writeConfig } from "./config.ts";
 import { LocalEmbedder } from "./embedder.ts";
@@ -143,6 +145,7 @@ export class Host implements HostApi {
   private stopped = false;
 
   private readonly agentList: Agents;
+  private readonly appList: Apps;
 
   constructor(opts: HostOptions) {
     this.opts = opts;
@@ -157,6 +160,38 @@ export class Host implements HostApi {
       onChange: () => this.agentsChanged(),
       log: (line) => this.log(line),
     });
+    this.appList = new Apps({
+      secrets: opts.secrets,
+      userId: () => this.composioUserId(),
+      emit: (data) => this.emit({ topic: "apps", data }),
+      log: (line) => this.log(line),
+    });
+  }
+
+  /** This AgentHerd's Composio user id, made the first time it is needed. */
+  private composioUserId(): string {
+    const config = this.config();
+    const known = config.apps?.composioUserId;
+    if (known !== undefined) return known;
+    const id = newComposioUserId();
+    writeConfig(this.opts.home, { ...config, apps: { ...config.apps, composioUserId: id } });
+    return id;
+  }
+
+  apps(search?: string): Promise<AppsView> {
+    return this.appList.view(search);
+  }
+
+  setComposioKey(key: string): Promise<AppsView> {
+    return this.appList.setKey(key);
+  }
+
+  connectApp(slug: string): Promise<{ url: string }> {
+    return this.appList.connect(slug);
+  }
+
+  disconnectApp(slug: string): Promise<AppsView> {
+    return this.appList.disconnect(slug);
   }
 
   onEvent(listener: (event: HostEvent) => void): () => void {
@@ -209,11 +244,12 @@ export class Host implements HostApi {
   /** Starts following tasks if a channel is bound. */
   async start(): Promise<void> {
     this.installNeededAgents();
+    void this.appList.load();
     await this.restartHerd();
   }
 
   /** One message from an agent's `agentherd` MCP server, for the running herd. */
-  mcp(token: string, msg: JsonRpcMessage): JsonRpcMessage | undefined {
+  mcp(token: string, msg: JsonRpcMessage): Promise<JsonRpcMessage | undefined> {
     if (this.herd === undefined) throw new UnknownTokenError();
     return this.herd.mcp(token, msg);
   }
@@ -264,6 +300,8 @@ export class Host implements HostApi {
         ? {}
         : {
             mcpServer: (token: string) => mcpServerFor(this.opts.mcpSocket as string, token),
+            apps: () => this.appList.appTools(),
+            appNames: () => this.appList.connectedNames(),
           }),
       agentModels: {
         list: () =>

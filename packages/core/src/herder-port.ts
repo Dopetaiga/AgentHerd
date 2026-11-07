@@ -65,6 +65,8 @@ export interface HerderHost {
   /** A red card from the Herder (ADR 0037); `retry` adds a 「重试」 button that calls {@link HerderPort.retry}. */
   alert(text: string, retry: boolean): Promise<void>;
   ask(text: string, options: string[]): Promise<void>;
+  /** Names of the owner's connected apps; agents other than Pi use them (docs/spec/09-agent-tools.md §3). */
+  apps?(): string[];
   audit(type: string, data: Record<string, unknown>): void;
   /** Keeps a line of the Herder's conversation with the owner (`herder_turns`). */
   recordTurn(role: HerderTurnRole, text: string, taskId?: string): void;

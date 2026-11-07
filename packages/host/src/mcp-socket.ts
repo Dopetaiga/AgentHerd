@@ -40,7 +40,14 @@ export interface McpServer {
   close(): Promise<void>;
 }
 
-export type McpHandler = (token: string, msg: JsonRpcMessage) => JsonRpcMessage | undefined;
+/**
+ * Answers one message. Throws `UnknownTokenError` at once for a bad token; app calls may wait
+ * (for the owner), so answers can come later and out of order.
+ */
+export type McpHandler = (
+  token: string,
+  msg: JsonRpcMessage,
+) => JsonRpcMessage | undefined | Promise<JsonRpcMessage | undefined>;
 
 const errorLine = (code: number, message: string, id: JsonRpcMessage["id"] = null) =>
   `${JSON.stringify({ jsonrpc: "2.0", id, error: { code, message } })}\n`;
@@ -60,21 +67,27 @@ function serveSocket(socket: Socket, handle: McpHandler): void {
       token = typeof msg.token === "string" ? msg.token : "";
       // A notification checks the token; it gets no answer and does nothing in the core.
       try {
-        handle(token, { jsonrpc: "2.0", method: "notifications/hello" });
+        const hello = handle(token, { jsonrpc: "2.0", method: "notifications/hello" });
+        void Promise.resolve(hello).catch(() => {});
       } catch {
         socket.end(errorLine(UNKNOWN_TOKEN, "unknown task token"));
       }
       return;
     }
-    try {
-      const answer = handle(token, msg);
-      if (answer !== undefined) socket.write(`${JSON.stringify(answer)}\n`);
-    } catch (error) {
+    const failed = (error: unknown) => {
+      if (socket.destroyed) return;
       if (error instanceof UnknownTokenError) {
         socket.end(errorLine(UNKNOWN_TOKEN, "unknown task token", msg.id ?? null));
       } else {
         socket.write(errorLine(INTERNAL_ERROR, (error as Error).message, msg.id ?? null));
       }
+    };
+    try {
+      Promise.resolve(handle(token, msg)).then((answer) => {
+        if (answer !== undefined && !socket.destroyed) socket.write(`${JSON.stringify(answer)}\n`);
+      }, failed);
+    } catch (error) {
+      failed(error);
     }
   };
   socket.on("data", (chunk: Buffer) => {

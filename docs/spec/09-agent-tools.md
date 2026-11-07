@@ -67,7 +67,15 @@ belongs to, and answers `"reported"`. The core treats it as the agent report sou
    API call and stores it in `secrets.json` under `composio`; the UI can replace or remove it, never
    read it.
 2. The app lists toolkits with their state (`已连接` / `未连接`), from the Composio session's
-   toolkit list. A search field finds more toolkits.
+   toolkit list. A search field finds more toolkits by name or slug (case-insensitive, with
+   surrounding spaces ignored). Description-only matches are hidden, including connected apps
+   that do not match. The current search stays in force while requests are pending or connection
+   events arrive; an older search response cannot replace a newer one. Search results do not
+   overwrite the default list. Clearing the field restores that list immediately, without waiting
+   for the background refresh. Default and search lists show five apps at a time, connected apps
+   first (counting toward the five). **显示更多** reveals another five already loaded rows without
+   a network request and disappears when all are visible. Changing or clearing the search resets
+   the visible count to five.
 3. **连接** asks Composio for an authorization link for that toolkit and opens it in the browser;
    the app polls until the connection is active (or 5 minutes pass). **断开** deletes the connected
    account.
@@ -126,10 +134,25 @@ redaction (06-security §2).
 
 ### What the Herder knows
 
-- `session_list` gains a line `已连接的应用：Gmail、GitHub` (or nothing without a key).
-- When the owner's request needs an app, the Herder starts the task with an agent that is not Pi
-  and adds `可用应用：…（通过 agentherd 工具）` to `addedContext`.
+- `session_list` gains a line `Connected apps (agents other than Pi use them through their
+  agentherd tools): Gmail, GitHub` (nothing without a key or without connected apps). The names
+  are the ones last read from Composio; the host reads them at start and after each change.
+- When the owner's request needs an app, the Herder starts the task with an installed agent that is
+  not Pi (`profile`) and says in `addedContext` which apps it can use through its agentherd tools.
 - The Herder has no app tools.
+
+### Which Composio tools agents see
+
+- Listed and forwarded directly: `COMPOSIO_SEARCH_TOOLS`, `COMPOSIO_GET_TOOL_SCHEMAS`.
+- Listed, approved per app tool: `COMPOSIO_MULTI_EXECUTE_TOOL` (slugs from `arguments.tools[].tool_slug`)
+  and any direct app tool.
+- Never listed and refused: `COMPOSIO_MANAGE_CONNECTIONS`, `COMPOSIO_REMOTE_WORKBENCH`,
+  `COMPOSIO_REMOTE_BASH_TOOL`, `COMPOSIO_PROXY_EXECUTE`, `COMPOSIO_WAIT_FOR_CONNECTIONS` (connecting is
+  done in the app; the other ones run code or raw requests no hint describes).
+- A slug Composio does not describe (`GET /tools/{slug}` fails) has no hints and goes to the owner.
+
+The settings use a second session with no toolkit filter, only to list toolkits and to get
+sign-in links; a session Composio no longer knows (404) is made again once.
 
 ## 4. Failure behavior
 

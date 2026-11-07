@@ -36,11 +36,55 @@ function escalate(item: Item, risk: Decision["risk"], reason: string): Decision 
   };
 }
 
+/** Reason of a read-only app call approved by its hints. */
+export const APP_READ = "app read";
+/** Reason of an app call that writes but deletes nothing, approved by its hints. */
+export const APP_WRITE = "app write";
+
+const allowBy = (item: Item, reason: string): PipelineResult => ({
+  decision: {
+    itemId: item.id,
+    action: "allow",
+    confidence: 1,
+    risk: "low",
+    source: "rule",
+    reason,
+    precedents: [],
+  },
+  apply: true,
+});
+
+/**
+ * An app call no rule matched (docs/spec/09-agent-tools.md §3): read-only tools run in every
+ * mode; writes that delete nothing run outside observe (the owner asked for them in the task);
+ * destructive tools and tools without hints go to the owner.
+ */
+function appDefault(item: Item, mode: Mode): PipelineResult {
+  const hints = item.toolCall?.appHints;
+  if (hints === undefined) {
+    return { decision: escalate(item, "medium", "app tool without hints"), apply: false };
+  }
+  if (hints.destructive) {
+    return {
+      decision: escalate(item, "high", "app tool that deletes or overwrites"),
+      apply: false,
+    };
+  }
+  if (hints.readOnly && !hints.create && !hints.update) return allowBy(item, APP_READ);
+  if (!hints.create && !hints.update) {
+    return { decision: escalate(item, "medium", "app tool without hints"), apply: false };
+  }
+  if (mode === "observe") {
+    return { decision: escalate(item, "medium", "observe mode; app tool writes"), apply: false };
+  }
+  return allowBy(item, APP_WRITE);
+}
+
 function decideUnsafe(item: Item, ctx: PipelineContext): PipelineResult {
   if (item.kind !== "permission") {
     return { decision: escalate(item, "medium", "not a permission request"), apply: false };
   }
-  if (item.toolCall !== undefined) {
+  if (item.toolCall !== undefined && item.toolCall.kind !== "app") {
     const where = { cwd: item.cwd, home: ctx.home };
     // A mass delete always goes to the owner, in every mode, whatever the rules say.
     const mass = massDeleteCheck(item.toolCall, where);
@@ -57,6 +101,7 @@ function decideUnsafe(item: Item, ctx: PipelineContext): PipelineResult {
   }
   const hit = matchRules(ctx.rules, item, ctx.home);
   if (hit === null) {
+    if (item.toolCall?.kind === "app") return appDefault(item, ctx.mode);
     if (ctx.mode === "observe") {
       return { decision: escalate(item, "medium", "no rule matched"), apply: false };
     }

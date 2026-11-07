@@ -6,6 +6,7 @@
 import { join } from "node:path";
 import type { AgentProfile, Inbound, Mode, Rule } from "@agentherd/protocol";
 import { DEFAULT_LOCALE } from "@agentherd/protocol";
+import { approveAppCalls } from "./app-calls.ts";
 import { Board } from "./board.ts";
 import { type Clock, systemClock } from "./clock.ts";
 import {
@@ -109,10 +110,17 @@ export class Herd {
       clock: this.clock,
       texts: this.texts,
       following: new Map<string, Following>(),
-      mcp: new McpGateway((taskId, report) => {
-        const f = this.ctx.following.get(taskId);
-        if (f !== undefined && !f.ended) applyReport(this.ctx, f, report);
-      }),
+      mcp: new McpGateway(
+        (taskId, report) => {
+          const f = this.ctx.following.get(taskId);
+          if (f !== undefined && !f.ended) applyReport(this.ctx, f, report);
+        },
+        {
+          ...(opts.apps === undefined ? {} : { apps: opts.apps }),
+          approve: (taskId, calls) => approveAppCalls(this.ctx, taskId, calls),
+          denied: (title) => this.texts.appDenied(title),
+        },
+      ),
       herder: () => this.herder,
       mode: () => this.mode,
     };
@@ -174,6 +182,7 @@ export class Herd {
       relayTaskId: () => this.relay()?.taskId,
       decisions: (limit) => this.store.recentDecisions(limit),
       models: () => this.opts.agentModels?.list() ?? [],
+      apps: () => this.opts.appNames?.() ?? [],
       checkModel: async (ref) => this.opts.agentModels?.check?.(ref) ?? { ok: true },
       startTask: async (profileId, cwd, title, prompt, model, images) => {
         const { taskId, turn } = await this.startTask(profileId, cwd, title, prompt, model, images);
@@ -217,7 +226,7 @@ export class Herd {
    * One message from a task's `agentherd` MCP server. Throws `UnknownTokenError` for a token no
    * running task holds.
    */
-  mcp(token: string, msg: JsonRpcMessage): JsonRpcMessage | undefined {
+  mcp(token: string, msg: JsonRpcMessage): Promise<JsonRpcMessage | undefined> {
     return this.ctx.mcp.handle(token, msg);
   }
 
