@@ -33,6 +33,9 @@ An agent is a profile in configuration, not a package:
 }
 ```
 
+A profile may add `"mcp": false` to start the agent without AgentHerd's `agentherd` MCP
+server ([09-agent-tools.md](09-agent-tools.md)).
+
 | Agent | Command | Status |
 | --- | --- | --- |
 | DeepSeek Harness | `dsh acp` | Tested 2026-11-04: `initialize` returns `deepseek-harness-acp`, session `close`/`list`/`resume`. Asks over `session/request_permission` only when a command needs more than its sandbox mode allows; see [DSH approvals](#dsh-approvals). Built-in profile `dsh` (found via `AGENTHERD_DSH`, `PATH`, or the app bundle); end-to-end run with Feishu passed 2026-11-04 |
@@ -47,7 +50,7 @@ The desktop app ships built-in profiles for these and lets the user add any ACP 
 | ACP | AgentHerd |
 | --- | --- |
 | `initialize` → `agentCapabilities` | Stored per profile; the UI hides actions the agent does not support |
-| `session/new` (with `cwd`, `mcpServers`), `session/prompt` | Start a task (the Herder's `session_start`). `mcpServers` carries AgentHerd's `herd_report` tool where the agent supports MCP **(verify, Q14)** |
+| `session/new` (with `cwd`, `mcpServers`), `session/prompt` | Start a task (the Herder's `session_start`). `mcpServers` carries the stdio server `agentherd` with `herd_report` ([09-agent-tools.md](09-agent-tools.md)); `session/load` carries it too |
 | `session/update` notifications (message chunks, tool calls, plan) | Session state, progress messages, loop detection |
 | `session/request_permission` (tool call + options) | An item that needs a decision ([04-herder.md](04-herder.md)) |
 | Answer with the selected `optionId`, or `cancelled` | Apply the decision. `allow` / `deny` map to the agent's `allow_once` / `reject_once` options; "Always do this" creates an AgentHerd rule, never the agent's `allow_always` |

@@ -35,6 +35,8 @@ export interface AgentProfile {
   command: string[];
   env: Record<string, string>;
   exporter: string | null;
+  /** `false`: start the agent without the `agentherd` MCP server (docs/spec/09-agent-tools.md). */
+  mcp?: boolean;
 }
 
 /** Channel-neutral description of what an agent wants to do. */

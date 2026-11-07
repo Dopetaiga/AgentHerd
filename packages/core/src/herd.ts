@@ -27,11 +27,12 @@ import {
   type OwnerImage,
 } from "./herder-port.ts";
 import { Inbox } from "./inbox.ts";
+import { type JsonRpcMessage, McpGateway } from "./mcp-gateway.ts";
 import { OwnerCommands } from "./owner-commands.ts";
 import { Registry } from "./registry.ts";
 import { Relay, type RelayState } from "./relay.ts";
 import { Store, type TranscriptEntry } from "./store.ts";
-import { onAlarm, restage } from "./task-report.ts";
+import { applyReport, onAlarm, restage } from "./task-report.ts";
 import { TaskRunner, unfinished } from "./task-runner.ts";
 import type { Task } from "./tasks.ts";
 import { type CoreTexts, coreTexts } from "./texts.ts";
@@ -108,6 +109,10 @@ export class Herd {
       clock: this.clock,
       texts: this.texts,
       following: new Map<string, Following>(),
+      mcp: new McpGateway((taskId, report) => {
+        const f = this.ctx.following.get(taskId);
+        if (f !== undefined && !f.ended) applyReport(this.ctx, f, report);
+      }),
       herder: () => this.herder,
       mode: () => this.mode,
     };
@@ -206,6 +211,14 @@ export class Herd {
       getState: (key) => this.store.getState(key),
       setState: (key, value) => this.store.setState(key, value),
     };
+  }
+
+  /**
+   * One message from a task's `agentherd` MCP server. Throws `UnknownTokenError` for a token no
+   * running task holds.
+   */
+  mcp(token: string, msg: JsonRpcMessage): JsonRpcMessage | undefined {
+    return this.ctx.mcp.handle(token, msg);
   }
 
   /** All tasks this Herd follows or followed. */

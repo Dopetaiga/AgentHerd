@@ -7,6 +7,7 @@ import {
   chooseModel,
   emptyModelSettings,
   Herd,
+  type JsonRpcMessage,
   type ModelRef,
   type ModelRole,
   type ModelService,
@@ -16,6 +17,7 @@ import {
   RESIDENT_CAPS,
   removeService,
   type SecretStore,
+  UnknownTokenError,
 } from "@agentherd/core";
 import {
   agentForModel,
@@ -63,6 +65,7 @@ import type {
 import type { AgentDef, Fetchers } from "./catalog.ts";
 import { type CliConfig, readConfig, writeConfig } from "./config.ts";
 import { LocalEmbedder } from "./embedder.ts";
+import { mcpServerFor } from "./mcp-socket.ts";
 import { probeModels } from "./probe.ts";
 import { availableProfiles } from "./profiles.ts";
 import { RuntimeStore } from "./runtimes.ts";
@@ -112,6 +115,8 @@ export interface HostOptions {
   verify?: VerifyOptions;
   /** The DeepSeek Harness app's CLI (tests). */
   dshApp?: string;
+  /** The MCP socket agents reach the gateway on (mcp-socket.ts). Without it, agents get none. */
+  mcpSocket?: string;
 }
 
 export class Host implements HostApi {
@@ -207,6 +212,12 @@ export class Host implements HostApi {
     await this.restartHerd();
   }
 
+  /** One message from an agent's `agentherd` MCP server, for the running herd. */
+  mcp(token: string, msg: JsonRpcMessage): JsonRpcMessage | undefined {
+    if (this.herd === undefined) throw new UnknownTokenError();
+    return this.herd.mcp(token, msg);
+  }
+
   async stop(): Promise<void> {
     this.stopped = true;
     this.agentList.stop();
@@ -249,6 +260,11 @@ export class Host implements HostApi {
       locale,
       profiles: this.herdProfiles(),
       ...(herder === undefined ? {} : { herder }),
+      ...(this.opts.mcpSocket === undefined
+        ? {}
+        : {
+            mcpServer: (token: string) => mcpServerFor(this.opts.mcpSocket as string, token),
+          }),
       agentModels: {
         list: () =>
           modelChoices(

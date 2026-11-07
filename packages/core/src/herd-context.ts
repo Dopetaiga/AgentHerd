@@ -1,6 +1,6 @@
 // Shared state and small helpers for the parts of the Herd (see herd.ts).
 
-import type { AgentConnection } from "@agentherd/acp-client";
+import type { AgentConnection, StdioMcpServer } from "@agentherd/acp-client";
 import type {
   AgentProfile,
   Channel,
@@ -16,6 +16,7 @@ import type { Board } from "./board.ts";
 import type { Clock, Timer } from "./clock.ts";
 import type { HerderFactory, HerderPort, OwnerImage } from "./herder-port.ts";
 import type { Inbox } from "./inbox.ts";
+import type { HerdReport, McpGateway } from "./mcp-gateway.ts";
 import type { Completer, Embedder } from "./memory-store.ts";
 import type { Registry } from "./registry.ts";
 import type { Store } from "./store.ts";
@@ -61,6 +62,11 @@ export interface HerdOptions {
   embedder?: Embedder;
   /** A cheap model the Herder uses to rank past cases. */
   memoryComplete?: Completer;
+  /**
+   * The stdio MCP server that reaches this Herd's gateway with the given task token
+   * (docs/spec/09-agent-tools.md §1). Without it, agents get no MCP servers.
+   */
+  mcpServer?: (token: string) => StdioMcpServer;
 }
 
 /** The owner's models and how an agent runs one (ADR 0025). Supplied by the host. */
@@ -104,6 +110,8 @@ export interface Following {
   needsHistory?: boolean;
   /** Set while an ended task is being started again. */
   reopening?: Promise<void>;
+  /** The agent's last `herd_report` in the current turn. */
+  report?: HerdReport;
   /** Text and tool calls of the current turn. */
   turn: { text: string; toolCalls: number };
   /** Reply text since the last tool call, not yet in the transcript. */
@@ -146,6 +154,8 @@ export interface HerdContext {
   readonly clock: Clock;
   readonly texts: CoreTexts;
   readonly following: Map<string, Following>;
+  /** Task tokens and answers for the agents' `agentherd` MCP server. */
+  readonly mcp: McpGateway;
   /** The current Herder, if any. It can change at runtime. */
   herder(): HerderPort | undefined;
   /** The current mode. It can change at runtime. */

@@ -46,6 +46,8 @@ export type Step =
       onReject: "end_turn" | "continue";
     }
   | { type: "sleep"; ms: number }
+  /** Calls a tool on the session's first stdio MCP server; the result becomes a message. */
+  | { type: "mcp_call"; tool: string; arguments: Record<string, unknown> }
   | { type: "crash"; code: number }
   | { type: "end_turn"; stopReason: "end_turn" | "refusal" | "max_tokens" };
 
@@ -171,6 +173,12 @@ function step(v: unknown, where: string): Step {
         s.expect = oneOf<Expectation>(body.expect, ["allow", "deny", "cancelled"], `${w}.expect`);
       }
       return s;
+    }
+    case "mcp_call": {
+      if (!isObj(body)) throw new ScriptError(`${w}: expected a mapping`);
+      const args = body.arguments ?? {};
+      if (!isObj(args)) throw new ScriptError(`${w}.arguments: expected a mapping`);
+      return { type: "mcp_call", tool: str(body.tool, `${w}.tool`), arguments: args };
     }
     case "sleep": {
       if (typeof body !== "number" || body < 0) throw new ScriptError(`${w}: expected ms >= 0`);
