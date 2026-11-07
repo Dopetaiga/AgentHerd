@@ -2,7 +2,7 @@
 // The Herder never picks one itself: the owner picks from what this returns.
 
 import { readdirSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 
 /** Folders never searched below the home folder. */
 const SKIP = new Set(["Library", "node_modules", "Applications", "Pictures", "Music", "Movies"]);
@@ -44,7 +44,7 @@ export function listRepos(root: string, depth = FIND_DEPTH, now = Date.now()): R
       return;
     }
     if (entries.some((e) => e.name === ".git")) {
-      const name = dir.slice(dir.lastIndexOf("/") + 1);
+      const name = basename(dir);
       let mtime = 0;
       try {
         mtime = statSync(join(dir, ".git")).mtimeMs;
@@ -106,8 +106,17 @@ export function findProjects(root: string, name: string, repos = listRepos(root)
   return { exact: [], similar: scored.slice(0, MAX_CHOICES).map((s) => s.r.path) };
 }
 
-/** The tool result: what to offer the owner, and how. */
-export function foundText(name: string, found: FoundProjects): string {
+/**
+ * The tool result: what to offer the owner, and how. `unique`: the one exact match, named in the
+ * owner's own words, which session_start may use without asking (ADR 0043).
+ */
+export function foundText(name: string, found: FoundProjects, unique?: string): string {
+  if (unique !== undefined) {
+    return [
+      `One project is named "${name}": ${unique}`,
+      "Start the task there (session_start project) without asking the owner.",
+    ].join("\n");
+  }
   if (found.exact.length > 0) {
     const shown = found.exact.slice(0, MAX_CHOICES);
     const more =
@@ -117,7 +126,7 @@ export function foundText(name: string, found: FoundProjects): string {
     return [
       `Projects named "${name}"${more}:`,
       ...shown.map((p) => `- ${p}`),
-      "Ask the owner with these full paths as the options, even if there is only one.",
+      "Ask the owner with these full paths as the options.",
     ].join("\n");
   }
   if (found.similar.length > 0) {

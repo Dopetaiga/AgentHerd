@@ -165,6 +165,7 @@ async function run(home: string, args: string[], out: Out): Promise<number> {
     profiles: [profile],
     // A one-off run may share herd.db with a running host; its running tasks are not stale.
     closeStaleTasks: false,
+    taskCopies: false,
   });
   herd.registry.onChange((row, previous) => out(`[session] ${previous ?? "new"} → ${row.state}`));
   const stop = () => {

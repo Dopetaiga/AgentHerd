@@ -1,4 +1,4 @@
-# ADR 0043: Codex runs any model of the owner's own OpenAI-compatible services
+# ADR 0044: Codex runs any model of the owner's own OpenAI-compatible services
 
 - Status: Accepted
 - Date: 2026-11-07

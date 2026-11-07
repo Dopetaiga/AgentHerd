@@ -1,5 +1,6 @@
+import { mkdirSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { resolve } from "node:path";
+import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { placeModels, type TierPlacement } from "../src/model-guide.ts";
 import { CONTEXT_LABEL, composeTaskPrompt, OWNER_LABEL, quoteAgent } from "../src/prompt.ts";
@@ -7,6 +8,7 @@ import {
   findTasks,
   herderTools,
   isVerbatim,
+  namedBy,
   resolveProject,
   type TurnContext,
 } from "../src/tools.ts";
@@ -518,5 +520,56 @@ describe("session_start folder check (ADR 0035)", () => {
     await call("ask", { question: "哪个？", options: ["/a", "其他"] });
     expect(rec.asked[0]?.options).toEqual(["/a", "其他"]);
     expect(rec.turns.at(-1)?.role).toBe("ask");
+  });
+});
+
+describe("projects without asking (ADR 0043)", () => {
+  function home(): string {
+    const dir = mkdtempSync(join(tmpdir(), "ah-home-"));
+    mkdirSync(join(dir, "code", "pi-desktop", ".git"), { recursive: true });
+    return dir;
+  }
+
+  it("namedBy finds the name in the owner's words, case and dashes ignored", () => {
+    expect(namedBy("看看 Pi Desktop 的 issue", "pi-desktop")).toBe(true);
+    expect(namedBy("看看 issue", "pi-desktop")).toBe(false);
+    expect(namedBy("anything", " ")).toBe(false);
+  });
+
+  it("a unique project the owner named starts without asking", async () => {
+    const userHome = home();
+    const dir = join(userHome, "code", "pi-desktop");
+    const { call, rec, ctx } = tools(
+      { typedText: "pi-desktop 看看 issue", ownerText: "pi-desktop 看看 issue", pickedDirs: [] },
+      { userHome },
+    );
+    const found = await call("project_find", { name: "pi-desktop" });
+    expect(found).toContain("without asking");
+    expect(ctx.pickedDirs).toEqual([dir]);
+    await call("session_start", { name: "看 issue", project: dir, ownerText: "看看 issue" });
+    expect(rec.started).toHaveLength(1);
+  });
+
+  it("a name the owner did not type still needs their pick", async () => {
+    const userHome = home();
+    const dir = join(userHome, "code", "pi-desktop");
+    const { call, ctx } = tools(
+      { typedText: "看看那个桌面项目", ownerText: "看看那个桌面项目", pickedDirs: [] },
+      { userHome },
+    );
+    const found = await call("project_find", { name: "pi-desktop" });
+    expect(found).not.toContain("without asking");
+    expect(ctx.pickedDirs).toEqual([]);
+    await expect(
+      call("session_start", { name: "看", project: dir, ownerText: "看" }),
+    ).rejects.toThrow(/did not pick/);
+  });
+
+  it("work without a project starts in a folder of its own", async () => {
+    const { call, rec } = tools({ ownerText: "写个脚本", pickedDirs: [] });
+    const out = await call("session_start", { name: "写脚本", ownerText: "写个脚本" });
+    expect(out).toContain("no project");
+    expect(rec.started).toHaveLength(1);
+    expect(rec.started[0]?.cwd).toBeUndefined();
   });
 });

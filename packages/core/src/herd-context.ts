@@ -23,6 +23,7 @@ import type { Store } from "./store.ts";
 import type { Task } from "./tasks.ts";
 import type { CoreTexts } from "./texts.ts";
 import type { Watchdog } from "./watchdog.ts";
+import type { TaskWorkspace, Workspaces } from "./workspace.ts";
 
 export interface HerdOptions {
   /** AgentHerd home (`AGENTHERD_HOME` or `~/.agentherd`). `herd.db` lives here. */
@@ -39,6 +40,11 @@ export interface HerdOptions {
    * "Restarts"). Default true; false for a one-off run that may share herd.db with a host.
    */
   closeStaleTasks?: boolean;
+  /**
+   * Run each task in a git project in a copy of its own, synced with the project folder every turn
+   * (ADR 0043). Default true; false runs agents in the folder itself (`agentherd run`).
+   */
+  taskCopies?: boolean;
   remindMinutes?: number;
   extraGuards?: ExtraGuard[];
   /** Values to redact everywhere (secrets from env). */
@@ -112,7 +118,10 @@ export interface AgentModels {
 export interface Following {
   task: Task;
   profile: AgentProfile;
+  /** Where the agent runs: the task's copy, its folder, or its scratch folder. */
   cwd: string;
+  /** Where the task works and how it syncs with the project (ADR 0043). */
+  workspace?: TaskWorkspace;
   alarm: boolean;
   finished: boolean;
   /** The session was in `error` at some point; the task stays failed. */
@@ -175,6 +184,7 @@ export interface HerdContext {
   readonly following: Map<string, Following>;
   /** Task tokens and answers for the agents' `agentherd` MCP server. */
   readonly mcp: McpGateway;
+  readonly workspaces: Workspaces;
   /** The current Herder, if any. It can change at runtime. */
   herder(): HerderPort | undefined;
   /** The current mode. It can change at runtime. */
@@ -188,7 +198,7 @@ export interface HerdContext {
 export interface TaskOps {
   startTask(
     profileId: string,
-    cwd: string,
+    cwd: string | undefined,
     ownerText: string,
     prompt?: string,
     model?: string,
@@ -197,6 +207,8 @@ export interface TaskOps {
   promptTask(taskId: string, text: string, images?: OwnerImage[]): Promise<RunResult>;
   interruptTask(taskId: string, text: string, images?: OwnerImage[]): Promise<RunResult>;
   endTask(taskId: string, why: string): Promise<void>;
+  /** Puts the task's version of the files both it and the owner changed into the project. */
+  takeTaskVersion(taskId: string): Promise<void>;
 }
 
 /** All tasks the Herd follows or followed, as copies. */
@@ -218,6 +230,7 @@ export function saveTask(ctx: HerdContext, f: Following): void {
       ...(f.endedAt === undefined ? {} : { endedAt: f.endedAt }),
       ...(f.endedWhy === undefined ? {} : { endedWhy: f.endedWhy }),
       ...(f.agentSessionId === undefined ? {} : { agentSessionId: f.agentSessionId }),
+      ...(f.workspace === undefined ? {} : { workspace: f.workspace }),
     });
   } catch (error) {
     ctx.store.audit("task.save-error", { taskId: f.task.id, message: (error as Error).message });
@@ -234,17 +247,24 @@ export async function say(
   text: string,
   taskLabel?: string,
   tone?: TextTone,
+  taskId?: string,
 ): Promise<void> {
   const view: TextView = { kind: "text", text };
   if (taskLabel !== undefined) view.taskLabel = taskLabel;
   if (tone !== undefined) view.tone = tone;
-  await send(ctx, view);
+  await send(ctx, view, taskId);
 }
 
-/** Sends a view; a failure is audited, never thrown. */
-export async function send(ctx: HerdContext, view: View): Promise<void> {
+/**
+ * Sends a view; a failure is audited, never thrown. A message about a task (a report, a relay
+ * view, or `taskId` given) is remembered, so the owner's reply to it goes to that task (ADR 0043).
+ */
+export async function send(ctx: HerdContext, view: View, taskId?: string): Promise<void> {
   try {
-    await ctx.opts.channel.send(view);
+    const ref = await ctx.opts.channel.send(view);
+    const about =
+      taskId ?? (view.kind === "report" || view.kind === "relay" ? view.taskId : undefined);
+    if (about !== undefined && typeof ref?.id === "string") ctx.store.linkMessage(ref.id, about);
   } catch (error) {
     ctx.store.audit("send.error", { kind: view.kind, message: (error as Error).message });
   }
