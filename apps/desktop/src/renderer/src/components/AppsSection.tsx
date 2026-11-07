@@ -58,6 +58,10 @@ function KeyForm({ hasKey, onDone }: { hasKey: boolean; onDone: () => void }) {
         <input
           className={`${inputClass} min-w-0 flex-1`}
           type="password"
+          // Chromium must neither remember the key nor offer it in another field.
+          autoComplete="new-password"
+          name="composio-key"
+          spellCheck={false}
           placeholder={hasKey ? "粘贴新的 Composio API Key 替换" : "粘贴你的 Composio API Key"}
           value={key}
           onChange={(e) => setKey(e.target.value)}
@@ -176,7 +180,13 @@ export function AppsSection() {
                 }
               />
             )}
-            <KeyForm hasKey={hasKey} onDone={() => setEditingKey(false)} />
+            <KeyForm
+              hasKey={hasKey}
+              onDone={() => {
+                setEditingKey(false);
+                setSearch("");
+              }}
+            />
           </>
         )}
         {view?.problem !== undefined && (
@@ -199,6 +209,12 @@ export function AppsSection() {
           >
             <input
               className={`${inputClass} min-w-0 flex-1`}
+              type="search"
+              // Without this Chromium took the field next to the key for a user name and filled
+              // the saved key into it after saving.
+              autoComplete="off"
+              name="app-search"
+              spellCheck={false}
               placeholder="搜索应用，如 gmail、github、notion"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
