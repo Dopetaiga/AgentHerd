@@ -17,6 +17,14 @@ export type {
 export { HERDER_RETRY_TARGET } from "./herder-port.ts";
 export type { Answerable, InboxOptions, OwnerAnswer } from "./inbox.ts";
 export { BODY_MAX_LINES, DEFAULT_REMIND_MINUTES, Inbox, itemBody, itemView } from "./inbox.ts";
+export type { HerdReport, JsonRpcMessage } from "./mcp-gateway.ts";
+export {
+  HERD_REPORT_TOOL,
+  McpGateway,
+  parseReport,
+  REPORT_SUMMARY_MAX,
+  UnknownTokenError,
+} from "./mcp-gateway.ts";
 export {
   ABSTRACT_MAX_CHARS,
   BODY_MAX_CHARS,
