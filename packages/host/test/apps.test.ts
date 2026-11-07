@@ -42,9 +42,17 @@ function fakeComposio(): FakeComposio {
     client: (key) => ({
       async checkKey() {
         f.calls.push(`check ${key}`);
-        if (key !== "good") throw new ComposioError("Invalid API key", 401, "APIKey_InvalidAPIKey");
+        if (key !== "good" && key !== "read-only") {
+          throw new ComposioError("Invalid API key", 401, "APIKey_InvalidAPIKey");
+        }
       },
       async createSession(_user, toolkits) {
+        if (key === "read-only") {
+          throw new ComposioError(
+            'This API key does not have the permissions required for POST /api/v3.1/tool_router/session. This route requires "session_management" write access, but the key has read access for "session_management".',
+            403,
+          );
+        }
         f.sessions.push([...toolkits]);
         return { id: `s${f.sessions.length}`, mcpUrl: `https://mcp/s${f.sessions.length}` };
       },
@@ -136,6 +144,13 @@ describe("Apps", () => {
     const { apps, secrets } = setup();
     const view = await apps.setKey("bad");
     expect(view.problem).toContain("这个 Composio API Key 不能用");
+    expect(secrets.data.has(COMPOSIO_ACCOUNT)).toBe(false);
+  });
+
+  it("does not save a key that may not make sessions, and says which right it lacks", async () => {
+    const { apps, secrets } = setup();
+    const view = await apps.setKey("read-only");
+    expect(view.problem).toContain("session_management 的写权限");
     expect(secrets.data.has(COMPOSIO_ACCOUNT)).toBe(false);
   });
 

@@ -47,6 +47,19 @@ interface Session {
 
 const why = (error: unknown) => (error as Error).message;
 
+/** A key that may read but not make sessions (Composio's key permissions). */
+const NO_SESSION_RIGHTS =
+  "这个 Key 权限不够：AgentHerd 要能创建会话（session_management 的写权限）。请在 Composio 的 Settings → API Keys 新建一个有完整权限的 Key 再粘贴。";
+
+function keyProblem(error: unknown): string | undefined {
+  if (!(error instanceof ComposioError)) return undefined;
+  if (error.status === 403 && /permission/i.test(error.message)) return NO_SESSION_RIGHTS;
+  if (error.status === 401 || error.status === 403) {
+    return `这个 Composio API Key 不能用：${error.message}`;
+  }
+  return undefined;
+}
+
 export class Apps {
   private readonly opts: AppsOptions;
   private readonly now: () => number;
@@ -160,7 +173,8 @@ export class Apps {
         apps: [...rows.values()],
       };
     } catch (error) {
-      return { hasKey: true, problem: `读不到 Composio 的应用列表：${why(error)}`, apps: [] };
+      const problem = keyProblem(error) ?? `读不到 Composio 的应用列表：${why(error)}`;
+      return { hasKey: true, problem, apps: [] };
     }
   }
 
@@ -181,17 +195,19 @@ export class Apps {
       this.reset();
       return { hasKey: false, apps: [] };
     }
+    // A key can be valid and still not allowed to make sessions, which everything here needs:
+    // make the settings session now, so such a key is not saved.
+    let browse: Session;
     try {
       await this.client(key).checkKey();
+      browse = await this.session(key, []);
     } catch (error) {
-      const text =
-        error instanceof ComposioError && (error.status === 401 || error.status === 403)
-          ? `这个 Composio API Key 不能用：${error.message}`
-          : `没能检查这个 Composio API Key：${why(error)}`;
+      const text = keyProblem(error) ?? `没能检查这个 Composio API Key：${why(error)}`;
       return { ...(await this.view()), problem: text };
     }
     this.opts.secrets.set(COMPOSIO_ACCOUNT, key);
     this.reset();
+    this.browse = Promise.resolve(browse);
     const view = await this.view();
     this.opts.emit(view);
     return view;
