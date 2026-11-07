@@ -78,6 +78,12 @@ Tested 2026-11-04 with DSH 0.0.1 ACP (`/Applications/DeepSeek Harness.app/.../ru
   shows the justification.
 - DSH writes two harmless stderr lines: `Node.js environment variables are disabled because
   this process is invoked by other apps.` and `Got response to unknown request null`.
+- Model ([ADR 0042](../adr/0042-dsh-runs-the-owners-models.md)): DSH's own settings (the `acp`
+  profile, default `deepseek-official`) unless the task runs a model from the owner's list. Then
+  the host writes `<home>/run/dsh-model-<hash>.json`, a patch overlay with one provider
+  `agentherd` (`llm-pi-ai`) and the `acp` route pointed at it, appends `--patch <file>` to the
+  command, and passes the key in `AGENTHERD_DSH_KEY`. Only `openai-completions`,
+  `openai-responses` and `anthropic-messages` models run in DSH.
 
 ### Pi
 

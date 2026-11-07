@@ -27,7 +27,7 @@ import {
   MemoryWorker,
   memoryModel,
   modelChoices,
-  modelEnvFor,
+  modelLaunchFor,
   piModelEnv,
   placeModels,
   resolveModel,
@@ -62,6 +62,7 @@ import type {
 } from "./api.ts";
 import type { AgentDef, Fetchers } from "./catalog.ts";
 import { type CliConfig, readConfig, writeConfig } from "./config.ts";
+import { dshPatchArgs, writeDshPatch } from "./dsh-patch.ts";
 import { LocalEmbedder } from "./embedder.ts";
 import { probeModels } from "./probe.ts";
 import { availableProfiles } from "./profiles.ts";
@@ -255,8 +256,20 @@ export class Host implements HostApi {
             this.settings(),
             this.profileList.map((p) => p.id),
           ),
-        envFor: (profileId, ref) =>
-          modelEnvFor(this.settings(), this.opts.secrets, profileId, ref, this.opts.env),
+        launchFor: (profileId, ref) => {
+          const launch = modelLaunchFor(
+            this.settings(),
+            this.opts.secrets,
+            profileId,
+            ref,
+            this.opts.env,
+          );
+          if (launch.dshPatch === undefined) return { env: launch.env };
+          return {
+            env: launch.env,
+            args: dshPatchArgs(writeDshPatch(this.opts.home, launch.dshPatch)),
+          };
+        },
         check: (ref) => this.checkModel(ref),
         next: (profileId, failed, tried) => this.nextModel(profileId, failed, tried),
       },

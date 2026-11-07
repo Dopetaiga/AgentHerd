@@ -63,12 +63,27 @@ export interface HerdOptions {
   memoryComplete?: Completer;
 }
 
+/** How an agent's launch changes to run one model: env added, arguments appended. */
+export interface ModelLaunch {
+  env: Record<string, string>;
+  args?: string[];
+}
+
+/** The agent's profile with a model's launch applied. */
+export function withModel(profile: AgentProfile, launch: ModelLaunch): AgentProfile {
+  return {
+    ...profile,
+    command: [...profile.command, ...(launch.args ?? [])],
+    env: { ...profile.env, ...launch.env },
+  };
+}
+
 /** The owner's models and how an agent runs one (ADR 0025). Supplied by the host. */
 export interface AgentModels {
   /** Models in the owner's list ("service/model"), with the profile ids that can run each. */
   list(): { ref: string; agents: string[] }[];
-  /** The env that makes the agent use the model. Throws when it cannot. */
-  envFor(profileId: string, ref: string): Record<string, string>;
+  /** The env and extra arguments that make the agent use the model. Throws when it cannot. */
+  launchFor(profileId: string, ref: string): ModelLaunch;
   /** Whether the model answers now (a short test call, may be cached). */
   check?(ref: string): Promise<{ ok: true } | { ok: false; message: string }>;
   /**

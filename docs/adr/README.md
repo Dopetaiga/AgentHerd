@@ -44,3 +44,4 @@ Format and rules: [ADR 0001](0001-record-architecture-decisions.md).
 | [0038](0038-herder-memory.md) | The Herder has a long-term memory (six kinds) in herd.db with code-checked writes | Accepted |
 | [0039](0039-tasks-kept-and-continued.md) | Tasks are kept in herd.db across restarts; an ended task can be continued (Pi reopens its own session) | Accepted |
 | [0040](0040-ask-before-continuing-cut-off-tasks.md) | After a restart the Herder asks whether to continue tasks the stop cut off | Accepted |
+| [0042](0042-dsh-runs-the-owners-models.md) | DSH runs the owner's models through a `--patch` overlay; `envFor` becomes `launchFor` | Accepted |

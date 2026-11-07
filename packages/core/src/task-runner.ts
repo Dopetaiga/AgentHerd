@@ -11,6 +11,7 @@ import {
   saveTask,
   say,
   type TaskOps,
+  withModel,
 } from "./herd-context.ts";
 import type { OwnerImage } from "./herder-port.ts";
 import { CASE_JOB } from "./memory-store.ts";
@@ -59,8 +60,7 @@ export class TaskRunner {
     let profile = found;
     if (model !== undefined) {
       if (ctx.opts.agentModels === undefined) throw new Error("no model list to choose from");
-      const env = ctx.opts.agentModels.envFor(profileId, model);
-      profile = { ...found, env: { ...found.env, ...env } };
+      profile = withModel(found, ctx.opts.agentModels.launchFor(profileId, model));
     }
     const sessionId = randomUUID();
     const now = ctx.clock.now().toISOString();
@@ -238,8 +238,7 @@ export class TaskRunner {
         let profile = base;
         if (model !== undefined) {
           if (ctx.opts.agentModels === undefined) throw new Error("no model list to choose from");
-          const env = ctx.opts.agentModels.envFor(base.id, model);
-          profile = { ...base, env: { ...base.env, ...env } };
+          profile = withModel(base, ctx.opts.agentModels.launchFor(base.id, model));
         }
         const connection = await startAgent(profile, { cwd: f.cwd });
         let sessionId: string | undefined;
@@ -459,7 +458,7 @@ export class TaskRunner {
       const base = ctx.opts.profiles.find((p) => p.id === next.profileId);
       if (base === undefined) return false;
       ref = next.model;
-      profile = { ...base, env: { ...base.env, ...models.envFor(base.id, ref) } };
+      profile = withModel(base, models.launchFor(base.id, ref));
     } catch {
       return false;
     }
