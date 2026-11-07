@@ -122,6 +122,8 @@ export function AppsSection() {
   const apps = useApp((s) => s.apps);
   const [search, setSearch] = useState("");
   const [editingKey, setEditingKey] = useState(false);
+  // Search results must not replace the default list needed when the field is cleared.
+  const [results, setResults] = useState<{ query: string; view: AppsView }>();
 
   useEffect(() => {
     const q = search.trim();
@@ -129,7 +131,9 @@ export function AppsSection() {
     const timer = setTimeout(
       async () => {
         const view = await call((h) => h.apps(q === "" ? undefined : q));
-        if (active && view !== undefined) useApp.setState({ apps: view });
+        if (!active || view === undefined) return;
+        if (q === "") useApp.setState({ apps: view });
+        else setResults({ query: q.toLowerCase(), view });
       },
       q === "" ? 0 : 300,
     );
@@ -139,10 +143,14 @@ export function AppsSection() {
     };
   }, [search]);
 
-  const view: AppsView | undefined = apps;
-  const hasKey = view?.hasKey === true;
-  const list = view?.apps ?? [];
   const q = search.trim().toLowerCase();
+  const found = apps?.hasKey === true && results?.query === q ? results.view : undefined;
+  const view: AppsView | undefined = found ?? apps;
+  const hasKey = apps?.hasKey === true;
+  // Default rows carry the latest connection state; remote search can add more apps.
+  const list = [
+    ...new Map([...(found?.apps ?? []), ...(apps?.apps ?? [])].map((a) => [a.slug, a])).values(),
+  ];
   // Keep the current query in force while a request is pending or an app event arrives.
   const shown =
     q === ""

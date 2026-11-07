@@ -70,8 +70,9 @@ belongs to, and answers `"reported"`. The core treats it as the agent report sou
    toolkit list. A search field finds more toolkits by name or slug (case-insensitive, with
    surrounding spaces ignored). Description-only matches are hidden, including connected apps
    that do not match. The current search stays in force while requests are pending or connection
-   events arrive; an older search response cannot replace a newer one. Clearing the field restores
-   the default list.
+   events arrive; an older search response cannot replace a newer one. Search results do not
+   overwrite the default list. Clearing the field restores that list immediately, without waiting
+   for the background refresh.
 3. **连接** asks Composio for an authorization link for that toolkit and opens it in the browser;
    the app polls until the connection is active (or 5 minutes pass). **断开** deletes the connected
    account.

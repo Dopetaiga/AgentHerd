@@ -31,19 +31,31 @@ async function searchScenario() {
   await tick();
   const late = names();
   const storedAfterLate = window.searchTest.stored();
-  window.searchTest.event();
-  await tick();
-  const event = names();
   await fill("");
+  const clearedPending = names();
   await until(() => window.searchTest.pending() === 3);
   window.searchTest.answer(2, false);
   await tick();
   const cleared = names();
+  await fill("github");
+  window.searchTest.event();
+  await tick();
+  const event = names();
   await fill("code_host");
   const slugOnly = names();
   await fill("no-such-app");
   const noMatch = names();
-  return { immediate, newer, late, storedAfterLate, event, cleared, slugOnly, noMatch };
+  return {
+    immediate,
+    newer,
+    late,
+    storedAfterLate,
+    event,
+    clearedPending,
+    cleared,
+    slugOnly,
+    noMatch,
+  };
 }
 
 app.whenReady().then(async () => {
