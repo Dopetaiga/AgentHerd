@@ -31,6 +31,26 @@ export interface PermissionResult {
 interface SessionState {
   turn: number;
   abort: AbortController | null;
+  /** The stdio MCP servers the client passed for this session. */
+  mcpServers: McpServerInfo[];
+}
+
+interface McpServerInfo {
+  name: string;
+  command: string;
+  args: string[];
+  env: { name: string; value: string }[];
+}
+
+function stdioServers(servers: unknown, log: (line: string) => void): McpServerInfo[] {
+  const out: McpServerInfo[] = [];
+  for (const s of Array.isArray(servers) ? servers : []) {
+    if (typeof s !== "object" || s === null || !("command" in s)) continue;
+    const server = s as McpServerInfo;
+    log(`mcp ${server.name} ${server.command}`);
+    out.push(server);
+  }
+  return out;
 }
 
 class Cancelled extends Error {}
@@ -160,15 +180,17 @@ export function createMockAgent(script: Script, options: MockAgentOptions = {}):
       agentInfo: { name: script.name, version: "0.0.0" },
       authMethods: [],
     }))
-    .onRequest(methods.agent.session.new, () => {
+    .onRequest(methods.agent.session.new, ({ params }) => {
       const sessionId = `mock-${nextSession++}`;
-      sessions.set(sessionId, { turn: 0, abort: null });
+      const mcpServers = stdioServers(params.mcpServers, log);
+      sessions.set(sessionId, { turn: 0, abort: null, mcpServers });
       return { sessionId };
     })
     .onRequest(methods.agent.session.load, ({ params }) => {
       if (script.loadSession !== true) throw new Error("session/load is not supported");
       log(`load ${params.sessionId}`);
-      sessions.set(params.sessionId, { turn: 0, abort: null });
+      const mcpServers = stdioServers(params.mcpServers, log);
+      sessions.set(params.sessionId, { turn: 0, abort: null, mcpServers });
       return {};
     })
     .onRequest(methods.agent.session.prompt, async ({ params, client }) => {
