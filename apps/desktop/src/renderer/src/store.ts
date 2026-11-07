@@ -3,6 +3,7 @@
 
 import type {
   AgentView,
+  AppsView,
   HostApi,
   HostEvent,
   HostStatus,
@@ -43,6 +44,8 @@ interface AppState {
   tasks: TasksView | undefined;
   models: ModelsView | undefined;
   agents: AgentView[];
+  /** 设置 › 应用连接; loaded when the section shows. */
+  apps: AppsView | undefined;
   providers: ProviderView[];
   setup: SetupState | undefined;
   page: Page;
@@ -84,6 +87,7 @@ export const useApp = create<AppState>()((set, get) => ({
   tasks: undefined,
   models: undefined,
   agents: [],
+  apps: undefined,
   providers: [],
   setup: undefined,
   page: hashPage() ?? "tasks",
@@ -166,6 +170,9 @@ function applyEvent(event: HostEvent): void {
       break;
     case "agents":
       useApp.setState({ agents: event.data });
+      break;
+    case "apps":
+      useApp.setState({ apps: event.data });
       break;
     case "setup":
       useApp.setState({ setup: event.data });
