@@ -24,6 +24,16 @@ export interface CoreTexts {
   manyMatches(query: string, list: string): string;
   noRelay: string;
   queued: string;
+  /** Project column of a task started without a project folder. */
+  noProject: string;
+  /** After a turn: files the task changed that the owner had changed too (ADR 0043). */
+  workspaceConflict(files: string[]): string;
+  /** Button under `workspaceConflict`. */
+  useTaskVersion: string;
+  /** After the owner pressed `useTaskVersion`. */
+  tookTaskVersion(files: string[]): string;
+  /** The task's changes could not be copied into the project folder. */
+  workspaceSyncFailed(message: string): string;
   unknownAgent(agent: string, known: string): string;
   notDirectory(path: string): string;
   taskEnded: string;
@@ -140,6 +150,12 @@ const zh: CoreTexts = {
   noRelay: "现在没有在转接。",
   imageAttached: (path) => `[主人发来一张图片，已保存在 ${path}]`,
   fileAttached: (name, path) => `[主人发来一个文件「${name}」，已保存在 ${path}]`,
+  noProject: "无项目",
+  workspaceConflict: (f) =>
+    `这些文件你和任务都改了，保留了你的版本，任务的改动没有放进去：\n${f.map((x) => `· ${x}`).join("\n")}`,
+  useTaskVersion: "用任务的版本",
+  tookTaskVersion: (f) => `已换成任务的版本：\n${f.map((x) => `· ${x}`).join("\n")}`,
+  workspaceSyncFailed: (m) => `任务的改动没能放进项目文件夹：${m}`,
   queued: "已排队：Agent 这一轮结束后会收到这条消息。",
   unknownAgent: (a, known) => `没有叫"${a}"的 Agent。可用的有：${known}。`,
   notDirectory: (p) => `不是一个目录：${p}`,
@@ -243,6 +259,12 @@ const en: CoreTexts = {
   noRelay: "No relay is active.",
   imageAttached: (path) => `[The owner sent an image, saved at ${path}]`,
   fileAttached: (name, path) => `[The owner sent a file "${name}", saved at ${path}]`,
+  noProject: "no project",
+  workspaceConflict: (f) =>
+    `You and the task both changed these files. Your version was kept; the task's changes were not put in:\n${f.map((x) => `- ${x}`).join("\n")}`,
+  useTaskVersion: "Use the task's version",
+  tookTaskVersion: (f) => `Now the task's version:\n${f.map((x) => `- ${x}`).join("\n")}`,
+  workspaceSyncFailed: (m) => `The task's changes could not be put into the project folder: ${m}`,
   queued: "Queued: the agent gets this when its turn ends.",
   unknownAgent: (a, known) => `Unknown agent "${a}". Known: ${known}.`,
   notDirectory: (p) => `Not a directory: ${p}`,

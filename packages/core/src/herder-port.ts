@@ -47,7 +47,8 @@ export interface HerderHost {
    */
   startTask(
     profileId: string,
-    cwd: string,
+    /** The owner's project folder; undefined for a task that needs none (a scratch folder). */
+    cwd: string | undefined,
     title: string,
     prompt: string,
     model?: string,

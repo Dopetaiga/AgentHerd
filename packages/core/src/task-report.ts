@@ -89,7 +89,9 @@ export async function sendReport(
   restage(ctx, f);
   const view = reportView(f.task, body, ctx.clock.now(), ctx.texts);
   try {
-    await ctx.opts.channel.send(view);
+    const ref = await ctx.opts.channel.send(view);
+    // A reply to the report goes to the task (ADR 0043).
+    if (typeof ref?.id === "string") ctx.store.linkMessage(ref.id, f.task.id);
     ctx.store.audit("report.sent", { taskId: f.task.id, summarized: body.summarized });
   } catch (error) {
     ctx.store.audit("report.error", { taskId: f.task.id, message: (error as Error).message });
@@ -110,12 +112,13 @@ export async function onAlarm(ctx: HerdContext, alarm: Alarm): Promise<void> {
   ctx.store.audit("watchdog.alarm", { ...alarm });
   setReport(ctx, f, ctx.texts.watchdog(alarm.detail));
   try {
-    await ctx.opts.channel.send({
+    const ref = await ctx.opts.channel.send({
       kind: "text",
       taskLabel: f.task.title,
       text: ctx.texts.watchdog(alarm.detail),
       tone: "alarm",
     });
+    if (typeof ref?.id === "string") ctx.store.linkMessage(ref.id, f.task.id);
   } catch (error) {
     ctx.store.audit("watchdog.error", { message: (error as Error).message });
   }
