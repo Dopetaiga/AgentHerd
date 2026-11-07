@@ -119,6 +119,13 @@ dependencies (the platform CLI build, over 100 MB). An owner's own `CODEX_PATH` 
 A task runs with a model from the owner's list: the Herder picks it and the agent gets it through
 env (Pi, Codex; see [ADR 0025](../adr/0025-herder-picks-model-per-task.md)). When Codex does not
 start or its first turn breaks before acting, the task moves to Pi with the same model.
+Codex can run GPT models on any OpenAI-style service and every model of the owner's own
+OpenAI-compatible services (relays usually offer the Responses API for all their models); other
+built-in providers without Responses stay with Pi ([ADR 0043](../adr/0043-codex-runs-relay-models.md),
+`codexCanRun` in `packages/herder/src/agent-models.ts`). Without a model named by the owner the
+default stays GPT → Codex. These runs get `CODEX_HOME=<home>/run/codex-<hash>` whose
+`config.toml` names the `agentherd` provider (no key): Codex 0.166 refuses a turn whose provider
+differs from its global config's (`packages/host/src/codex-home.ts`).
 
 验证 starts the agent in an empty temporary folder, runs `initialize` and `session/new`, and
 reports its name and version, a needed sign-in, or the error. Local API: `agents()`,

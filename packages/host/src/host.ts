@@ -61,6 +61,7 @@ import type {
   TranscriptView,
 } from "./api.ts";
 import type { AgentDef, Fetchers } from "./catalog.ts";
+import { withCodexHome } from "./codex-home.ts";
 import { type CliConfig, readConfig, writeConfig } from "./config.ts";
 import { LocalEmbedder } from "./embedder.ts";
 import { probeModels } from "./probe.ts";
@@ -255,8 +256,16 @@ export class Host implements HostApi {
             this.settings(),
             this.profileList.map((p) => p.id),
           ),
-        envFor: (profileId, ref) =>
-          modelEnvFor(this.settings(), this.opts.secrets, profileId, ref, this.opts.env),
+        envFor: (profileId, ref) => {
+          const env = modelEnvFor(
+            this.settings(),
+            this.opts.secrets,
+            profileId,
+            ref,
+            this.opts.env,
+          );
+          return profileId === "codex" ? withCodexHome(this.opts.home, env) : env;
+        },
         check: (ref) => this.checkModel(ref),
         next: (profileId, failed, tried) => this.nextModel(profileId, failed, tried),
       },
