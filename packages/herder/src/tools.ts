@@ -131,6 +131,15 @@ function oneTask(host: HerderHost, query: string): Task {
   );
 }
 
+/** The owner's connected apps, when there are any. */
+function appLines(host: HerderHost): string[] {
+  const apps = host.apps?.() ?? [];
+  if (apps.length === 0) return [];
+  return [
+    `Connected apps (agents other than Pi use them through their agentherd tools): ${apps.join(", ")}`,
+  ];
+}
+
 /** Ended tasks listed by session_list, newest first. */
 export const ENDED_TASKS_LISTED = 15;
 
@@ -232,6 +241,7 @@ export function herderTools(
           "Models (name: services offering it, in order of preference):",
           ...modelLines(host, modelTiers),
           `Relay: ${host.relayTaskId()?.slice(0, 8) ?? "none"}`,
+          ...appLines(host),
         ];
         return ok(lines.join("\n"));
       },

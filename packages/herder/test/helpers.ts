@@ -49,6 +49,7 @@ export function fakeHost(
     failing?: string[];
     profiles?: { id: string; name: string }[];
     memory?: MemoryStore;
+    apps?: string[];
   } = {},
 ): {
   host: HerderHost;
@@ -79,6 +80,7 @@ export function fakeHost(
     relayTaskId: () => undefined,
     decisions: () => [],
     models: () => opts.models ?? [],
+    apps: () => opts.apps ?? [],
     checkModel: async (ref) =>
       opts.failing?.includes(ref) ? { ok: false, message: "down" } : { ok: true },
     startTask: async (profileId, cwd, title, prompt, model, images) => {

@@ -69,6 +69,8 @@ export interface HerdOptions {
   mcpServer?: (token: string) => StdioMcpServer;
   /** The owner's connected apps, if any (docs/spec/09-agent-tools.md §3). Read on every call. */
   apps?: () => AppTools | undefined;
+  /** Names of the owner's connected apps, for the Herder (e.g. ["Gmail"]). */
+  appNames?: () => string[];
 }
 
 /** The owner's models and how an agent runs one (ADR 0025). Supplied by the host. */

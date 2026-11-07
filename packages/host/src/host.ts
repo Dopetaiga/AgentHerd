@@ -301,6 +301,7 @@ export class Host implements HostApi {
         : {
             mcpServer: (token: string) => mcpServerFor(this.opts.mcpSocket as string, token),
             apps: () => this.appList.appTools(),
+            appNames: () => this.appList.connectedNames(),
           }),
       agentModels: {
         list: () =>

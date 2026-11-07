@@ -182,6 +182,7 @@ export class Herd {
       relayTaskId: () => this.relay()?.taskId,
       decisions: (limit) => this.store.recentDecisions(limit),
       models: () => this.opts.agentModels?.list() ?? [],
+      apps: () => this.opts.appNames?.() ?? [],
       checkModel: async (ref) => this.opts.agentModels?.check?.(ref) ?? { ok: true },
       startTask: async (profileId, cwd, title, prompt, model, images) => {
         const { taskId, turn } = await this.startTask(profileId, cwd, title, prompt, model, images);
