@@ -1,3 +1,5 @@
+export type { AppCall } from "./app-calls.ts";
+export { approveAppCalls } from "./app-calls.ts";
 export type { BoardOptions } from "./board.ts";
 export { BOARD_DEBOUNCE_MS, BOARD_MAX_ROWS, Board, boardView } from "./board.ts";
 export type { Clock, Timer } from "./clock.ts";
@@ -17,6 +19,24 @@ export type {
 export { HERDER_RETRY_TARGET } from "./herder-port.ts";
 export type { Answerable, InboxOptions, OwnerAnswer } from "./inbox.ts";
 export { BODY_MAX_LINES, DEFAULT_REMIND_MINUTES, Inbox, itemBody, itemView } from "./inbox.ts";
+export type {
+  AppToolInfo,
+  AppTools,
+  GatewayOptions,
+  HerdReport,
+  JsonRpcMessage,
+  McpTool,
+} from "./mcp-gateway.ts";
+export {
+  DIRECT_META,
+  HERD_REPORT_TOOL,
+  HIDDEN_META,
+  McpGateway,
+  MULTI_EXECUTE,
+  parseReport,
+  REPORT_SUMMARY_MAX,
+  UnknownTokenError,
+} from "./mcp-gateway.ts";
 export {
   ABSTRACT_MAX_CHARS,
   BODY_MAX_CHARS,

@@ -21,6 +21,8 @@ export interface CliConfig {
   keepAwake?: boolean;
   /** Where the owner dragged models to (ADR 0028); models not here are placed by name. */
   modelTiers?: Partial<ModelTiers>;
+  /** Connected apps (docs/spec/09-agent-tools.md §3). The Composio key is in secrets.json. */
+  apps?: { composioUserId?: string };
 }
 
 export function agentherdHome(env: NodeJS.ProcessEnv = process.env): string {
@@ -63,7 +65,7 @@ function writeSecrets(home: string, secrets: Record<string, string>): void {
 
 /**
  * Secrets in `<home>/secrets.json`, readable only by the user (mode 600). Accounts are
- * `feishu:<appId>` and `model:<serviceId>`.
+ * `feishu:<appId>`, `model:<serviceId>` and `composio` (the owner's Composio API key).
  */
 export function secretFile(home: string): SecretStore {
   return {

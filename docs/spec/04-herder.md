@@ -140,14 +140,15 @@ an alarm.
 | Source | How AgentHerd gets it |
 | --- | --- |
 | Session state (`working`, `waiting-approval`, `idle`, `error`, `ended`) | ACP events ([03-agents.md](03-agents.md)) |
-| Agent report | MCP tool `herd_report`, offered in `session/new` |
+| Agent report | MCP tool `herd_report` of the `agentherd` server, offered in `session/new` and `session/load` ([09-agent-tools.md](09-agent-tools.md)) |
 | Final reply | The agent's last message when the task's turn ends |
 | Watchdog | Timer, every `watchdogSeconds` (default 60) |
 
 `herd_report(state, summary, changes?, tests?, risks?, links?)`, with `state` one of
 `progress`, `waiting`, `ready`, `blocked`, `failed`, `dropped`. `summary` ≤ 600 characters.
 `progress` only updates the board; the other states end or pause the task and wake the Herder.
-Without `herd_report`, the stage comes from the stop reason and session state.
+Without `herd_report`, the stage comes from the stop reason and session state. A report holds
+for the turn it came in; the next prompt starts without one.
 
 ### Stages
 

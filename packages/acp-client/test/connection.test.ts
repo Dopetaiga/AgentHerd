@@ -158,6 +158,21 @@ turns:
     expect(await turn).toBeInstanceOf(Error);
   });
 
+  it("passes MCP servers to new and loaded sessions", async () => {
+    const conn = await startAgent(profile("load_session: true\nturns: []\n"), { cwd: dir });
+    open.push(conn);
+    const server = {
+      name: "agentherd",
+      command: "relay",
+      args: ["--x"],
+      env: [{ name: "T", value: "1" }],
+    };
+    const id = await conn.newSession(dir, [server]);
+    await conn.loadSession(id, dir, [server]);
+    const lines = conn.stderr().join("\n");
+    expect(lines.match(/mcp agentherd relay/g)).toHaveLength(2);
+  });
+
   it("redacts env secrets in stderr", async () => {
     const script = 'turns:\n  - - stderr: "token is hunter2-very-secret"\n    - crash: 1\n';
     const { conn, exit, sessionId } = await start(script, { MOCK_SECRET: "hunter2-very-secret" });

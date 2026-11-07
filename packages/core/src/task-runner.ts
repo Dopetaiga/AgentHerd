@@ -1,7 +1,7 @@
 // Task lifecycle: start an agent, run prompts one turn at a time, end the task.
 
 import { randomUUID } from "node:crypto";
-import { type AgentConnection, startAgent } from "@agentherd/acp-client";
+import { type AgentConnection, type StdioMcpServer, startAgent } from "@agentherd/acp-client";
 import type { AgentProfile } from "@agentherd/protocol";
 import {
   type Following,
@@ -30,6 +30,16 @@ export const MAX_MODEL_SWITCHES = 3;
 export const TASKS_RESTORED = 50;
 /** Characters of the earlier conversation given to an agent that could not open its session. */
 export const HISTORY_MAX_CHARS = 8000;
+
+/**
+ * The `agentherd` MCP server for a new or loaded session, with a fresh token for the task
+ * (docs/spec/09-agent-tools.md §1). None when the host has no gateway or the profile opts out.
+ */
+function mcpServers(ctx: HerdContext, f: Following): StdioMcpServer[] {
+  const make = ctx.opts.mcpServer;
+  if (make === undefined || f.profile.mcp === false) return [];
+  return [make(ctx.mcp.register(f.task.id))];
+}
 
 export class TaskRunner {
   private readonly ctx: HerdContext;
@@ -95,7 +105,7 @@ export class TaskRunner {
     try {
       const connection = await startAgent(profile, { cwd });
       f.connection = connection;
-      f.agentSessionId = await connection.newSession(cwd);
+      f.agentSessionId = await connection.newSession(cwd, mcpServers(ctx, f));
     } catch (error) {
       const message = (error as Error).message;
       await f.connection?.close().catch(() => {});
@@ -248,7 +258,7 @@ export class TaskRunner {
           base.id === f.profile.id
         ) {
           try {
-            await connection.loadSession(f.agentSessionId, f.cwd);
+            await connection.loadSession(f.agentSessionId, f.cwd, mcpServers(ctx, f));
             sessionId = f.agentSessionId;
           } catch (error) {
             ctx.store.audit("task.load-failed", { taskId, message: (error as Error).message });
@@ -257,7 +267,7 @@ export class TaskRunner {
         const loaded = sessionId !== undefined;
         if (sessionId === undefined) {
           try {
-            sessionId = await connection.newSession(f.cwd);
+            sessionId = await connection.newSession(f.cwd, mcpServers(ctx, f));
           } catch (error) {
             await connection.close().catch(() => {});
             throw error;
@@ -336,6 +346,7 @@ export class TaskRunner {
     await ctx.inbox.expireSession(taskId, why);
     await connection?.close();
     if (f.connection === connection) delete f.connection;
+    ctx.mcp.revoke(taskId);
     ctx.registry.set(taskId, "ended");
     ctx.store.audit("task.ended", { taskId, why });
     this.queueCase(f, why);
@@ -470,7 +481,7 @@ export class TaskRunner {
     try {
       const connection = await startAgent(profile, { cwd: f.cwd });
       f.connection = connection;
-      f.agentSessionId = await connection.newSession(f.cwd);
+      f.agentSessionId = await connection.newSession(f.cwd, mcpServers(ctx, f));
     } catch (error) {
       ctx.store.audit("task.model-switch-failed", {
         taskId: f.task.id,
@@ -508,6 +519,8 @@ export class TaskRunner {
     if (connection === undefined || agentSessionId === undefined) {
       throw new Error(`task ${sessionId} has no session`);
     }
+    // A herd_report speaks for the turn it came in; the next turn starts without one.
+    delete f.report;
     f.turn = { text: "", toolCalls: 0 };
     f.pending = "";
     // Read before this prompt is added, so the history holds only the earlier conversation.
