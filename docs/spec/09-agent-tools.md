@@ -24,7 +24,7 @@ flowchart LR
 
 - `session/new` and `session/load` carry
   `mcpServers: [{ name: "agentherd", command, args, env }]` (stdio). `command`/`args` run
-  `agentherd-mcp.js` with the host's Node (`process.execPath`, `ELECTRON_RUN_AS_NODE=1` in the
+  `packages/host/bin/agentherd-mcp.ts` with the host's Node (`process.execPath`, `ELECTRON_RUN_AS_NODE=1` in the
   app). `env` has `AGENTHERD_MCP_SOCKET` (the gateway socket) and `AGENTHERD_MCP_TOKEN`.
 - A profile with `mcp: false` gets `mcpServers: []` as before. The Pi bridge ignores
   `mcpServers` (Pi has no MCP); Pi tasks keep the stop-reason fallback and have no apps.

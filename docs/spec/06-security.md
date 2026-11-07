@@ -9,6 +9,7 @@ a mistake with the user's shell. This spec lists the rules that keep that power 
 | --- | --- |
 | Chat app → core | Only the owner's id is accepted. Every inbound action names an existing open item; anything else is dropped. |
 | Desktop / CLI → core | Unix socket with mode `600` in a directory with mode `700`. No TCP listener. |
+| Agent → core (MCP) | The `agentherd` relay reaches `<home>/run/mcp.sock` (mode `600`; Windows: a named pipe) and must send its task's 32-byte token first; tokens die with the task. No TCP listener ([09-agent-tools.md](09-agent-tools.md)). |
 | Core → agent configs | Exporters write only their own block, after a backup; a rule is never widened. |
 | Renderer → main → core | `contextIsolation: true`, `sandbox: true`, `nodeIntegration: false`. The preload exposes typed methods only. |
 | Herder model → decisions | Model output is data. It is parsed against a schema; on a parse error the item is escalated. The guard list runs before any model. |
