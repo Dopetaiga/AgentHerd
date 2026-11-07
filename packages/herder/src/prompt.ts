@@ -122,7 +122,12 @@ export function nowLine(ms: number): string {
 
 export function eventsPrompt(events: HerderEvent[]): string {
   const lines = events.map((e) => {
-    const what = e.kind === "watchdog" ? "watchdog alarm" : "task reported";
+    const what =
+      e.kind === "watchdog"
+        ? "watchdog alarm"
+        : e.kind === "github"
+          ? "activity on the task's pull request"
+          : "task reported";
     return `- ${what}: task ${e.taskId.slice(0, 8)} "${e.title}"\n${quoteAgent(e.text)}`;
   });
   return `[Already sent to the owner, not from the owner]\n${lines.join("\n")}`;

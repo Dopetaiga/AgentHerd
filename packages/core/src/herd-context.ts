@@ -14,6 +14,7 @@ import type {
 import type { ExtraGuard } from "@agentherd/rules";
 import type { Board } from "./board.ts";
 import type { Clock, Timer } from "./clock.ts";
+import type { GitHubOptions, GitHubWatch } from "./github-watch.ts";
 import type { HerderFactory, HerderPort, OwnerImage } from "./herder-port.ts";
 import type { Inbox } from "./inbox.ts";
 import type { AppTools, HerdReport, McpGateway } from "./mcp-gateway.ts";
@@ -80,6 +81,11 @@ export interface HerdOptions {
   apps?: () => AppTools | undefined;
   /** Names of the owner's connected apps, for the Herder (e.g. ["Gmail"]). */
   appNames?: () => string[];
+  /**
+   * Follows pull requests tasks open on GitHub with `gh` (ADR 0047). Without it,
+   * nothing is followed.
+   */
+  github?: GitHubOptions;
 }
 
 /** How an agent's launch changes to run one model: env added, arguments appended. */
@@ -200,6 +206,8 @@ export interface HerdContext {
   /** Messages for the owner, stored until the channel took them. */
   readonly outbox: Outbox;
   readonly workspaces: Workspaces;
+  /** Pull requests tasks opened, when `github` is set. */
+  github(): GitHubWatch | undefined;
   /** The current Herder, if any. It can change at runtime. */
   herder(): HerderPort | undefined;
   /** The current mode. It can change at runtime. */

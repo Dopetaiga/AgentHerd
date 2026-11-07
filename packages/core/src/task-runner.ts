@@ -817,6 +817,10 @@ export class TaskRunner {
         );
       }
       await this.tellConflicts(f, conflicts);
+      // Pull requests the agent opened or wrote on are looked at (ADR 0047).
+      ctx
+        .github()
+        ?.turnEnded(sessionId, `${reply}\n${ctx.following.get(sessionId)?.report?.summary ?? ""}`);
       return { sessionId, stopReason };
     } catch (error) {
       // Ending a task closes its agent, which fails the running turn; report why it ended, not

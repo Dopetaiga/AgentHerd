@@ -20,7 +20,7 @@ export interface OwnerImage {
 export type HerderTurnRole = "owner" | "answer" | "herder" | "ask" | "event";
 
 export interface HerderEvent {
-  kind: "task-reported" | "watchdog";
+  kind: "task-reported" | "watchdog" | "github";
   taskId: string;
   title: string;
   /** Text that came from an agent. Untrusted. */

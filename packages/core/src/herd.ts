@@ -9,6 +9,7 @@ import { DEFAULT_LOCALE } from "@agentherd/protocol";
 import { approveAppCalls } from "./app-calls.ts";
 import { Board } from "./board.ts";
 import { type Clock, systemClock } from "./clock.ts";
+import { GitHubWatch } from "./github-watch.ts";
 import {
   allTasks,
   type Following,
@@ -62,6 +63,7 @@ export class Herd {
   private readonly texts: CoreTexts;
   private started = false;
   private herder: HerderPort | undefined;
+  private readonly github: GitHubWatch | undefined;
   /** Tasks cut off by the last stop or crash, asked about once the channel is up. */
   private interrupted: string[] = [];
   private mode: Mode;
@@ -128,6 +130,7 @@ export class Herd {
       workspaces: new Workspaces(opts.home),
       herder: () => this.herder,
       mode: () => this.mode,
+      github: () => this.github,
     };
     this.relays = new Relay(this.ctx);
     this.runner = new TaskRunner(this.ctx, this.relays, this);
@@ -146,6 +149,12 @@ export class Herd {
       this.ctx.following.has(id),
     );
     this.herder = opts.herder?.(this.herderHost());
+    this.github =
+      opts.github === undefined
+        ? undefined
+        : new GitHubWatch(this.ctx, opts.github, {
+            prompt: (taskId, text) => this.promptTask(taskId, text),
+          });
   }
 
   /** Replaces the Herder, e.g. after the owner chose another model. `undefined` turns it off. */
@@ -268,6 +277,7 @@ export class Herd {
     this.store.audit("herd.started", { mode: this.mode, channel: this.opts.channel.id });
     // What the last run could not send goes out now.
     this.ctx.outbox.start();
+    this.github?.start();
     await this.endOldRelay(relay?.taskId);
     await this.askToResume();
     if (this.opts.closeStaleTasks !== false) {
@@ -396,6 +406,7 @@ export class Herd {
     if (cut.length > 0) this.store.setState(INTERRUPTED_STATE, cut);
     await this.ctx.inbox.stop();
     this.ctx.outbox.stop();
+    this.github?.stop();
     if (this.started) await this.opts.channel.stop();
     this.store.audit("herd.stopped", {});
     if (this.opts.store === undefined) this.store.close();
