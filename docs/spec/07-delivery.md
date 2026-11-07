@@ -42,6 +42,7 @@ Each milestone is split into plans under [`plans/`](../../plans/README.md).
 | E2E-CHANNEL-DOWN | Channel disconnected; a new item waits in the inbox and is sent after reconnect | M2 | |
 | E2E-OWNER-ONLY | A non-owner taps a button; nothing changes; event is logged | M1 | `packages/core/test/e2e/approval.e2e.test.ts` |
 | E2E-DUPLICATE-ACTION | Owner taps Allow twice; the decision is applied once | M1 | `packages/core/test/e2e/approval.e2e.test.ts` |
+| E2E-APP-SEARCH | In app connections, typing filters names/slugs immediately; unrelated Composio matches, late replies and connection events do not bring back nonmatching apps; clearing restores the list | M2 | `apps/desktop/test/apps-search.test.ts`, `packages/host/test/apps.test.ts` |
 | E2E-EXPORT-NARROW | A rule the target cannot express exactly is exported narrower or skipped, never wider, and shows its export status | M3 | |
 | E2E-EXPORT-REMOVE | `remove` restores the agent config byte-for-byte except for content the user added | M3 | |
 | E2E-ALWAYS-RULE | Owner taps "Always do this"; the next equal request is allowed by rule in `assist` mode | M3 | |

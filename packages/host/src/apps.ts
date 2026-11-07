@@ -147,10 +147,11 @@ export class Apps {
     const key = this.key();
     if (key === undefined) return { hasKey: false, apps: [] };
     const problem = this.problem;
+    const q = search?.trim().toLowerCase() ?? "";
     try {
       await this.refreshConnected(key);
       const found = await this.onBrowse(key, (s) =>
-        this.client(key).toolkits(s.id, search === undefined || search === "" ? {} : { search }),
+        this.client(key).toolkits(s.id, q === "" ? {} : { search: q }),
       );
       const connected = new Set(this.connected.map((t) => t.slug));
       const rows = new Map<string, AppView>();
@@ -161,12 +162,15 @@ export class Apps {
         connected: connected.has(t.slug),
         connecting: this.connecting.has(t.slug),
       });
-      const q = search?.trim().toLowerCase() ?? "";
-      for (const t of this.connected) {
-        if (q === "" || t.name.toLowerCase().includes(q) || t.slug.includes(q))
+      // Composio also matches descriptions. Settings search is by app name or slug.
+      for (const t of [...this.connected, ...found]) {
+        if (
+          !rows.has(t.slug) &&
+          (q === "" || t.name.toLowerCase().includes(q) || t.slug.toLowerCase().includes(q))
+        ) {
           rows.set(t.slug, row(t));
+        }
       }
-      for (const t of found) if (!rows.has(t.slug)) rows.set(t.slug, row(t));
       return {
         hasKey: true,
         ...(problem === undefined ? {} : { problem }),

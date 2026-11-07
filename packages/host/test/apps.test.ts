@@ -27,6 +27,7 @@ interface FakeComposio {
   sessions: string[][];
   accounts: Map<string, string>;
   connected: ComposioToolkit[];
+  available?: ComposioToolkit[];
   client: (key: string) => ComposioClient;
 }
 
@@ -59,7 +60,9 @@ function fakeComposio(): FakeComposio {
       async toolkits(_s, opts = {}) {
         f.calls.push(`toolkits ${JSON.stringify(opts)}`);
         if (opts.connected === true) return f.connected;
-        return [GMAIL, GITHUB].map((t) => f.connected.find((c) => c.slug === t.slug) ?? t);
+        return (f.available ?? [GMAIL, GITHUB]).map(
+          (t) => f.connected.find((c) => c.slug === t.slug) ?? t,
+        );
       },
       async link(_s, toolkit) {
         f.accounts.set("ca_1", "INITIATED");
@@ -163,6 +166,28 @@ describe("Apps", () => {
     expect(JSON.stringify([view, ...emitted])).not.toContain("good");
     expect((await apps.setKey("")).hasKey).toBe(false);
     expect(secrets.data.has(COMPOSIO_ACCOUNT)).toBe(false);
+  });
+
+  it("filters search by name or slug even when Composio returns unrelated apps", async () => {
+    const { apps, composio } = setup("good");
+    composio.connected = [{ ...GMAIL, account: { id: "ca_1", status: "ACTIVE" } }];
+    expect((await apps.view("  GitHub  ")).apps).toEqual([
+      { slug: "github", name: "GitHub", connected: false, connecting: false },
+    ]);
+    expect(composio.calls.at(-1)).toBe('toolkits {"search":"github"}');
+    expect((await apps.view("GMAIL")).apps).toEqual([
+      { slug: "gmail", name: "Gmail", connected: true, connecting: false },
+    ]);
+    expect((await apps.view("no-such-app")).apps).toEqual([]);
+    expect((await apps.view("  ")).apps.map((a) => a.slug)).toEqual(["gmail", "github"]);
+  });
+
+  it("matches the name and slug independently", async () => {
+    const { apps, composio } = setup("good");
+    composio.available = [{ slug: "CODE_HOST", name: "Source control", noAuth: false }];
+    expect((await apps.view("source")).apps.map((a) => a.slug)).toEqual(["CODE_HOST"]);
+    expect((await apps.view("code_host")).apps.map((a) => a.slug)).toEqual(["CODE_HOST"]);
+    expect((await apps.view("unrelated")).apps).toEqual([]);
   });
 
   it("connects an app: link, poll until ACTIVE, then agents get a session with it", async () => {

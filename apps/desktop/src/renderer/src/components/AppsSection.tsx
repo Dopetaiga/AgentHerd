@@ -125,20 +125,29 @@ export function AppsSection() {
 
   useEffect(() => {
     const q = search.trim();
+    let active = true;
     const timer = setTimeout(
       async () => {
         const view = await call((h) => h.apps(q === "" ? undefined : q));
-        if (view !== undefined) useApp.setState({ apps: view });
+        if (active && view !== undefined) useApp.setState({ apps: view });
       },
       q === "" ? 0 : 300,
     );
-    return () => clearTimeout(timer);
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
   }, [search]);
 
   const view: AppsView | undefined = apps;
   const hasKey = view?.hasKey === true;
   const list = view?.apps ?? [];
-  const shown = search.trim() === "" ? list.filter((a, i) => a.connected || i < SHOWN) : list;
+  const q = search.trim().toLowerCase();
+  // Keep the current query in force while a request is pending or an app event arrives.
+  const shown =
+    q === ""
+      ? list.filter((a, i) => a.connected || i < SHOWN)
+      : list.filter((a) => a.name.toLowerCase().includes(q) || a.slug.toLowerCase().includes(q));
 
   return (
     <Section
