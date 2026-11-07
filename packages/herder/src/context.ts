@@ -33,8 +33,11 @@ import { OWNER_LABEL } from "./prompt.ts";
 
 /** Where the folds and refs are saved; the messages themselves are in `herder_log`. */
 export const CONTEXT_STATE_KEY = "herder.context";
-/** Used when the model does not say how much it reads. */
-export const DEFAULT_CONTEXT_WINDOW = 128_000;
+/**
+ * The window the Herder works in: the model's, but at most this, and this when the model does not
+ * say. Every request sends the whole view, and a chat with the owner needs no more.
+ */
+export const CONTEXT_WINDOW_MAX = 128_000;
 /** At this share of the window, unfolded old messages are folded without waiting for the model… */
 export const FORCED_FOLD_AT = 0.9;
 /** …until the context is down to about this share. */
@@ -345,7 +348,7 @@ export class HerderContext {
 
   private config(): Config {
     const window = this.hooks.contextWindow();
-    return defaultConfig(window > 0 ? window : DEFAULT_CONTEXT_WINDOW);
+    return defaultConfig(window > 0 ? Math.min(window, CONTEXT_WINDOW_MAX) : CONTEXT_WINDOW_MAX);
   }
 
   private log(): AgentMessage[] {
@@ -568,12 +571,24 @@ export class HerderContext {
           tokens: r.tokensCompressed,
           errors: r.errors,
         });
-        if (r.blocksCreated === 0) throw new Error(r.errors.join("; ") || "nothing was compressed");
+        const notes = [...r.warnings, ...(r.notes ?? [])].map((n) => `Note: ${n}`);
+        if (r.blocksCreated === 0) {
+          // Already folded or among the newest messages: a receipt, so the model does not retry.
+          if (r.noop === true) {
+            return ok(
+              [
+                "[Compression no-op: nothing in these ranges needed folding. They are already folded or among the newest messages, which stay as they are.]",
+                ...notes,
+              ].join("\n"),
+            );
+          }
+          throw new Error([...r.errors, ...notes].join("; ") || "nothing was compressed");
+        }
         this.state = result.state;
         const lines = [
           `Compressed ${r.blocksCreated} block(s), about ${r.tokensCompressed} tokens folded.`,
           ...r.errors.map((e) => `Not compressed: ${e}`),
-          ...r.warnings.map((w) => `Note: ${w}`),
+          ...notes,
         ];
         return ok(lines.join("\n"));
       },

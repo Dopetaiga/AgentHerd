@@ -123,8 +123,9 @@ it knows what happened without repeating it.
   is cut. Before each request it goes through billion-context's kernel (`packages/context-kernel`):
   each message gets a ref, and parts the Herder folded with `compress` show as its summary. Summaries
   keep unresolved owner instructions verbatim; `search_context` and `decompress` bring folded parts
-  back. At 90 % of the model's window AgentHerd folds the oldest whole turns itself (never the
-  current one); a "context too long" error folds about half and retries once
+  back. The window is the model's, at most 128,000 tokens. At 90 % of it AgentHerd folds the oldest
+  whole turns itself (never the current one); a "context too long" error folds about half and
+  retries once
   ([ADR 0041](../adr/0041-herder-context-folded-by-the-model.md)).
 - Tasks are saved in `herd.db` and come back after a restart as ended tasks. `session_prompt` to an
   ended task starts its agent again in the same folder with the same model; Pi reopens its own

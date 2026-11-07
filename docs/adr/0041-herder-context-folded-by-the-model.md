@@ -43,8 +43,11 @@ own it instead of depending on the package: "参考把代码全copy过来，就�
   names, folders and models.
 - The kernel's nudges and status line are added only to the request, as notes at the end. They are
   not saved, so the cached prefix does not change.
-- Last resorts, never a cut: when the request reaches 90 % of the model's window, AgentHerd folds
-  the oldest whole turns with a plain summary down to 60 % (never the current turn); a "context too
+- The Herder works in the model's window, but at most 128,000 tokens: every request sends the whole
+  view, and a chat with the owner needs no more. The kernel's nudges and the last resorts below are
+  measured against it.
+- Last resorts, never a cut: when the request reaches 90 % of that window, AgentHerd folds the
+  oldest whole turns with a plain summary down to 60 % (never the current turn); a "context too
   long" error from the provider folds about half and retries once. Folded messages stay in the log
   and can be searched and shown.
 - Ref tags the model copies are removed from what reaches the owner and from tool arguments. A

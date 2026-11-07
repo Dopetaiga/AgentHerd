@@ -10,8 +10,8 @@ export {
 } from "./agent-models.ts";
 export {
   CONTEXT_STATE_KEY,
+  CONTEXT_WINDOW_MAX,
   type ContextHooks,
-  DEFAULT_CONTEXT_WINDOW,
   FORCED_FOLD_AT,
   FORCED_FOLD_TO,
   HerderContext,

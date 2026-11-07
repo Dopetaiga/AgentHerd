@@ -160,6 +160,20 @@ describe("HerderContext", () => {
     );
   });
 
+  it("works in at most 128,000 tokens even when the model reads more", async () => {
+    const { context } = setup([owner("你好"), reply("你好。")], { window: 1_000_000 });
+    const status = textOf(await tool(context, "acp_status").execute("a1", {}));
+    expect(status).toMatch(/ of 128000 tokens /);
+  });
+
+  it("folding what is already folded is a receipt, not an error, so the model does not retry", async () => {
+    const s = await folded();
+    const args = { content: `m00002–m00003 三月发票\n${SUMMARY}` };
+    s.box.messages.push(call("k2", "compress", args));
+    const again = textOf(await tool(s.context, "compress").execute("k2", args));
+    expect(again).toMatch(/^\[Compression no-op: nothing in these ranges needed folding\./);
+  });
+
   it("a fold is kept across a restart: from the saved state, or replayed from the log", async () => {
     const before = await folded();
     const log = before.box.messages.slice(1);
