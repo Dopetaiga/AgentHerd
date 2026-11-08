@@ -614,3 +614,35 @@ describe("mail watches (ADR 0048)", () => {
     expect(mail).toEqual([]);
   });
 });
+
+describe("new-work watches (ADR 0052)", () => {
+  it("exist only with GitHub, and start and stop when the owner asks", async () => {
+    expect(tools({}).names).not.toContain("intake_watch");
+    const intake: never[] = [];
+    const { call, names } = tools({}, { intake });
+    expect(names).toEqual(expect.arrayContaining(["intake_watch", "intake_unwatch"]));
+    const out = await call("intake_watch", {
+      kind: "issues",
+      repo: "acme/app",
+      about: "acme 的 bug",
+    });
+    expect(out).toContain('"acme 的 bug" (auto: false)');
+    expect(await call("session_list", {})).toContain(
+      '"acme 的 bug" kind=issues repo=acme/app auto=false',
+    );
+    await expect(call("intake_watch", { kind: "bugs" })).rejects.toThrow(/issues" or "reviews/);
+    expect(await call("intake_unwatch", { watch: "acme" })).toContain("stopped");
+    expect(intake).toEqual([]);
+  });
+
+  it("are never made by an event or by the work they offer", async () => {
+    for (const kind of ["event", "intake"] as const) {
+      const intake: never[] = [];
+      const { call } = tools({ kind }, { intake });
+      await expect(call("intake_watch", { kind: "issues", auto: true })).rejects.toThrow(
+        /only the owner/,
+      );
+      expect(intake).toEqual([]);
+    }
+  });
+});

@@ -56,6 +56,17 @@ export interface CoreTexts {
   mailNew(about: string, lines: string): string;
   mailLine(sender: string, subject: string, preview: string, url: string): string;
   mailMore(n: number): string;
+  intakeOffer(
+    repo: string,
+    n: number,
+    title: string,
+    url: string,
+    kind: "issues" | "reviews",
+  ): string;
+  intakeAuto(repo: string, n: number, title: string, kind: "issues" | "reviews"): string;
+  intakeStart: string;
+  intakeIgnore: string;
+  intakeNoHerder: string;
   /** A watched source has failed for `minutes` (ADR 0050). */
   sourceDown(
     source: "github" | "mail",
@@ -208,6 +219,13 @@ const zh: CoreTexts = {
   mailLine: (sender, subject, preview, url) =>
     `- ${sender}：「${subject}」${preview === "" ? "" : `\n  ${preview}`}\n  ${url}`,
   mailMore: (n) => `还有 ${n} 封`,
+  intakeOffer: (repo, n, title, url, kind) =>
+    `${kind === "issues" ? "有指派给你的 issue" : "有 PR 请你审查"}：[${repo} #${n} ${title}](${url})。要开任务吗？`,
+  intakeAuto: (repo, n, title, kind) =>
+    `按你的规则开工：${kind === "issues" ? "issue" : "审查 PR"} ${repo} #${n} ${title}`,
+  intakeStart: "开任务",
+  intakeIgnore: "忽略",
+  intakeNoHerder: "没有主管，开不了这个任务。请在设置里打开主管，或直接告诉我在哪个项目里做。",
   sourceDown: (source, hint, minutes) => {
     if (source === "github") {
       if (hint === "missing")
@@ -351,6 +369,14 @@ const en: CoreTexts = {
   mailLine: (sender, subject, preview, url) =>
     `- ${sender}: "${subject}"${preview === "" ? "" : `\n  ${preview}`}\n  ${url}`,
   mailMore: (n) => `and ${n} more`,
+  intakeOffer: (repo, n, title, url, kind) =>
+    `${kind === "issues" ? "An issue was assigned to you" : "A pull request waits for your review"}: [${repo} #${n} ${title}](${url}). Start a task?`,
+  intakeAuto: (repo, n, title, kind) =>
+    `Started by your rule: ${kind === "issues" ? "issue" : "review of"} ${repo} #${n} ${title}`,
+  intakeStart: "Start a task",
+  intakeIgnore: "Ignore",
+  intakeNoHerder:
+    "Without the Herder this task cannot start. Turn the Herder on in Settings, or tell me which project to work in.",
   sourceDown: (source, hint, minutes) => {
     if (source === "github") {
       if (hint === "missing") {

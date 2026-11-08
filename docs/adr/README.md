@@ -55,3 +55,4 @@ Format and rules: [ADR 0001](0001-record-architecture-decisions.md).
 | [0049](0049-short-messages-written-by-the-agent.md) | Every message to the owner is at most 100 words; the agent writes its own summary and acknowledgement, too-long ones are refused | Accepted |
 | [0050](0050-tell-the-owner-when-a-source-stops.md) | A watched source (gh, Gmail) failing for 30 minutes is told once and its return once; `gh` runs with the system proxy | Accepted |
 | [0051](0051-keep-following-pull-requests-after-they-close.md) | Pull request watches stay 14 days after a merge or close; pull requests the owner hands to a task are followed too | Accepted |
+| [0052](0052-offer-new-github-work-when-asked.md) | New GitHub work (issues assigned to the owner, reviews requested) is watched only when asked and offered with 「开任务 / 忽略」; `auto` watches start by themselves | Accepted |

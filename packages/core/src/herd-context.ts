@@ -18,6 +18,7 @@ import type { Clock, Timer } from "./clock.ts";
 import type { GitHubOptions, GitHubWatch } from "./github-watch.ts";
 import type { HerderFactory, HerderPort, OwnerImage } from "./herder-port.ts";
 import type { Inbox } from "./inbox.ts";
+import type { Intake } from "./intake.ts";
 import type { AppTools, HerdReport, McpGateway } from "./mcp-gateway.ts";
 import type { Completer, Embedder } from "./memory-store.ts";
 import type { Outbox } from "./outbox.ts";
@@ -84,6 +85,8 @@ export interface HerdOptions {
   apps?: () => AppTools | undefined;
   /** Names of the owner's connected apps, for the Herder (e.g. ["Gmail"]). */
   appNames?: () => string[];
+  /** Minutes between two looks for new work (ADR 0052). */
+  intakePollMinutes?: number;
   /** Minutes between two looks at the owner's mail watches (ADR 0048). */
   mailPollMinutes?: number;
   /** A watched source failing this long is told to the owner (default 30, ADR 0050). */
@@ -223,6 +226,8 @@ export interface HerdContext {
   readonly sources: SourceHealth;
   /** Pull requests tasks opened, when `github` is set. */
   github(): GitHubWatch | undefined;
+  /** New work the owner asked to be offered, when `github` is set (ADR 0052). */
+  intake(): Intake | undefined;
   /** The current Herder, if any. It can change at runtime. */
   herder(): HerderPort | undefined;
   /** The current mode. It can change at runtime. */

@@ -151,6 +151,7 @@ an alarm.
 | Final reply | The agent's last message when the task's turn ends |
 | Watchdog | Timer, every `watchdogSeconds` (default 60) |
 | Pull requests | `gh`, every 2 minutes, for pull requests a task opened (see Pull requests) |
+| New work | `gh search`, every 5 minutes, only for watches the owner asked for (see New work) |
 
 `herd_report(state, summary, changes?, tests?, risks?, links?)`, with `state` one of
 `progress`, `waiting`, `ready`, `blocked`, `failed`, `dropped`. `summary` ≤ 600 characters.
@@ -283,6 +284,30 @@ Mail is watched only when the owner asks for it ([ADR 0048](../adr/0048-watch-ma
   told; they survive restarts.
 - **Failures** are audited (`mail.error`) once per distinct error; after 30 minutes the owner
   is told once (see Source health).
+
+### New work
+
+New GitHub work is offered only when the owner asks for it ([ADR 0052](../adr/0052-offer-new-github-work-when-asked.md)).
+
+- **Asking.** 「有指派给我的 issue 告诉我」「有人请我 review 就提醒我」: the Herder calls
+  `intake_watch` with `kind` `issues` (open issues assigned to the owner) or `reviews`
+  (open pull requests requesting their review), optionally `repo` and `label`, and `auto`
+  only when the owner said such items start by themselves. The same kind/repo/label again only
+  changes `auto`. `intake_unwatch` stops one; `session_list` lists them. Only an owner
+  turn can add, change or stop one. The tools exist only when `gh` is set up.
+- **Looking.** While a watch exists, every 5 minutes (`intakePollMinutes`) each watch runs
+  `gh search issues --assignee=@me` or `gh search prs --review-requested=@me` with
+  `--state=open`. Creating a watch searches once; what is there already is not new, and a
+  failing `gh` refuses the watch. Failures count for source health as `github`.
+- **Offering.** A new item is sent once as a question card: 「有指派给你的 issue：<repo> #n
+  <title>（链接）。要开任务吗？」 with 「开任务」「忽略」. Core handles the tap: the card shows the
+  choice; 「开任务」 gives the Herder an intake turn with the item's line. With `auto` the owner
+  gets 「按你的规则开工：…」 and the intake turn runs at once. The Herder's conversation gets every
+  new item as an event marked as new GitHub work. Table `intake_watches` (schema 12) keeps
+  watches, seen items and unanswered offers.
+- **The intake turn** may start a task. The title is quoted as not from the owner; only the
+  repository's name picks a project without asking (ADR 0043), otherwise the Herder asks which
+  folder. The task's prompt has the item's link, so its pull request is followed (ADR 0051).
 
 ### Source health
 
