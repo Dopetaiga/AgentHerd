@@ -240,7 +240,8 @@ follows its tickets' pull requests ([ADR 0047](../adr/0047-follow-the-pull-reque
 - **Which.** At the end of each turn, links `https://github.com/<owner>/<repo>/pull/<n>` in the
   agent's reply and `herd_report` summary are read. One is followed when its author is the `gh`
   user, it was opened after the task started and it is open; a pull request the agent only
-  mentioned is not. Table `pr_watches` (schema 9) keeps the task, the comment and review ids
+  mentioned is not. Links in what the owner sends a task (the starting request, later prompts)
+  are followed whoever opened them and in any state (`handed`, ADR 0051). Table `pr_watches` (schema 9) keeps the task, the comment and review ids
   already handled, the head commit whose failed checks were handed over, and the wake count.
 - **When.** Every 2 minutes (`github.pollMinutes`). A task that is working, or whose ended turn is
   not looked at yet, is skipped: while a task works, what its account writes on GitHub is the
@@ -254,8 +255,10 @@ follows its tickets' pull requests ([ADR 0047](../adr/0047-follow-the-pull-reque
 - **Checks.** When every check of the head commit finished and some failed, the task gets the
   names and how to read the logs, once per head commit; the owner hears only what the task
   reports.
-- **End.** Merged or closed: the owner is told once (「PR #n 已合并」/「已关闭，没有合并」), the
-  Herder gets an event, and the watch ends. A watch with no activity for 14 days ends silently.
+- **End.** Merged or closed: the owner is told once (「PR #n 已合并」/「已关闭，没有合并」) and the
+  Herder gets an event; the watch stays (`closed`), so later comments still wake the task, whose
+  prompt says the pull request is closed (ADR 0051). Checks of a closed pull request are
+  ignored; reopening is told once. A watch with no activity for 14 days ends silently.
   At most 20 wakes per pull request; later activity is only told.
 - **Failures.** `gh` missing, logged out or offline is audited (`github.error`) once per distinct
   error; after 30 minutes the owner is told once (see Source health). `gh` runs with the

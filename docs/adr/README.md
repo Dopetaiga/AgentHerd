@@ -54,3 +54,4 @@ Format and rules: [ADR 0001](0001-record-architecture-decisions.md).
 | [0048](0048-watch-mail-only-when-asked.md) | Mail is watched only when the owner asks the Herder: a Gmail search polled through Composio every 3 minutes while a watch exists | Accepted |
 | [0049](0049-short-messages-written-by-the-agent.md) | Every message to the owner is at most 100 words; the agent writes its own summary and acknowledgement, too-long ones are refused | Accepted |
 | [0050](0050-tell-the-owner-when-a-source-stops.md) | A watched source (gh, Gmail) failing for 30 minutes is told once and its return once; `gh` runs with the system proxy | Accepted |
+| [0051](0051-keep-following-pull-requests-after-they-close.md) | Pull request watches stay 14 days after a merge or close; pull requests the owner hands to a task are followed too | Accepted |

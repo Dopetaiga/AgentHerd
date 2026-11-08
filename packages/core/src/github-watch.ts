@@ -250,6 +250,45 @@ export class GitHubWatch {
     });
   }
 
+  /**
+   * The owner sent this text to a task: pull requests linked in it are followed for that task,
+   * whoever opened them and whatever their state (ADR 0051).
+   */
+  handed(taskId: string, text: string): void {
+    const links = prLinks(text);
+    if (links.length === 0) return;
+    this.enqueue(async () => {
+      const { store } = this.ctx;
+      for (const link of links) {
+        const known = store.prWatches().find((w) => sameWatch(w, link));
+        if (known !== undefined) {
+          if (known.taskId !== taskId || known.handed !== true) {
+            store.savePrWatch({ ...known, taskId, handed: true });
+            store.audit("github.following", { taskId, url: link.url, handed: true });
+          }
+          continue;
+        }
+        const pr = await this.read(link.repo, link.number);
+        const now = this.clock.now().toISOString();
+        const closed = closedState(pr);
+        store.savePrWatch({
+          repo: link.repo,
+          number: link.number,
+          url: link.url,
+          taskId,
+          seen: pr.activity.map((a) => a.id),
+          ...(pr.failed.length > 0 && !pr.pending ? { ciFailedSha: pr.headSha } : {}),
+          wakes: 0,
+          createdAt: now,
+          activeAt: now,
+          handed: true,
+          ...(closed === undefined ? {} : { closed }),
+        });
+        store.audit("github.following", { taskId, url: link.url, handed: true });
+      }
+    });
+  }
+
   /** Looks at every followed pull request now. */
   poll(): Promise<void> {
     this.enqueue(() => this.pollAll());
@@ -293,7 +332,7 @@ export class GitHubWatch {
     const watches = store.prWatches();
     const known = new Set(watches.map((w) => `${w.repo.toLowerCase()}#${w.number}`));
     const links = prLinks(text).filter((l) => !known.has(`${l.repo.toLowerCase()}#${l.number}`));
-    const mine = watches.filter((w) => w.taskId === taskId && w.closed === undefined);
+    const mine = watches.filter((w) => w.taskId === taskId);
     if (links.length === 0 && mine.length === 0) return;
     const self = await this.login();
     for (const link of links) {
@@ -352,7 +391,8 @@ export class GitHubWatch {
   }
 
   /** Acts on what is new on a pull request since the watch last looked. */
-  private async check(watch: PrWatch, pr: PrView): Promise<void> {
+  private async check(seenWatch: PrWatch, pr: PrView): Promise<void> {
+    let watch = seenWatch;
     const { ctx } = this;
     const { store, texts } = ctx;
     const f = ctx.following.get(watch.taskId);
@@ -364,20 +404,34 @@ export class GitHubWatch {
       ctx.herder()?.event({ kind: "github", taskId: f.task.id, title: f.task.title, text });
     };
 
-    if (pr.state !== "OPEN") {
+    // Merged or closed: told once, and the watch stays for 14 quiet days, so later comments
+    // still reach the task (ADR 0051).
+    const closed = closedState(pr);
+    if (closed !== undefined && watch.closed === undefined) {
       const text =
-        pr.state === "MERGED" ? texts.prMerged(watch.number) : texts.prClosed(watch.number);
-      store.deletePrWatch(watch);
+        closed === "merged" ? texts.prMerged(watch.number) : texts.prClosed(watch.number);
+      watch = { ...watch, closed, activeAt: this.clock.now().toISOString() };
+      store.savePrWatch(watch);
       store.audit("github.closed", { taskId: watch.taskId, url: watch.url, state: pr.state });
       await tell(text);
       event(`${text} ${watch.url}`);
-      return;
+    } else if (closed === undefined && watch.closed !== undefined) {
+      const { closed: _was, ...open } = watch;
+      watch = { ...open, activeAt: this.clock.now().toISOString() };
+      store.savePrWatch(watch);
+      store.audit("github.reopened", { taskId: watch.taskId, url: watch.url });
+      await tell(texts.prReopened(watch.number));
     }
 
     const fresh = pr.activity.filter((a) => !watch.seen.includes(a.id));
     const people = fresh.filter((a) => !a.bot);
     const failedNow =
-      pr.failed.length > 0 && !pr.pending && pr.headSha !== watch.ciFailedSha ? pr.failed : [];
+      closed === undefined &&
+      pr.failed.length > 0 &&
+      !pr.pending &&
+      pr.headSha !== watch.ciFailedSha
+        ? pr.failed
+        : [];
     if (fresh.length === 0 && failedNow.length === 0) return;
 
     const next: PrWatch = {
@@ -425,7 +479,10 @@ export class GitHubWatch {
         ...(failedNow.length > 0 ? [texts.prChecksPart(failedNow.join(", "), watch.url)] : []),
       ];
       void this.tasks
-        .prompt(watch.taskId, texts.prPrompt(watch.url, parts.join("\n")))
+        .prompt(
+          watch.taskId,
+          texts.prPrompt(watch.url, parts.join("\n"), watch.handed === true, watch.closed),
+        )
         .catch((error: Error) => {
           store.audit("github.wake-error", { taskId: watch.taskId, message: error.message });
         });
@@ -458,6 +515,13 @@ export class GitHubWatch {
   }
 }
 
-function sameWatch(a: PrWatch, b: PrWatch): boolean {
+function closedState(pr: PrView): "merged" | "closed" | undefined {
+  return pr.state === "MERGED" ? "merged" : pr.state === "CLOSED" ? "closed" : undefined;
+}
+
+function sameWatch(
+  a: { repo: string; number: number },
+  b: { repo: string; number: number },
+): boolean {
   return a.repo.toLowerCase() === b.repo.toLowerCase() && a.number === b.number;
 }
