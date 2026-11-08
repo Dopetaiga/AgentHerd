@@ -49,6 +49,7 @@ class FakeGh {
   run = async (args: string[]): Promise<string> => {
     this.calls.push(args);
     if (this.fail !== undefined) throw new Error(this.fail);
+    if (args[0] === "repo") return JSON.stringify({ nameWithOwner: `me/${args[2]}` });
     const list = args[1] === "issues" ? this.issues : this.reviews;
     const repo = args[args.indexOf("--repo") + 1];
     return JSON.stringify(
@@ -163,6 +164,12 @@ describe("E2E-INTAKE", () => {
     await until(() => offerAt(channel).final !== undefined);
     expect(offerAt(channel).final).toBe("Ignore");
     expect(intakes).toEqual([]);
+
+    // A bare repository name is the owner's own repository.
+    const own = await host.watchIntake?.({ kind: "issues", repo: "app" });
+    expect(own?.repo).toBe("me/app");
+    expect(searches(gh).at(-1)).toEqual(searchArgs({ kind: "issues", repo: "me/app" }));
+    host.unwatchIntake?.(own?.id ?? "");
 
     // Asking again for the same watch with auto makes it start by itself.
     const changed = await host.watchIntake?.({ kind: "reviews", auto: true });

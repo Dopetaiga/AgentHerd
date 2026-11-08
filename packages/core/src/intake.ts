@@ -135,9 +135,23 @@ export class Intake {
    * Starts offering new items of a kind, from now on. Searches once first, so a missing or
    * logged-out `gh` fails here, and what is already there is not offered as new.
    */
+  /**
+   * GitHub search needs owner/name. A bare name is what the owner usually
+   * says, and means one of the owner's own repositories, so `gh` resolves it.
+   */
+  private async fullRepo(repo: string | undefined): Promise<string | undefined> {
+    if (repo === undefined || repo.includes("/")) return repo;
+    const out = await this.run(["repo", "view", repo, "--json", "nameWithOwner"]);
+    const full = (JSON.parse(out) as { nameWithOwner?: unknown }).nameWithOwner;
+    if (typeof full !== "string" || !full.includes("/")) {
+      throw new Error(`cannot find the repository ${repo}; give it as owner/name`);
+    }
+    return full;
+  }
+
   async add(request: IntakeRequest): Promise<IntakeWatch> {
     const { store } = this.ctx;
-    const repo = request.repo?.trim() || undefined;
+    const repo = await this.fullRepo(request.repo?.trim() || undefined);
     const label = request.label?.trim() || undefined;
     const watches = store.intakeWatches();
     const same = watches.find(

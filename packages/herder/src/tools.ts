@@ -295,7 +295,12 @@ const intakeWatchSchema = obj({
     description:
       '"issues" for issues assigned to the owner, "reviews" for pull requests waiting for their review.',
   }),
-  repo: opt(str({ description: "owner/name to watch only one repository; leave out for all." })),
+  repo: opt(
+    str({
+      description:
+        "Repository to watch only, as owner/name or just the name of one of the owner's own repositories; leave out for all.",
+    }),
+  ),
   label: opt(str({ description: "Only issues or pull requests with this label." })),
   about: opt(str({ description: 'What the owner wants, in their words, e.g. "acme 的 bug".' })),
   auto: opt(
