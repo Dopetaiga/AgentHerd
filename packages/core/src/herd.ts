@@ -35,6 +35,7 @@ import { Outbox } from "./outbox.ts";
 import { OwnerCommands } from "./owner-commands.ts";
 import { Registry } from "./registry.ts";
 import { Relay, type RelayState } from "./relay.ts";
+import { SourceHealth, type SourceState } from "./source-health.ts";
 import { Store, type TranscriptEntry } from "./store.ts";
 import { applyReport, onAlarm, restage } from "./task-report.ts";
 import { TaskRunner, unfinished } from "./task-runner.ts";
@@ -131,6 +132,7 @@ export class Herd {
       ),
       outbox: new Outbox(opts.channel, this.store, this.clock),
       workspaces: new Workspaces(opts.home),
+      sources: new SourceHealth(() => this.ctx, opts.sourceDownMinutes),
       herder: () => this.herder,
       mode: () => this.mode,
       github: () => this.github,
@@ -195,6 +197,11 @@ export class Herd {
     this.store.audit("mode.changed", { mode });
   }
 
+  /** Watched sources that are failing now (ADR 0050). */
+  sources(): SourceState[] {
+    return this.ctx.sources.list();
+  }
+
   private herderHost(): HerderHost {
     return {
       locale: this.opts.locale ?? DEFAULT_LOCALE,
@@ -217,6 +224,7 @@ export class Herd {
             },
             unwatchMail: (id: string) => this.mail?.remove(id) ?? false,
           }),
+      sources: () => this.ctx.sources.list(),
       checkModel: async (ref) => this.opts.agentModels?.check?.(ref) ?? { ok: true },
       startTask: async (profileId, cwd, title, prompt, model, images) => {
         const { taskId, turn } = await this.startTask(profileId, cwd, title, prompt, model, images);

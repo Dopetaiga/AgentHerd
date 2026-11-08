@@ -1,3 +1,4 @@
+import type { SourceState } from "./source-health.ts";
 // What the Herd and the Herder know about each other (docs/spec/04-herder.md §1). The core does
 // not import the Herder or any model library: the CLI or the app passes a factory.
 
@@ -75,6 +76,8 @@ export interface HerderHost {
   /** Starts telling the owner about mail matching a Gmail search; throws when Gmail cannot be read. */
   watchMail?(about: string, query: string): Promise<MailWatch>;
   unwatchMail?(id: string): boolean;
+  /** Watched sources that are failing now (ADR 0050). */
+  sources?(): SourceState[];
   audit(type: string, data: Record<string, unknown>): void;
   /** Keeps a line of the Herder's conversation with the owner (`herder_turns`). */
   recordTurn(role: HerderTurnRole, text: string, taskId?: string): void;

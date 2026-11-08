@@ -74,6 +74,7 @@ import { LocalEmbedder } from "./embedder.ts";
 import { mcpServerFor } from "./mcp-socket.ts";
 import { probeModels } from "./probe.ts";
 import { availableProfiles } from "./profiles.ts";
+import { withSystemProxy } from "./proxy.ts";
 import { RuntimeStore } from "./runtimes.ts";
 import { type VerifyOptions, verifyProfile } from "./verify.ts";
 
@@ -301,7 +302,7 @@ export class Host implements HostApi {
       mode: config.mode ?? "assist",
       locale,
       profiles: this.herdProfiles(),
-      github: { run: this.opts.gh ?? runGh() },
+      github: { run: this.opts.gh ?? runGh(withSystemProxy()) },
       ...(herder === undefined ? {} : { herder }),
       ...(this.opts.mcpSocket === undefined
         ? {}

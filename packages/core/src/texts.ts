@@ -55,6 +55,13 @@ export interface CoreTexts {
   mailNew(about: string, lines: string): string;
   mailLine(sender: string, subject: string, preview: string, url: string): string;
   mailMore(n: number): string;
+  /** A watched source has failed for `minutes` (ADR 0050). */
+  sourceDown(
+    source: "github" | "mail",
+    hint: "missing" | "login" | "offline",
+    minutes: number,
+  ): string;
+  sourceUp(source: "github" | "mail"): string;
   unknownAgent(agent: string, known: string): string;
   notDirectory(path: string): string;
   taskEnded: string;
@@ -199,6 +206,17 @@ const zh: CoreTexts = {
   mailLine: (sender, subject, preview, url) =>
     `- ${sender}：「${subject}」${preview === "" ? "" : `\n  ${preview}`}\n  ${url}`,
   mailMore: (n) => `还有 ${n} 封`,
+  sourceDown: (source, hint, minutes) => {
+    if (source === "github") {
+      if (hint === "missing")
+        return "PR 提醒停了：这台电脑上找不到 gh 命令。装好 gh 后会自动恢复。";
+      if (hint === "login") return "PR 提醒停了：gh 没有登录，请运行 gh auth login。";
+      return `PR 提醒停了：已经 ${minutes} 分钟连不上 GitHub，恢复后会告诉你。`;
+    }
+    if (hint === "login") return "邮件提醒停了：Gmail 连接失效，请在 设置 → 应用 里重新连接。";
+    return `邮件提醒停了：已经 ${minutes} 分钟查不了 Gmail，恢复后会告诉你。`;
+  },
+  sourceUp: (source) => (source === "github" ? "PR 提醒恢复了。" : "邮件提醒恢复了。"),
   queued: "已排队：Agent 这一轮结束后会收到这条消息。",
   unknownAgent: (a, known) => `没有叫"${a}"的 Agent。可用的有：${known}。`,
   notDirectory: (p) => `不是一个目录：${p}`,
@@ -330,6 +348,22 @@ const en: CoreTexts = {
   mailLine: (sender, subject, preview, url) =>
     `- ${sender}: "${subject}"${preview === "" ? "" : `\n  ${preview}`}\n  ${url}`,
   mailMore: (n) => `and ${n} more`,
+  sourceDown: (source, hint, minutes) => {
+    if (source === "github") {
+      if (hint === "missing") {
+        return "Pull request updates stopped: the gh command is not on this computer. They resume once gh is installed.";
+      }
+      if (hint === "login")
+        return "Pull request updates stopped: gh is not logged in. Run gh auth login.";
+      return `Pull request updates stopped: GitHub has not answered for ${minutes} minutes. You will hear when it is back.`;
+    }
+    if (hint === "login") {
+      return "Mail updates stopped: the Gmail connection expired. Connect Gmail again under Settings → Apps.";
+    }
+    return `Mail updates stopped: Gmail has not answered for ${minutes} minutes. You will hear when it is back.`;
+  },
+  sourceUp: (source) =>
+    source === "github" ? "Pull request updates work again." : "Mail updates work again.",
   queued: "Queued: the agent gets this when its turn ends.",
   unknownAgent: (a, known) => `Unknown agent "${a}". Known: ${known}.`,
   notDirectory: (p) => `Not a directory: ${p}`,

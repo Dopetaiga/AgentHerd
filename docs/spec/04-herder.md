@@ -258,7 +258,8 @@ follows its tickets' pull requests ([ADR 0047](../adr/0047-follow-the-pull-reque
   Herder gets an event, and the watch ends. A watch with no activity for 14 days ends silently.
   At most 20 wakes per pull request; later activity is only told.
 - **Failures.** `gh` missing, logged out or offline is audited (`github.error`) once per distinct
-  error; nothing is sent to the owner. `agentherd run` does not follow pull requests.
+  error; after 30 minutes the owner is told once (see Source health). `gh` runs with the
+  system proxy. `agentherd run` does not follow pull requests.
 
 ### Mail
 
@@ -277,7 +278,25 @@ Mail is watched only when the owner asks for it ([ADR 0048](../adr/0048-watch-ma
   whole message stays within 100 words (fewer mails, then no previews, then cut; ADR 0049). The Herder's conversation gets the same
   as an event line marked as mail. Table `mail_watches` (schema 10) keeps watches and the ids
   told; they survive restarts.
-- **Failures** are audited (`mail.error`) once per distinct error; nothing goes to the owner.
+- **Failures** are audited (`mail.error`) once per distinct error; after 30 minutes the owner
+  is told once (see Source health).
+
+### Source health
+
+A source that stops answering is told once ([ADR 0050](../adr/0050-tell-the-owner-when-a-source-stops.md)).
+
+- `SourceHealth` (`packages/core/src/source-health.ts`) keeps, per source (`github`, `mail`),
+  the first failure, the last error and whether the owner was told, in store state
+  `sources.health`.
+- After 30 minutes of failures with no success (`sourceDownMinutes`) the owner gets one alarm
+  message: which updates stopped and, when the error tells, what to do (`gh auth login`,
+  install `gh`, reconnect Gmail). Audit `source.down`. The first success after it is told once
+  (「PR 提醒恢复了。」, `source.up`).
+- Removing the last mail watch forgets mail's failures. `session_list` shows failing sources
+  to the Herder.
+- The host passes the system proxy to `gh` as `HTTPS_PROXY`/`HTTP_PROXY` (Windows registry
+  Internet Settings, macOS `scutil --proxy`) unless the environment has one
+  (`packages/host/src/proxy.ts`).
 
 ### Message length
 

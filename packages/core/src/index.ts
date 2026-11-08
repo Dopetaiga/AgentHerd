@@ -116,6 +116,8 @@ export {
   reportView,
   summaryPrompt,
 } from "./report.ts";
+export type { SourceId, SourceState } from "./source-health.ts";
+export { SOURCE_DOWN_MINUTES, SourceHealth, sourceHint } from "./source-health.ts";
 export type {
   AuditRow,
   DecisionRow,

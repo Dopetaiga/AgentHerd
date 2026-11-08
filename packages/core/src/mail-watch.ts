@@ -129,7 +129,6 @@ export class MailWatches {
   private timer: Timer | undefined;
   private running = false;
   private chain: Promise<void> = Promise.resolve();
-  private lastError = "";
 
   constructor(ctx: HerdContext, options: MailWatchOptions) {
     this.ctx = ctx;
@@ -193,7 +192,11 @@ export class MailWatches {
     if (watch === undefined) return false;
     store.deleteMailWatch(id);
     store.audit("mail.unwatched", { id, about: watch.about });
-    if (store.mailWatches().length === 0) this.cancel();
+    if (store.mailWatches().length === 0) {
+      this.cancel();
+      // Nothing is watched: a broken Gmail is no longer the owner's problem.
+      this.ctx.sources.clear("mail");
+    }
     return true;
   }
 
@@ -224,10 +227,9 @@ export class MailWatches {
   }
 
   private failed(error: Error): void {
-    // Offline or the connection expired: told once in the audit, not every look.
-    if (error.message === this.lastError) return;
-    this.lastError = error.message;
-    this.ctx.store.audit("mail.error", { message: error.message });
+    // Offline or the connection expired: in the audit once per error; the owner hears when it
+    // lasts (ADR 0050).
+    this.ctx.sources.failed("mail", error);
   }
 
   private async pollAll(): Promise<void> {
@@ -238,8 +240,9 @@ export class MailWatches {
     }
     for (const watch of this.ctx.store.mailWatches()) {
       try {
-        await this.check(watch, await fetchMail(apps, searchSince(watch.query, watch.createdAt)));
-        this.lastError = "";
+        const messages = await fetchMail(apps, searchSince(watch.query, watch.createdAt));
+        this.ctx.sources.ok("mail");
+        await this.check(watch, messages);
       } catch (error) {
         this.failed(error as Error);
       }

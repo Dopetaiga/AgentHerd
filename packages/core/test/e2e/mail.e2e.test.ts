@@ -245,6 +245,42 @@ describe("E2E-MAIL", () => {
     expect(texts(channel)[0]).toContain('- bob@x.com: "Hi"');
   });
 
+  it("tells the owner once when Gmail stays unreachable, and when it is back (ADR 0050)", async () => {
+    const { channel, clock, gmail, host, store } = await setup();
+    await host.watchMail?.("all new mail", "in:inbox");
+    gmail.fail = "fetch failed";
+    // A few failed looks are not news.
+    for (let i = 0; i < 9; i++) await clock.advance(3 * 60_000);
+    await until(() => store.auditRows("mail.error").length > 0);
+    expect(texts(channel)).toEqual([]);
+    expect(host.sources?.()).toMatchObject([{ source: "mail", told: false }]);
+    // Half an hour of failures is.
+    for (let i = 0; i < 2; i++) await clock.advance(3 * 60_000);
+    await until(() => texts(channel).length > 0);
+    expect(texts(channel)).toEqual([
+      "Mail updates stopped: Gmail has not answered for 30 minutes. You will hear when it is back.",
+    ]);
+    expect(store.auditRows("mail.error")).toHaveLength(1);
+    await clock.advance(3 * 60_000);
+    expect(texts(channel)).toHaveLength(1);
+    // Back: said once.
+    gmail.fail = undefined;
+    await clock.advance(3 * 60_000);
+    await until(() => texts(channel).length > 1);
+    expect(texts(channel)[1]).toBe("Mail updates work again.");
+    expect(host.sources?.()).toEqual([]);
+  });
+
+  it("a Gmail that fails while nothing is watched is forgotten", async () => {
+    const { clock, gmail, host } = await setup();
+    const watch = await host.watchMail?.("all new mail", "in:inbox");
+    gmail.fail = "fetch failed";
+    await clock.advance(3 * 60_000);
+    await until(() => (host.sources?.() ?? []).length > 0);
+    host.unwatchMail?.(watch?.id ?? "");
+    expect(host.sources?.()).toEqual([]);
+  });
+
   it("refuses a watch Gmail cannot answer, and has no mail tools without apps", async () => {
     const { gmail, host } = await setup();
     gmail.fail = "Gmail is not connected";
