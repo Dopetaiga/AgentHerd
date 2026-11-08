@@ -137,14 +137,12 @@ describe("E2E-GITHUB", () => {
     await clock.advance(120_000);
     expect(texts(channel).filter((t) => t.includes("PR #7"))).toEqual([]);
 
-    // A person's comment wakes the task and reaches the owner; a bot's does neither.
+    // A person's comment wakes the task, which tells the owner itself; a bot's does neither.
     github.comment("alice", "Please rename foo to bar.\nIt reads better.");
     github.comment("lint-bot[bot]", "Style nits", "Bot");
     await clock.advance(120_000);
     await until(() => reports(channel).length === 2);
-    expect(texts(channel)).toContain(
-      "New comment on PR #7 (alice): Please rename foo to bar.\nHanded to the task.",
-    );
+    expect(texts(channel).filter((t) => t.startsWith("New comment"))).toEqual([]);
     const prompts = store.transcript(taskId).filter((e) => e.role === "prompt");
     expect(prompts[1]?.text).toContain("alice commented: Please rename foo to bar.");
     expect(prompts[1]?.text).not.toContain("Style nits");
@@ -160,9 +158,12 @@ describe("E2E-GITHUB", () => {
     github.checks = [{ name: "build", status: "COMPLETED", conclusion: "FAILURE" }];
     await clock.advance(120_000);
     await until(() => reports(channel).length === 3);
-    expect(texts(channel)).toContain("Checks failed on PR #7: build. Handed to the task to fix.");
+    const third = store.transcript(taskId).filter((e) => e.role === "prompt");
+    expect(third.at(-1)?.text).toContain("Checks failed: build.");
     await clock.advance(120_000);
-    expect(texts(channel).filter((t) => t.startsWith("Checks failed"))).toHaveLength(1);
+    expect(reports(channel)).toHaveLength(3);
+    // The task reports; no separate notice says the same (ADR 0049).
+    expect(texts(channel).filter((t) => t.startsWith("Checks failed"))).toEqual([]);
 
     // The merge is told once and ends the watch.
     github.state = "MERGED";

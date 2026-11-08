@@ -49,6 +49,10 @@ export class OwnerCommands {
         await ctx.inbox.handle(inbound);
         return;
       }
+      // The task this message starts or continues acknowledges it with a reply (ADR 0049).
+      if (inbound.ref !== undefined) {
+        ctx.ownerMessage = { ref: inbound.ref, at: ctx.clock.now().getTime() };
+      }
       const text = [inbound.text, ...this.saveFiles(inbound.files ?? [])]
         .filter((t) => t !== "")
         .join("\n");

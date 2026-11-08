@@ -29,6 +29,8 @@ export type {
 export { HERDER_RETRY_TARGET } from "./herder-port.ts";
 export type { Answerable, InboxOptions, OwnerAnswer } from "./inbox.ts";
 export { BODY_MAX_LINES, DEFAULT_REMIND_MINUTES, Inbox, itemBody, itemView } from "./inbox.ts";
+export type { MailMessage, MailWatchOptions } from "./mail-watch.ts";
+export { fetchMail, MAIL_POLL_MINUTES, MAIL_WATCHES_MAX, MailWatches } from "./mail-watch.ts";
 export type {
   AppToolInfo,
   AppTools,
@@ -92,15 +94,23 @@ export {
   SERVICE_ID_PATTERN,
   type SecretStore,
 } from "./models.ts";
+export {
+  ACK_WORDS_MAX,
+  cutWords,
+  fitsOwner,
+  OWNER_WORDS_MAX,
+  ownerWords,
+  tooLong,
+} from "./owner-text.ts";
 export type { PipelineContext, PipelineResult } from "./pipeline.ts";
 export { decide } from "./pipeline.ts";
 export type { SessionListener } from "./registry.ts";
 export { Registry } from "./registry.ts";
-export type { ReportBody, SummaryAnswer } from "./report.ts";
+export type { ReportBody, ReportBodyOptions, SummaryAnswer } from "./report.ts";
 export {
   formatDuration,
   REPLY_HINT_CHARS,
-  REPORT_MAX_CHARS,
+  REPORT_MAX_WORDS,
   replyHint,
   reportBody,
   reportView,
@@ -109,6 +119,7 @@ export {
 export type {
   AuditRow,
   DecisionRow,
+  MailWatch,
   SessionRow,
   StoredItem,
   StoredTask,

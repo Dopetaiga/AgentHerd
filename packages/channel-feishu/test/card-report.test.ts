@@ -86,15 +86,14 @@ describe("renderCard report", () => {
     ]);
   });
 
-  it("renders automatic decisions as a bullet list", () => {
+  it("folds automatic decisions under their count (ADR 0049)", () => {
     const elements = bodyElements(
       renderCard(makeReport({ automaticDecisions: ["Allow lint", "Deny deploy"] }), "en"),
     );
     expect(elements).toHaveLength(3);
-    expect(elements[1]).toEqual({
-      tag: "markdown",
-      content: "**Automatic decisions**\n- Allow lint\n- Deny deploy",
-    });
+    expect(elements[1]).toMatchObject({ tag: "collapsible_panel", expanded: false });
+    expect(JSON.stringify(elements[1])).toContain("Automatic decisions · 2");
+    expect(JSON.stringify(elements[1])).toContain("- Allow lint\\n- Deny deploy");
     expect(elements[2]).toEqual(buttonRow("Relay to this task", "r1", "relay"));
   });
 

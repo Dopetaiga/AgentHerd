@@ -4,7 +4,7 @@ import type { AgentConnection } from "@agentherd/acp-client";
 import { type Following, firstLine, type HerdContext, say } from "./herd-context.ts";
 import type { HerdReport } from "./mcp-gateway.ts";
 import {
-  REPORT_MAX_CHARS,
+  REPORT_MAX_WORDS,
   reportBody,
   reportView,
   type SummaryAnswer,
@@ -78,8 +78,7 @@ export async function askSummary(
 ): Promise<SummaryAnswer> {
   f.turn = { text: "", toolCalls: 0 };
   f.pending = "";
-  const max = ctx.opts.reportMaxChars ?? REPORT_MAX_CHARS;
-  const prompt = summaryPrompt(max, ctx.texts);
+  const prompt = summaryPrompt(ctx.opts.reportMaxWords ?? REPORT_MAX_WORDS, ctx.texts);
   ctx.store.addTranscript(f.task.id, "prompt", prompt);
   try {
     await connection.prompt(agentSessionId, prompt);
@@ -100,12 +99,16 @@ export async function sendReport(
   ask: (() => Promise<SummaryAnswer>) | null,
   toOwner = true,
 ): Promise<void> {
-  const max = ctx.opts.reportMaxChars ?? REPORT_MAX_CHARS;
+  // The agent's own report of a turn that ended normally speaks first (ADR 0049).
+  const own = ask !== null && f.report !== undefined && f.report.state !== "progress";
   const body = await reportBody(
     reply,
     ask ?? (() => Promise.reject(new Error("no summary turn"))),
-    max,
-    ctx.texts.noReply,
+    {
+      maxWords: ctx.opts.reportMaxWords ?? REPORT_MAX_WORDS,
+      noReply: ctx.texts.noReply,
+      ...(own && f.report !== undefined ? { summary: f.report.summary } : {}),
+    },
   );
   restage(ctx, f);
   const view = reportView(f.task, body, ctx.clock.now(), ctx.texts);

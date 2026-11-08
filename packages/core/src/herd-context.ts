@@ -6,6 +6,7 @@ import type {
   Channel,
   ChannelBinding,
   Locale,
+  MessageRef,
   Mode,
   TextTone,
   TextView,
@@ -53,7 +54,8 @@ export interface HerdOptions {
   secrets?: Record<string, string>;
   /** Use this store instead of `<home>/herd.db` (tests pass `:memory:`). */
   store?: Store;
-  reportMaxChars?: number;
+  /** Words in a report body (ADR 0049); default OWNER_WORDS_MAX. */
+  reportMaxWords?: number;
   replyHintChars?: number;
   watchdogSeconds?: number;
   maxQuietMinutes?: number;
@@ -81,6 +83,8 @@ export interface HerdOptions {
   apps?: () => AppTools | undefined;
   /** Names of the owner's connected apps, for the Herder (e.g. ["Gmail"]). */
   appNames?: () => string[];
+  /** Minutes between two looks at the owner's mail watches (ADR 0048). */
+  mailPollMinutes?: number;
   /**
    * Follows pull requests tasks open on GitHub with `gh` (ADR 0047). Without it,
    * nothing is followed.
@@ -155,6 +159,10 @@ export interface Following {
   notified?: HerdReport;
   /** The agent sent its `herd_ack` line in this turn. */
   acked?: boolean;
+  /** The owner's message that asked for the current turn; the ack replies to it. */
+  trigger?: MessageRef;
+  /** The current turn is AgentHerd's own check on background work. */
+  waking?: boolean;
   /** The turn ended with work still running in the background: checks so far, the next one. */
   background?: { checks: number; timer?: Timer };
   /** Text and tool calls of the current turn. */
@@ -181,6 +189,8 @@ export interface QueuedPrompt {
   images: OwnerImage[];
   /** AgentHerd's own prompt asking about background work, not the owner's. */
   wake?: boolean;
+  /** The owner's message this prompt answers. */
+  trigger?: MessageRef;
   resolve: (result: RunResult) => void;
   reject: (error: Error) => void;
 }
@@ -212,6 +222,8 @@ export interface HerdContext {
   herder(): HerderPort | undefined;
   /** The current mode. It can change at runtime. */
   mode(): Mode;
+  /** The owner's latest message, until a task's prompt takes it as its trigger. */
+  ownerMessage?: { ref: MessageRef; at: number };
 }
 
 /**
@@ -271,10 +283,12 @@ export async function say(
   taskLabel?: string,
   tone?: TextTone,
   taskId?: string,
+  replyTo?: MessageRef,
 ): Promise<void> {
   const view: TextView = { kind: "text", text };
   if (taskLabel !== undefined) view.taskLabel = taskLabel;
   if (tone !== undefined) view.tone = tone;
+  if (replyTo !== undefined) view.replyTo = replyTo;
   await send(ctx, view, taskId);
 }
 

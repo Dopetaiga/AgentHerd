@@ -1,20 +1,22 @@
-// Completion reports (docs/spec/04-herder.md §2 "Completion report", ADR 0019). The body is the
-// agent's own words: its final reply, or its own summary when the reply is long. AgentHerd adds
-// only the title and the list of automatic decisions.
+// Completion reports (docs/spec/04-herder.md §2 "Completion report", ADR 0019, ADR 0049). The
+// body is the agent's own words, at most OWNER_WORDS_MAX: its herd_report summary, its final
+// reply, or its own summary when the reply is long. AgentHerd adds only the title and the list of
+// automatic decisions; the full reply stays one tap away.
 
 import type { ReportResult, ReportView, Stage } from "@agentherd/protocol";
+import { cutWords, fitsOwner, OWNER_WORDS_MAX } from "./owner-text.ts";
 import type { Task } from "./tasks.ts";
 import { CORE_TEXTS, type CoreTexts } from "./texts.ts";
 
-/** Default `reportMaxChars`. */
-export const REPORT_MAX_CHARS = 400;
+/** Default `reportMaxWords`. */
+export const REPORT_MAX_WORDS = OWNER_WORDS_MAX;
 
 /** Default `replyHintChars`. */
 export const REPLY_HINT_CHARS = 300;
 
 /** The extra prompt for a long final reply. Labeled, so the agent knows who asks. */
-export function summaryPrompt(maxChars: number, texts: CoreTexts = CORE_TEXTS.en): string {
-  return texts.summaryPrompt(maxChars);
+export function summaryPrompt(maxWords: number, texts: CoreTexts = CORE_TEXTS.en): string {
+  return texts.summaryPrompt(maxWords);
 }
 
 /** The note added before the owner's words in the first prompt of a session. */
@@ -35,30 +37,50 @@ export interface ReportBody {
   fullReply?: string;
 }
 
+export interface ReportBodyOptions {
+  /** Words in the body; default REPORT_MAX_WORDS. */
+  maxWords?: number;
+  noReply?: string;
+  /** The agent's herd_report summary of this turn (not a progress one). */
+  summary?: string;
+}
+
 /**
- * Chooses the report body by size. The summary turn is asked at most once; if it fails, calls
- * tools, is empty, or is still too long, the body is the original reply (the channel folds it).
+ * Chooses the report body, first that fits in `maxWords` (ADR 0049): the agent's herd_report
+ * summary, its reply, its answer to one summary turn, else the reply cut short. Whenever the body
+ * is not the whole reply, the reply is kept as `fullReply`.
  * @param finalReply The agent's last message of the task, verbatim.
  * @param askSummary Sends `summaryPrompt()` to the same session and returns its answer.
  */
 export async function reportBody(
   finalReply: string,
   askSummary: () => Promise<SummaryAnswer>,
-  maxChars: number = REPORT_MAX_CHARS,
-  noReply: string = CORE_TEXTS.en.noReply,
+  opts: ReportBodyOptions = {},
 ): Promise<ReportBody> {
+  const max = opts.maxWords ?? REPORT_MAX_WORDS;
   const reply = finalReply.trim();
-  if (reply.length <= maxChars) return { body: reply === "" ? noReply : reply, summarized: false };
+  const own = opts.summary?.trim() ?? "";
+  if (own !== "" && fitsOwner(own, max)) {
+    return reply === "" || reply === own
+      ? { body: own, summarized: false }
+      : { body: own, summarized: true, fullReply: reply };
+  }
+  if (fitsOwner(reply, max)) {
+    return {
+      body: reply === "" ? (opts.noReply ?? CORE_TEXTS.en.noReply) : reply,
+      summarized: false,
+    };
+  }
   try {
     const answer = await askSummary();
     const text = answer.text.trim();
-    if (answer.toolCalls === 0 && text !== "" && text.length <= maxChars) {
+    if (answer.toolCalls === 0 && text !== "" && fitsOwner(text, max)) {
       return { body: text, summarized: true, fullReply: reply };
     }
   } catch {
-    // The summary turn failed (agent exited or rejected the prompt): fall back to the reply.
+    // The summary turn failed (agent exited or rejected the prompt): cut the reply.
   }
-  return { body: reply, summarized: false };
+  return { body: cutWords(reply, max), summarized: true, fullReply: reply };
 }
 
 const RESULT: Record<Stage, ReportResult> = {

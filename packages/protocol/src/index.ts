@@ -198,6 +198,8 @@ export interface TextView {
   options?: ItemOption[];
   /** Target of the buttons' actions. */
   target?: string;
+  /** Sent as a reply to this message (an acknowledgement answers the owner's request). */
+  replyTo?: MessageRef;
 }
 
 /** A question from the Herder with suggested answers. */
@@ -219,6 +221,8 @@ export type Inbound =
       /** May be empty when the message is only images. */
       text: string;
       from: string;
+      /** This message, so AgentHerd can reply to it. */
+      ref?: MessageRef;
       replyTo?: MessageRef;
       images?: InboundImage[];
       files?: InboundFile[];

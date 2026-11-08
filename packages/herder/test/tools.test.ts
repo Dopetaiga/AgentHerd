@@ -493,6 +493,17 @@ describe("tools", () => {
     expect(rec.said).toEqual(["测试挂了"]);
     expect(ctx.asked && ctx.notified).toBe(true);
   });
+
+  it("ask and notify refuse a message over 100 words (ADR 0049)", async () => {
+    const { call, rec } = tools({});
+    const long = "测试挂了，原因是配置文件里的端口被占用。".repeat(12);
+    await expect(call("notify", { text: long })).rejects.toThrow(/too long/);
+    await expect(call("ask", { question: long, options: ["好", "不好"] })).rejects.toThrow(
+      /too long/,
+    );
+    expect(rec.said).toEqual([]);
+    expect(rec.asked).toEqual([]);
+  });
 });
 
 describe("session_start folder check (ADR 0035)", () => {
@@ -571,5 +582,35 @@ describe("projects without asking (ADR 0043)", () => {
     expect(out).toContain("no project");
     expect(rec.started).toHaveLength(1);
     expect(rec.started[0]?.cwd).toBeUndefined();
+  });
+});
+
+describe("mail watches (ADR 0048)", () => {
+  it("exist only with connected apps", () => {
+    expect(tools({}).names).not.toContain("mail_watch");
+    expect(tools({}, { mail: [] }).names).toEqual(
+      expect.arrayContaining(["mail_watch", "mail_unwatch"]),
+    );
+  });
+
+  it("start and stop when the owner asks, and show in session_list", async () => {
+    const mail: never[] = [];
+    const { call } = tools({}, { mail });
+    const out = await call("mail_watch", { about: "导师的邮件", query: "from:li@uni.edu" });
+    expect(out).toContain('"导师的邮件"');
+    const list = await call("session_list", {});
+    expect(list).toContain('"导师的邮件" query=from:li@uni.edu');
+    expect(await call("mail_unwatch", { watch: "导师" })).toContain("stopped");
+    expect(mail).toEqual([]);
+    await expect(call("mail_unwatch", { watch: "导师" })).rejects.toThrow(/no mail watch/);
+  });
+
+  it("are never started by an event", async () => {
+    const mail: never[] = [];
+    const { call } = tools({ kind: "event" }, { mail });
+    await expect(call("mail_watch", { about: "all", query: "in:inbox" })).rejects.toThrow(
+      /only the owner/,
+    );
+    expect(mail).toEqual([]);
   });
 });

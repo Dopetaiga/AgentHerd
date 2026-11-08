@@ -23,8 +23,11 @@ export class FakeChannel implements Channel {
   readonly id = "fake";
   readonly capabilities: ChannelCapability[] = ["buttons", "free-text", "update-message", "pin"];
   readonly messages: SentMessage[] = [];
+  /** References of the messages the test sent to AgentHerd, in order. */
+  readonly received: MessageRef[] = [];
   private sink: InboundSink | null = null;
   private next = 1;
+  private nextIn = 1;
   private waiters: { match: (m: SentMessage) => boolean; resolve: (m: SentMessage) => void }[] = [];
 
   private readonly ownerId: string;
@@ -70,14 +73,20 @@ export class FakeChannel implements Channel {
     await this.deliver({ kind: "action", target, action, from });
   }
 
-  /** Sends a text message to AgentHerd. */
+  /** Sends a text message to AgentHerd. Its reference is added to `received`. */
   async say(text: string, from = this.ownerId): Promise<void> {
-    await this.deliver({ kind: "message", text, from });
+    await this.deliver({ kind: "message", text, from, ref: this.inboundRef() });
   }
 
   /** Sends a text message that replies to one AgentHerd sent. */
   async reply(to: MessageRef, text: string, from = this.ownerId): Promise<void> {
-    await this.deliver({ kind: "message", text, from, replyTo: to });
+    await this.deliver({ kind: "message", text, from, ref: this.inboundRef(), replyTo: to });
+  }
+
+  private inboundRef(): MessageRef {
+    const ref = { channelId: this.id, id: `in${this.nextIn++}` };
+    this.received.push(ref);
+    return ref;
   }
 
   /** Messages whose current view has the given kind. */

@@ -22,6 +22,8 @@ export interface FeishuApi {
   close(): Promise<void>;
   /** Sends an interactive card to a user; returns the message id. */
   sendCard(openId: string, card: Record<string, unknown>): Promise<string>;
+  /** Sends the card as a reply to a message; returns the new message's id. */
+  replyCard?(messageId: string, card: Record<string, unknown>): Promise<string>;
   patchCard(messageId: string, card: Record<string, unknown>): Promise<void>;
   pin(messageId: string): Promise<void>;
   /** Downloads an image of a received message (`im:message` covers it). */
@@ -84,6 +86,16 @@ export function sdkApi(creds: FeishuCredentials): FeishuApi {
       check("send", res);
       const id = res.data?.message_id;
       if (id === undefined) throw new Error("feishu send returned no message_id");
+      return id;
+    },
+    async replyCard(messageId, card) {
+      const res = await client.im.v1.message.reply({
+        path: { message_id: messageId },
+        data: { msg_type: "interactive", content: JSON.stringify(card) },
+      });
+      check("reply", res);
+      const id = res.data?.message_id;
+      if (id === undefined) throw new Error("feishu reply returned no message_id");
       return id;
     },
     async patchCard(messageId, card) {

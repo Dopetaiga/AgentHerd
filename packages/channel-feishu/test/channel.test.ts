@@ -326,6 +326,7 @@ describe("FeishuChannel images", () => {
     expect(got).toEqual([
       {
         kind: "message",
+        ref: expect.objectContaining({ channelId: "feishu" }),
         text: "",
         from: "ou_owner",
         images: [{ mimeType: "image/png", data: PNG }],
@@ -337,7 +338,9 @@ describe("FeishuChannel images", () => {
     const got = await receive(image, async () => {
       throw new Error("234043");
     });
-    expect(got).toEqual([{ kind: "message", text: "[图片没能下载：234043]", from: "ou_owner" }]);
+    expect(got).toEqual([
+      { kind: "message", ref: expect.anything(), text: "[图片没能下载：234043]", from: "ou_owner" },
+    ]);
   });
 
   const file = (type: string, content: object) => ({
@@ -363,7 +366,13 @@ describe("FeishuChannel images", () => {
     );
     expect(asked).toEqual(["om_7/file_7"]);
     expect(got).toEqual([
-      { kind: "message", text: "", from: "ou_owner", files: [{ name: "报告.pdf", data }] },
+      {
+        kind: "message",
+        ref: expect.anything(),
+        text: "",
+        from: "ou_owner",
+        files: [{ name: "报告.pdf", data }],
+      },
     ]);
   });
 
@@ -382,7 +391,12 @@ describe("FeishuChannel images", () => {
       },
     );
     expect(failed).toEqual([
-      { kind: "message", text: "[文件 a.mp4 没能下载：too big]", from: "ou_owner" },
+      {
+        kind: "message",
+        ref: expect.anything(),
+        text: "[文件 a.mp4 没能下载：too big]",
+        from: "ou_owner",
+      },
     ]);
   });
 

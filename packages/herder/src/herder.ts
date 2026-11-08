@@ -2,7 +2,7 @@
 
 import type { CompressionState } from "@agentherd/context-kernel";
 import type { HerderEvent, HerderHost, HerderPort, OwnerImage } from "@agentherd/core";
-import { REVIEW_JOB } from "@agentherd/core";
+import { cutWords, fitsOwner, OWNER_WORDS_MAX, ownerWords, REVIEW_JOB } from "@agentherd/core";
 import { Agent, type AgentMessage, type AgentTool, type StreamFn } from "@agentherd/herder-loop";
 import { guardCheck } from "@agentherd/rules";
 import { type Api, isContextOverflow, type Model } from "@earendil-works/pi-ai";
@@ -289,20 +289,34 @@ export class Herder implements HerderPort {
     const done = await this.runWithRetries(job, prompt, images);
     if (job.kind === "owner") this.countForReview();
     if (!done) return;
-    const last = this.agent.state.messages.at(-1);
-    if (!this.turn.asked && last?.role === "assistant") {
-      const text = withoutContextMarks(
-        last.content
-          .filter((c) => c.type === "text")
-          .map((c) => (c as { text: string }).text)
-          .join(""),
-      ).trim();
-      if (text !== "") {
-        this.host.recordTurn("herder", text);
-        await this.host.say(text);
-      }
+    let text = this.turn.asked ? "" : this.lastReply();
+    // At most OWNER_WORDS_MAX (ADR 0049): asked to write it again once, then cut.
+    if (text !== "" && !fitsOwner(text)) {
+      this.host.audit("herder.reply.long", { words: ownerWords(text) });
+      const again = await this.attempt(
+        `[AgentHerd] Your reply has ${ownerWords(text)} words; the owner reads at most ${OWNER_WORDS_MAX}. Write it again in at most ${OWNER_WORDS_MAX} words: the answer first, no steps. Do not call tools.`,
+        [],
+      );
+      const shorter = again.ok ? this.lastReply() : "";
+      text = cutWords(shorter !== "" ? shorter : text);
+    }
+    if (text !== "") {
+      this.host.recordTurn("herder", text);
+      await this.host.say(text);
     }
     this.save();
+  }
+
+  /** Text of the Herder's last message, if it is the model's. */
+  private lastReply(): string {
+    const last = this.agent.state.messages.at(-1);
+    if (last?.role !== "assistant") return "";
+    return withoutContextMarks(
+      last.content
+        .filter((c) => c.type === "text")
+        .map((c) => (c as { text: string }).text)
+        .join(""),
+    ).trim();
   }
 
   /**

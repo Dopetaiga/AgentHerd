@@ -193,22 +193,20 @@ When a task ends, the owner always gets a report ([05-channels.md](05-channels.m
 a title (task, project, agent, duration, result) added by code, the body, and the automatic
 decisions during the task.
 
-The body is chosen by size:
+The body is at most `reportMaxWords` (default 100, see "Message length") and is chosen in
+this order ([ADR 0049](../adr/0049-short-messages-written-by-the-agent.md)):
 
-1. Final reply ≤ `reportMaxChars` (default 400, [ADR 0036](../adr/0036-message-cards-by-kind.md)): the reply, verbatim.
-2. Longer: AgentHerd sends the session one more prompt, labeled as from AgentHerd:
+1. The turn's own `herd_report` summary, when its state is `ready`, `failed`, `blocked` or
+   `waiting`.
+2. The final reply, verbatim, when it fits.
+3. Longer: AgentHerd sends the session one more prompt, labeled as from AgentHerd, asking for one
+   or two sentences of at most 100 words for the owner (the result and what the owner must do,
+   no steps), no tools. The answer is the body.
+4. The summary turn is asked once. If it fails, calls tools, or is still too long, the body is
+   the reply cut after 100 words with "…".
 
-   ```text
-   [AgentHerd] Summarize for the owner what you did in this task, in at most 400 characters:
-   what changed, what you verified, outputs (files, commits, PR), risks or open parts.
-   Do not call tools.
-   ```
-
-   The answer is the body. The full final reply is attached ("Full reply").
-3. The summary turn is asked once. If it fails, calls tools, or is still too long, the body
-   is the original reply, folded.
-
-The Herder never writes or shortens the body.
+Whenever the body is not the reply, the full reply is attached ("Full reply", folded). Automatic
+decisions are folded under their count. The Herder never writes or shortens the body.
 
 ### Background work
 
@@ -221,8 +219,10 @@ ending the task cancels it ([ADR 0046](../adr/0046-tell-the-owner-at-the-right-t
 
 ### Acknowledgement
 
-An agent may call `herd_ack` once per turn with one line (≤ 200 characters) about what it is
-starting; the owner gets it at once ([09-agent-tools.md](09-agent-tools.md)).
+An agent may call `herd_ack` once per turn with one line (≤ 30 words) about what it is
+starting; the owner gets it at once, as a reply to the owner's message that started the turn
+when there is one ([09-agent-tools.md](09-agent-tools.md), ADR 0049). Turns AgentHerd starts
+itself (background checks) are not acknowledged.
 
 ### Delivery
 
@@ -246,18 +246,49 @@ follows its tickets' pull requests ([ADR 0047](../adr/0047-follow-the-pull-reque
   not looked at yet, is skipped: while a task works, what its account writes on GitHub is the
   agent's. After a turn, new comments by the `gh` user are marked as the agent's own.
 - **People.** New comments, reviews with text, line comments and `CHANGES_REQUESTED` wake the
-  task with one prompt that quotes them (labeled as from GitHub, not from the owner), and the
-  owner gets 「PR #n 有新评论（login）：<first line>」「已交给任务处理」. An ended task is started
-  again, as with any prompt (ADR 0039). A bare approval is only told: 「PR #n 已被 login 批准」.
+  task with one prompt that quotes them (labeled as from GitHub, not from the owner); the owner
+  hears from the task itself (`herd_ack`, then its report), not from a separate notice
+  (ADR 0049). An ended task is started again, as with any prompt (ADR 0039). A bare approval is
+  only told: 「PR #n 已被 login 批准」.
 - **Bots** (`type: Bot` or a login ending in `[bot]`) are marked seen and never wake or notify.
 - **Checks.** When every check of the head commit finished and some failed, the task gets the
-  names and how to read the logs, once per head commit; the owner gets an alarm-toned
-  「PR #n 的检查没通过：…」.
+  names and how to read the logs, once per head commit; the owner hears only what the task
+  reports.
 - **End.** Merged or closed: the owner is told once (「PR #n 已合并」/「已关闭，没有合并」), the
   Herder gets an event, and the watch ends. A watch with no activity for 14 days ends silently.
   At most 20 wakes per pull request; later activity is only told.
 - **Failures.** `gh` missing, logged out or offline is audited (`github.error`) once per distinct
   error; nothing is sent to the owner. `agentherd run` does not follow pull requests.
+
+### Mail
+
+Mail is watched only when the owner asks for it ([ADR 0048](../adr/0048-watch-mail-only-when-asked.md)).
+
+- **Asking.** 「导师来邮件提醒我」: the Herder calls `mail_watch` with the owner's words (`about`)
+  and a Gmail search (`query`); `mail_unwatch` stops it; `session_list` lists watches. Only an
+  owner turn can add or stop one. The tools exist only when the owner has connected apps
+  (Composio, [09-agent-tools.md](09-agent-tools.md) §3). There is no setting.
+- **Looking.** While at least one watch exists, every 3 minutes (`mailPollMinutes`) each search
+  runs as `(<query>) after:<created>` with `GMAIL_FETCH_EMAILS` through
+  `COMPOSIO_MULTI_EXECUTE_TOOL`. With no watch nothing is polled. Creating a watch runs the
+  search once and fails when Gmail cannot answer.
+- **Telling.** New matches are sent once: 「新邮件（<about>）：」 then sender, subject, a preview
+  of at most 40 characters and the Gmail link, at most 3 per message and then 「还有 N 封」; the
+  whole message stays within 100 words (fewer mails, then no previews, then cut; ADR 0049). The Herder's conversation gets the same
+  as an event line marked as mail. Table `mail_watches` (schema 10) keeps watches and the ids
+  told; they survive restarts.
+- **Failures** are audited (`mail.error`) once per distinct error; nothing goes to the owner.
+
+### Message length
+
+Every message to the owner is at most 100 words ([ADR 0049](../adr/0049-short-messages-written-by-the-agent.md)),
+counted with `Intl.Segmenter("zh", { granularity: "word" })`: Chinese is split into words,
+English by spaces, links count; text without word breaks is held to 8 characters per word
+(`packages/core/src/owner-text.ts`). The agent writes its own short text: a `herd_report`
+summary over 100 words or a `herd_ack` over 30 is refused with a tool error asking for a shorter
+one. The Herder's replies follow the same limit: a longer final reply is written again once
+(audited `herder.reply.long`), then cut; `ask` and `notify` refuse longer text. Relay and the
+board are not limited.
 
 ### Reply length
 

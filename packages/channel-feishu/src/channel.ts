@@ -153,8 +153,16 @@ export class FeishuChannel implements Channel {
   }
 
   async send(view: View): Promise<MessageRef> {
-    const id = await this.requireApi().sendCard(this.ownerId, renderCard(view, this.locale));
-    return { channelId: CHANNEL_ID, id };
+    const api = this.requireApi();
+    const card = renderCard(view, this.locale);
+    if (view.kind === "text" && view.replyTo !== undefined && api.replyCard !== undefined) {
+      try {
+        return { channelId: CHANNEL_ID, id: await api.replyCard(view.replyTo.id, card) };
+      } catch {
+        // The message is gone (recalled): send it on its own.
+      }
+    }
+    return { channelId: CHANNEL_ID, id: await api.sendCard(this.ownerId, card) };
   }
 
   async update(ref: MessageRef, view: View): Promise<void> {
@@ -195,6 +203,7 @@ export class FeishuChannel implements Channel {
       kind: "message",
       text,
       from: m.from,
+      ...(m.messageId === "" ? {} : { ref: { channelId: CHANNEL_ID, id: m.messageId } }),
       ...(m.replyTo === undefined ? {} : { replyTo: m.replyTo }),
       ...(images.length === 0 ? {} : { images }),
       ...(files.length === 0 ? {} : { files }),

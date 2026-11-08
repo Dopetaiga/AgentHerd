@@ -3,7 +3,7 @@
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { type AgentConnection, type StdioMcpServer, startAgent } from "@agentherd/acp-client";
-import type { AgentProfile } from "@agentherd/protocol";
+import type { AgentProfile, MessageRef } from "@agentherd/protocol";
 import {
   type Following,
   firstLine,
@@ -17,6 +17,7 @@ import {
 } from "./herd-context.ts";
 import type { OwnerImage } from "./herder-port.ts";
 import { CASE_JOB } from "./memory-store.ts";
+import { ACK_WORDS_MAX, tooLong } from "./owner-text.ts";
 import { onPermission } from "./permission.ts";
 import type { Relay } from "./relay.ts";
 import { REPLY_HINT_CHARS, replyHint } from "./report.ts";
@@ -31,6 +32,9 @@ export const SESSION_IDLE_MINUTES = 60;
 export const BACKGROUND_CHECK_MINUTES = 5;
 /** Checks before the task is reported anyway (about half an hour). */
 export const BACKGROUND_MAX_CHECKS = 6;
+
+/** An owner's message this old no longer counts as the request a new turn answers. */
+export const OWNER_MESSAGE_FRESH_MS = 5 * 60_000;
 /** At most this many models are tried for one task before it fails. */
 export const MAX_MODEL_SWITCHES = 3;
 /** Saved tasks loaded when AgentHerd starts (ADR 0039). */
@@ -298,10 +302,20 @@ export class TaskRunner {
     this.ctx.board.changed();
   }
 
-  /** Sends a prompt to an open task. Queued while a turn runs; settles when its turn ends. */
-  promptTask(taskId: string, text: string, images: OwnerImage[] = []): Promise<RunResult> {
+  /**
+   * Sends a prompt to an open task. Queued while a turn runs; settles when its turn ends.
+   * @param fromOwner false for AgentHerd's own prompts (pull request activity): they do not take
+   *   the owner's latest message as the one to acknowledge.
+   */
+  promptTask(
+    taskId: string,
+    text: string,
+    images: OwnerImage[] = [],
+    fromOwner = true,
+  ): Promise<RunResult> {
     const f = this.ctx.following.get(taskId);
     if (f === undefined) return Promise.reject(new Error(`unknown task ${taskId}`));
+    const trigger = fromOwner ? this.takeOwnerMessage() : undefined;
     // An ended task (also one from before a restart) is started again (ADR 0039).
     if (f.ended && f.reopening === undefined) {
       f.reopening = this.reopen(f).finally(() => {
@@ -311,7 +325,13 @@ export class TaskRunner {
     const queue = (): Promise<RunResult> => {
       if (f.ended) return Promise.reject(new Error(`task ${taskId} is not open`));
       const done = new Promise<RunResult>((resolve, reject) => {
-        f.queue.push({ text, images, resolve, reject });
+        f.queue.push({
+          text,
+          images,
+          resolve,
+          reject,
+          ...(trigger === undefined ? {} : { trigger }),
+        });
       });
       void this.pump(f);
       return done;
@@ -597,7 +617,7 @@ export class TaskRunner {
     f.busy = true;
     f.idleTimer?.cancel();
     try {
-      next.resolve(await this.runTurn(f, next.text, next.images, next.wake === true));
+      next.resolve(await this.runTurn(f, next.text, next.images, next.wake === true, next.trigger));
     } catch (error) {
       next.reject(error as Error);
     } finally {
@@ -691,11 +711,25 @@ export class TaskRunner {
     const { ctx } = this;
     const f = ctx.following.get(taskId);
     if (f === undefined || f.ended || !f.busy) return "no turn is running";
+    if (f.waking === true) return "not needed: this turn is AgentHerd's own check, not a request";
     if (f.acked === true) return "already sent in this turn";
+    const long = tooLong(text, ACK_WORDS_MAX);
+    if (long !== undefined) return long;
     f.acked = true;
-    ctx.store.audit("task.ack", { taskId, text });
-    void say(ctx, text, f.task.title, undefined, taskId);
+    ctx.store.audit("task.ack", { taskId, text, reply: f.trigger !== undefined });
+    // A reply to the owner's message, so it reads as the answer to that request (ADR 0049).
+    void say(ctx, text, f.task.title, undefined, taskId, f.trigger);
     return undefined;
+  }
+
+  /** The owner's latest message, if it came just now; taken once. */
+  private takeOwnerMessage(): MessageRef | undefined {
+    const { ctx } = this;
+    const m = ctx.ownerMessage;
+    delete ctx.ownerMessage;
+    if (m === undefined || ctx.clock.now().getTime() - m.at > OWNER_MESSAGE_FRESH_MS)
+      return undefined;
+    return m.ref;
   }
 
   /**
@@ -754,6 +788,7 @@ export class TaskRunner {
     text: string,
     images: OwnerImage[],
     wake = false,
+    trigger?: MessageRef,
   ): Promise<RunResult> {
     const { ctx } = this;
     const sessionId = f.task.id;
@@ -770,6 +805,9 @@ export class TaskRunner {
     delete f.reportAt;
     delete f.notified;
     f.acked = false;
+    f.waking = wake;
+    if (trigger === undefined) delete f.trigger;
+    else f.trigger = trigger;
     f.turn = { text: "", toolCalls: 0 };
     f.pending = "";
     // Read before this prompt is added, so the history holds only the earlier conversation.
