@@ -58,6 +58,8 @@ export class TaskRunner {
   private readonly ctx: HerdContext;
   private readonly relay: Relay;
   private readonly ops: TaskOps;
+  /** Turns running now, so stopping can wait for their reports. */
+  private readonly turns = new Set<Promise<unknown>>();
 
   constructor(ctx: HerdContext, relay: Relay, ops: TaskOps) {
     this.ctx = ctx;
@@ -609,6 +611,23 @@ export class TaskRunner {
     ];
   }
 
+  /**
+   * Waits (at most `ms`) for running turns to finish. Stopping ends tasks, which fails their
+   * turns; each failed turn still reports, and that report must be sent before the store
+   * closes, or the outbox sends it a second time after the next start.
+   */
+  async settle(ms: number): Promise<void> {
+    if (this.turns.size === 0) return;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    await Promise.race([
+      Promise.allSettled([...this.turns]),
+      new Promise((resolve) => {
+        timer = setTimeout(resolve, ms);
+      }),
+    ]);
+    clearTimeout(timer);
+  }
+
   /** Runs queued prompts one turn at a time. */
   private async pump(f: Following): Promise<void> {
     if (f.busy) return;
@@ -616,11 +635,14 @@ export class TaskRunner {
     if (next === undefined) return;
     f.busy = true;
     f.idleTimer?.cancel();
+    const turn = this.runTurn(f, next.text, next.images, next.wake === true, next.trigger);
+    this.turns.add(turn);
     try {
-      next.resolve(await this.runTurn(f, next.text, next.images, next.wake === true, next.trigger));
+      next.resolve(await turn);
     } catch (error) {
       next.reject(error as Error);
     } finally {
+      this.turns.delete(turn);
       f.busy = false;
     }
     if (f.ended) return;
