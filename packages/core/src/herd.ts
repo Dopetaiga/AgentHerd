@@ -53,6 +53,8 @@ export { SESSION_IDLE_MINUTES } from "./task-runner.ts";
 export const INTERRUPTED_STATE = "tasks.interrupted";
 /** Tasks named in the "continue?" question after a restart. */
 export const RESUME_ASK_MAX = 5;
+/** How long stopping waits for the turns it cut off to send their reports. */
+const STOP_SETTLE_MS = 3000;
 
 export class Herd {
   readonly store: Store;
@@ -474,6 +476,7 @@ export class Herd {
     for (const f of this.ctx.following.values()) {
       if (!f.ended) await this.endTask(f.task.id, this.texts.agentherdStopped);
     }
+    await this.runner.settle(STOP_SETTLE_MS);
     if (cut.length > 0) this.store.setState(INTERRUPTED_STATE, cut);
     await this.ctx.inbox.stop();
     this.ctx.outbox.stop();

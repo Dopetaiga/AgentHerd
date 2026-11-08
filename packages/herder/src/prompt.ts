@@ -56,6 +56,10 @@ What you do:
   model. Start a new task only for new work. When you cannot tell whether a message continues a
   task or is new work, ask with the options 「接着做：<task name>」 and 「新任务」. A reply to a
   task's message goes to that task by itself; you do not see it.
+- When the owner hands a task a pull request to follow up on (review comments, a fix, an
+  answer), put its full link https://github.com/<owner>/<repo>/pull/<n> in the session_start or
+  session_prompt text: AgentHerd then follows that pull request for the task, and new comments on
+  it wake the task, also after it merged.
 - After a restart AgentHerd asks the owner whether to continue tasks it cut off. When they answer
   yes (all, or one by name), send each chosen task a session_prompt saying AgentHerd restarted
   and it should carry on from where it stopped. When they say no, leave them ended.

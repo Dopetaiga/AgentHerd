@@ -1,6 +1,6 @@
 // E2E for following the pull requests tasks open (docs/spec/04-herder.md "Pull requests"): people's comments
 // wake the task and reach the owner, bots do not, failed checks go to the task, a merge is told
-// once and ends the watch.
+// once and the watch stays for later comments (ADR 0051).
 
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -30,6 +30,8 @@ turns:
   - - message: "Renamed it."
     - end_turn: end_turn
   - - message: "Fixed the build."
+    - end_turn: end_turn
+  - - message: "Answered on the merged PR."
     - end_turn: end_turn
 `;
 
@@ -165,13 +167,51 @@ describe("E2E-GITHUB", () => {
     // The task reports; no separate notice says the same (ADR 0049).
     expect(texts(channel).filter((t) => t.startsWith("Checks failed"))).toEqual([]);
 
-    // The merge is told once and ends the watch.
+    // The merge is told once; the watch stays, so a later comment still reaches the task
+    // (ADR 0051).
     github.state = "MERGED";
     await clock.advance(120_000);
     await until(() => texts(channel).includes("PR #7 was merged."));
-    expect(texts(channel)).toContain("PR #7 was merged.");
-    expect(store.prWatches()).toEqual([]);
-  });
+    await clock.advance(120_000);
+    expect(texts(channel).filter((t) => t === "PR #7 was merged.")).toHaveLength(1);
+    expect(store.prWatches()).toMatchObject([{ number: 7, closed: "merged" }]);
+    await herd.endTask(taskId, "done");
+    github.comment("carol", "Why was foo renamed?");
+    await clock.advance(120_000);
+    await until(() => reports(channel).length === 5);
+    const after = store.transcript(taskId).filter((e) => e.role === "prompt");
+    expect(after.at(-1)?.text).toContain("carol commented: Why was foo renamed?");
+    expect(after.at(-1)?.text).toContain("already merged");
+
+    // Fourteen quiet days after that, the watch ends.
+    await clock.advance(15 * 24 * 60 * 60_000);
+    await until(() => store.prWatches().length === 0);
+    expect(store.auditRows("github.expired")).toHaveLength(1);
+  }, 20_000);
+
+  it("follows a pull request the owner hands to a task, whoever opened it", async () => {
+    const { herd, channel, clock, store, github } = await setup();
+    const { taskId, turn } = await herd.startTask(
+      "mock",
+      dir,
+      "Follow up on https://github.com/acme/app/pull/3 please",
+    );
+    await turn;
+    await until(() => store.prWatches().length > 0);
+    // #3 is someone else's: followed only because the owner handed it over.
+    expect(store.prWatches().find((w) => w.number === 3)).toMatchObject({ taskId, handed: true });
+    github.comment("dave", "Can you also update the docs?");
+    await clock.advance(120_000);
+    const handed = () =>
+      store
+        .transcript(taskId)
+        .filter((e) => e.role === "prompt")
+        .find((e) => e.text.includes("pull/3") && e.text.startsWith("(AgentHerd)"));
+    await until(() => handed() !== undefined);
+    expect(handed()?.text).toContain("the pull request the owner asked you to follow");
+    expect(handed()?.text).toContain("dave commented: Can you also update the docs?");
+    expect(texts(channel)).toEqual([]);
+  }, 20_000);
 
   it("keeps quiet without gh", async () => {
     const { herd, store, clock } = await setup();
