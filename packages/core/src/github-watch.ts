@@ -210,7 +210,6 @@ export class GitHubWatch {
   /** Tasks whose ended turn is not yet looked at; their pull requests wait for it. */
   private readonly turnsPending = new Set<string>();
   private self: string | undefined;
-  private lastError = "";
 
   constructor(ctx: HerdContext, options: GitHubOptions, tasks: WatchTask) {
     this.ctx = ctx;
@@ -269,10 +268,16 @@ export class GitHubWatch {
   }
 
   private failed(error: Error): void {
-    // gh missing, logged out or offline: told once in the audit, not every poll.
-    if (error.message === this.lastError) return;
-    this.lastError = error.message;
-    this.ctx.store.audit("github.error", { message: error.message });
+    // gh missing, logged out or offline: in the audit once per error; the owner hears when it
+    // lasts (ADR 0050).
+    this.ctx.sources.failed("github", error);
+  }
+
+  /** Reads a pull request; a read that worked means GitHub answers. */
+  private async read(repo: string, number: number): Promise<PrView> {
+    const pr = await readPr(this.gh, repo, number);
+    this.ctx.sources.ok("github");
+    return pr;
   }
 
   private async login(): Promise<string> {
@@ -292,7 +297,7 @@ export class GitHubWatch {
     if (links.length === 0 && mine.length === 0) return;
     const self = await this.login();
     for (const link of links) {
-      const pr = await readPr(this.gh, link.repo, link.number);
+      const pr = await this.read(link.repo, link.number);
       // Only a pull request this task opened: not one it just mentioned.
       const startedAt = f?.task.startedAt ?? this.clock.now().toISOString();
       if (pr.author !== self || pr.createdAt < startedAt || pr.state !== "OPEN") {
@@ -315,7 +320,7 @@ export class GitHubWatch {
     }
     for (const watch of mine) {
       // What the agent's account wrote while the task ran is the agent's own.
-      const pr = await readPr(this.gh, watch.repo, watch.number);
+      const pr = await this.read(watch.repo, watch.number);
       const own = pr.activity.filter((a) => a.login === self && !watch.seen.includes(a.id));
       if (own.length > 0) {
         store.savePrWatch({ ...watch, seen: [...watch.seen, ...own.map((a) => a.id)] });
@@ -339,8 +344,7 @@ export class GitHubWatch {
         continue;
       }
       try {
-        await this.check(watch, await readPr(this.gh, watch.repo, watch.number));
-        this.lastError = "";
+        await this.check(watch, await this.read(watch.repo, watch.number));
       } catch (error) {
         this.failed(error as Error);
       }

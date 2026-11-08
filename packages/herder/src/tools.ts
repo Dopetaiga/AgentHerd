@@ -162,6 +162,19 @@ function mailLines(host: HerderHost): string[] {
   ];
 }
 
+/** Watched sources that stopped answering (ADR 0050). */
+function sourceLines(host: HerderHost): string[] {
+  const down = host.sources?.() ?? [];
+  if (down.length === 0) return [];
+  return [
+    "Not working now (the owner's pull request or mail updates are paused until it answers again):",
+    ...down.map(
+      (s) =>
+        `- ${s.source === "github" ? "GitHub (gh)" : "Gmail (Composio)"} failing since ${s.since}: ${s.message.slice(0, 200)}${s.told ? " (owner told)" : ""}`,
+    ),
+  ];
+}
+
 /** A mail watch by id prefix or words of what it is about. */
 function oneWatch(host: HerderHost, query: string): { id: string; about: string } {
   const q = normalize(query);
@@ -298,6 +311,7 @@ export function herderTools(
           `Relay: ${host.relayTaskId()?.slice(0, 8) ?? "none"}`,
           ...appLines(host),
           ...mailLines(host),
+          ...sourceLines(host),
         ];
         return ok(lines.join("\n"));
       },

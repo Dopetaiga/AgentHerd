@@ -22,6 +22,7 @@ import type { AppTools, HerdReport, McpGateway } from "./mcp-gateway.ts";
 import type { Completer, Embedder } from "./memory-store.ts";
 import type { Outbox } from "./outbox.ts";
 import type { Registry } from "./registry.ts";
+import type { SourceHealth } from "./source-health.ts";
 import type { Store } from "./store.ts";
 import type { Task } from "./tasks.ts";
 import type { CoreTexts } from "./texts.ts";
@@ -85,6 +86,8 @@ export interface HerdOptions {
   appNames?: () => string[];
   /** Minutes between two looks at the owner's mail watches (ADR 0048). */
   mailPollMinutes?: number;
+  /** A watched source failing this long is told to the owner (default 30, ADR 0050). */
+  sourceDownMinutes?: number;
   /**
    * Follows pull requests tasks open on GitHub with `gh` (ADR 0047). Without it,
    * nothing is followed.
@@ -216,6 +219,8 @@ export interface HerdContext {
   /** Messages for the owner, stored until the channel took them. */
   readonly outbox: Outbox;
   readonly workspaces: Workspaces;
+  /** Whether the watched sources (GitHub, Gmail) still answer. */
+  readonly sources: SourceHealth;
   /** Pull requests tasks opened, when `github` is set. */
   github(): GitHubWatch | undefined;
   /** The current Herder, if any. It can change at runtime. */
