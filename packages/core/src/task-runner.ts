@@ -120,6 +120,8 @@ export class TaskRunner {
       busy: false,
     };
     ctx.following.set(sessionId, f);
+    // Pull requests the owner names in the request are followed for this task (ADR 0051).
+    ctx.github()?.handed(sessionId, prompt === ownerText ? ownerText : `${ownerText}\n${prompt}`);
     ctx.registry.add(sessionId, profile.id, f.cwd);
     ctx.board.changed();
 
@@ -318,6 +320,7 @@ export class TaskRunner {
     const f = this.ctx.following.get(taskId);
     if (f === undefined) return Promise.reject(new Error(`unknown task ${taskId}`));
     const trigger = fromOwner ? this.takeOwnerMessage() : undefined;
+    if (fromOwner) this.ctx.github()?.handed(taskId, text);
     // An ended task (also one from before a restart) is started again (ADR 0039).
     if (f.ended && f.reopening === undefined) {
       f.reopening = this.reopen(f).finally(() => {

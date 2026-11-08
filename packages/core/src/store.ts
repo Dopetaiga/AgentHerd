@@ -638,8 +638,10 @@ export interface PrWatch {
   createdAt: string;
   /** Last comment, review or failed check; a watch quiet for long ends. */
   activeAt: string;
-  /** Set once it merged or closed. */
+  /** Set once it merged or closed; the watch then keeps going for 14 quiet days (ADR 0051). */
   closed?: "merged" | "closed";
+  /** The owner handed this pull request to the task; it need not be the task's own. */
+  handed?: boolean;
 }
 
 export function prKey(w: Pick<PrWatch, "repo" | "number">): string {
