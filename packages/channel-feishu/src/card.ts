@@ -293,11 +293,11 @@ export function renderCard(view: View, locale: Locale = DEFAULT_LOCALE): Record<
         elements.push(collapsiblePanel(t.fullReply, view.fullReply));
       }
       if (view.automaticDecisions.length > 0) {
+        // Folded: the owner sees how many, and opens the list when they care (ADR 0049).
         elements.push(
-          markdown(
-            `**${t.automaticDecisions}**\n${view.automaticDecisions
-              .map((decision) => `- ${decision}`)
-              .join("\n")}`,
+          collapsiblePanel(
+            `${t.automaticDecisions} · ${view.automaticDecisions.length}`,
+            view.automaticDecisions.map((decision) => `- ${decision}`).join("\n"),
           ),
         );
       }

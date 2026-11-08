@@ -54,14 +54,16 @@ flowchart LR
 ## 2. `herd_report`
 
 Input as in [04-herder.md §2](04-herder.md): `state` (`progress`, `waiting`, `ready`, `blocked`,
-`failed`, `dropped`), `summary` (≤ 600 characters, longer is cut), optional `changes`, `tests`,
+`failed`, `dropped`), `summary` (one or two sentences for the owner, ≤ 100 words; longer is
+refused with a tool error, [ADR 0049](../adr/0049-short-messages-written-by-the-agent.md)), optional `changes`, `tests`,
 `risks`, `links` (strings). The gateway validates it, hands it to the core for the task the token
 belongs to, and answers `"reported"`. The core treats it as the agent report source of 04-herder
 §2.
 
-`herd_ack(text)` ([ADR 0046](../adr/0046-tell-the-owner-at-the-right-time.md)): one line (≤ 200
-characters, longer is cut) sent to the owner at once, labeled with the task. Once per turn and
-only while a turn runs; otherwise the answer is a tool error.
+`herd_ack(text)` ([ADR 0046](../adr/0046-tell-the-owner-at-the-right-time.md), ADR 0049): one line
+(≤ 30 words) sent to the owner at once, labeled with the task, as a reply to the owner's message
+that started the turn when there is one. Once per turn, only while a turn runs, and not in turns
+AgentHerd started itself; otherwise, or when longer, the answer is a tool error.
 
 ## 3. Apps through Composio
 

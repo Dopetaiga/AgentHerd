@@ -493,6 +493,17 @@ describe("tools", () => {
     expect(rec.said).toEqual(["测试挂了"]);
     expect(ctx.asked && ctx.notified).toBe(true);
   });
+
+  it("ask and notify refuse a message over 100 words (ADR 0049)", async () => {
+    const { call, rec } = tools({});
+    const long = "测试挂了，原因是配置文件里的端口被占用。".repeat(12);
+    await expect(call("notify", { text: long })).rejects.toThrow(/too long/);
+    await expect(call("ask", { question: long, options: ["好", "不好"] })).rejects.toThrow(
+      /too long/,
+    );
+    expect(rec.said).toEqual([]);
+    expect(rec.asked).toEqual([]);
+  });
 });
 
 describe("session_start folder check (ADR 0035)", () => {

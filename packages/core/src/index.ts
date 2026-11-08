@@ -94,15 +94,23 @@ export {
   SERVICE_ID_PATTERN,
   type SecretStore,
 } from "./models.ts";
+export {
+  ACK_WORDS_MAX,
+  cutWords,
+  fitsOwner,
+  OWNER_WORDS_MAX,
+  ownerWords,
+  tooLong,
+} from "./owner-text.ts";
 export type { PipelineContext, PipelineResult } from "./pipeline.ts";
 export { decide } from "./pipeline.ts";
 export type { SessionListener } from "./registry.ts";
 export { Registry } from "./registry.ts";
-export type { ReportBody, SummaryAnswer } from "./report.ts";
+export type { ReportBody, ReportBodyOptions, SummaryAnswer } from "./report.ts";
 export {
   formatDuration,
   REPLY_HINT_CHARS,
-  REPORT_MAX_CHARS,
+  REPORT_MAX_WORDS,
   replyHint,
   reportBody,
   reportView,

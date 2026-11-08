@@ -4,6 +4,7 @@
 import { randomBytes } from "node:crypto";
 import type { AppHints, ReportState } from "@agentherd/protocol";
 import type { AppCall } from "./app-calls.ts";
+import { ACK_WORDS_MAX, OWNER_WORDS_MAX, tooLong } from "./owner-text.ts";
 
 export interface JsonRpcMessage {
   jsonrpc: "2.0";
@@ -51,7 +52,9 @@ export const HERD_REPORT_TOOL = {
   description:
     "Tell AgentHerd (and the owner) where this task stands. Call it when you finish, get stuck, " +
     "need the owner, or give up. state: progress | waiting (need the owner) | ready (done) | " +
-    "blocked | failed | dropped. summary: one short paragraph for the owner, at most 600 characters. " +
+    "blocked | failed | dropped. summary: what the owner reads on the phone, one or two sentences " +
+    `and at most ${OWNER_WORDS_MAX} words: the result and what the owner has to do, not the steps ` +
+    "(details go in changes, tests, risks, links). A longer summary is refused. " +
     "waiting, blocked and failed reach the owner at once. If you end your turn while work you " +
     "started still runs in the background (a build, a test run, a subagent), call it with state " +
     "progress last: AgentHerd then checks back with you later instead of reporting the task done.",
@@ -76,8 +79,9 @@ export const HERD_ACK_TOOL = {
   name: "herd_ack",
   description:
     "Tell the owner in one short line what you are about to do, before you start real work on " +
-    'a new request (e.g. "Running the core tests, then fixing what fails"). At most once per ' +
-    "turn. Not for progress or results: use herd_report for those.",
+    'a new request (e.g. "Running the core tests, then fixing what fails"). It is sent as a ' +
+    `reply to their message. At most once per turn and ${ACK_WORDS_MAX} words. Not for progress ` +
+    "or results: use herd_report for those.",
   inputSchema: {
     type: "object",
     properties: { text: { type: "string", maxLength: ACK_MAX } },
@@ -96,6 +100,8 @@ export function parseReport(input: unknown): HerdReport | string {
     return `state must be one of ${STATES.join(", ")}`;
   }
   if (typeof v.summary !== "string" || v.summary.trim() === "") return "summary is required";
+  const long = tooLong(v.summary.trim());
+  if (long !== undefined) return `summary ${long}`;
   const report: HerdReport = {
     state: v.state as ReportState,
     summary: v.summary.slice(0, REPORT_SUMMARY_MAX),

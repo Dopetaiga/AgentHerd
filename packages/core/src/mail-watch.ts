@@ -7,6 +7,7 @@ import type { Clock, Timer } from "./clock.ts";
 import { type HerdContext, say } from "./herd-context.ts";
 import type { AppTools } from "./mcp-gateway.ts";
 import { MULTI_EXECUTE } from "./mcp-gateway.ts";
+import { cutWords, fitsOwner } from "./owner-text.ts";
 import type { MailWatch } from "./store.ts";
 
 export const MAIL_POLL_MINUTES = 3;
@@ -15,7 +16,9 @@ export const MAIL_WATCHES_MAX = 10;
 /** Messages read per watch and look. */
 const FETCH_MAX = 10;
 /** Messages listed in one owner message; the rest are counted. */
-const TOLD_MAX = 5;
+const TOLD_MAX = 3;
+/** Preview characters in the owner's message (the Herder hears PREVIEW_MAX). */
+const OWNER_PREVIEW_MAX = 40;
 const SEEN_MAX = 200;
 const PREVIEW_MAX = 100;
 const FETCH_SLUG = "GMAIL_FETCH_EMAILS";
@@ -258,14 +261,39 @@ export class MailWatches {
     });
     store.audit("mail.new", { id: watch.id, about: watch.about, count: fresh.length });
     const shown = fresh.slice(-TOLD_MAX);
-    const lines = shown.map((m) => texts.mailLine(m.sender, m.subject, m.preview, m.url));
-    if (fresh.length > shown.length) lines.unshift(texts.mailMore(fresh.length - shown.length));
-    await say(ctx, texts.mailNew(watch.about, lines.join("\n")));
+    await say(ctx, this.ownerText(watch.about, fresh));
     // The Herder hears what the owner was told, so "what did it say?" makes sense to it.
     ctx.herder()?.event({
       kind: "mail",
       title: watch.about,
       text: shown.map((m) => `- ${m.sender}: ${m.subject} — ${m.preview}`).join("\n"),
     });
+  }
+
+  /**
+   * The owner's message about new mail, within OWNER_WORDS_MAX (ADR 0049): the newest
+   * TOLD_MAX as sender, subject and link, with short previews while they fit; the rest counted.
+   */
+  private ownerText(about: string, fresh: MailMessage[]): string {
+    const { texts } = this.ctx;
+    const text = (shown: MailMessage[], previews: boolean): string => {
+      const lines = shown.map((m) =>
+        texts.mailLine(
+          m.sender,
+          m.subject,
+          previews ? tidy(m.preview, OWNER_PREVIEW_MAX) : "",
+          m.url,
+        ),
+      );
+      if (fresh.length > shown.length) lines.push(texts.mailMore(fresh.length - shown.length));
+      return texts.mailNew(about, lines.join("\n"));
+    };
+    for (const previews of [true, false]) {
+      for (let n = Math.min(TOLD_MAX, fresh.length); n >= 1; n--) {
+        const candidate = text(fresh.slice(-n), previews);
+        if (fitsOwner(candidate)) return candidate;
+      }
+    }
+    return cutWords(text(fresh.slice(-1), false));
   }
 }

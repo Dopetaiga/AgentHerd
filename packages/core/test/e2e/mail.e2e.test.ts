@@ -12,6 +12,7 @@ import { FakeClock } from "../../src/clock.ts";
 import { Herd } from "../../src/herd.ts";
 import type { HerderEvent, HerderHost } from "../../src/herder-port.ts";
 import type { AppTools } from "../../src/mcp-gateway.ts";
+import { fitsOwner } from "../../src/owner-text.ts";
 import { Store } from "../../src/store.ts";
 
 const dir = mkdtempSync(join(tmpdir(), "agentherd-mail-"));
@@ -187,6 +188,31 @@ describe("E2E-MAIL", () => {
     await clock.advance(10 * 60_000);
     expect(gmail.queries).toHaveLength(asked);
     expect(clock.pending()).toBe(0);
+  });
+
+  it("keeps a burst of mail to one short message (ADR 0049)", async () => {
+    const { channel, clock, gmail, host } = await setup();
+    await host.watchMail?.("all new mail", "in:inbox");
+    const body = "Lorem ipsum dolor sit amet ".repeat(20);
+    for (let i = 1; i <= 6; i++) {
+      gmail.receive(
+        `b${i}`,
+        `Sender ${i} <s${i}@x.com>`,
+        `Subject ${i}`,
+        `2026-11-04T00:1${i}:00Z`,
+        body,
+      );
+    }
+    await clock.advance(3 * 60_000);
+    await until(() => texts(channel).length > 0);
+    const [told] = texts(channel);
+    expect(texts(channel)).toHaveLength(1);
+    expect(fitsOwner(told ?? "")).toBe(true);
+    expect(told).toContain("Subject 6");
+    expect((told ?? "").match(/https:\/\/mail/g)?.length ?? 0).toBeLessThanOrEqual(3);
+    expect(told).toMatch(/and \d+ more/);
+    // A preview is a glimpse, not the mail.
+    expect(told).not.toContain(body.trim());
   });
 
   it("keeps watching across a restart", async () => {

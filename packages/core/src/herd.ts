@@ -163,7 +163,7 @@ export class Herd {
       opts.github === undefined
         ? undefined
         : new GitHubWatch(this.ctx, opts.github, {
-            prompt: (taskId, text) => this.promptTask(taskId, text),
+            prompt: (taskId, text) => this.runner.promptTask(taskId, text, [], false),
           });
   }
 

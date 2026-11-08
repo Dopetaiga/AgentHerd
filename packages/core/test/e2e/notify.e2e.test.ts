@@ -8,7 +8,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { StdioMcpServer } from "@agentherd/acp-client";
 import { FakeChannel } from "@agentherd/channel-fake";
-import type { AgentProfile, TextView, View } from "@agentherd/protocol";
+import type { AgentProfile, MessageRef, TextView, View } from "@agentherd/protocol";
 import { afterEach, describe, expect, it } from "vitest";
 import { FakeClock } from "../../src/clock.ts";
 import { Herd } from "../../src/herd.ts";
@@ -178,5 +178,68 @@ describe("E2E-NOTIFY", () => {
     await until(() => reports(channel).length > 0);
     expect(reports(channel)).toHaveLength(1);
     expect(store.outbox()).toEqual([]);
+  });
+  it("herd_ack answers the owner's message as a reply (ADR 0049)", async () => {
+    const { herd, tokens, channel } = await setup(
+      profile(`
+turns:
+  - - message: "Done."
+    - end_turn: end_turn
+  - - sleep: 400
+    - message: "Lint fixed."
+    - end_turn: end_turn
+`),
+    );
+    const { turn } = await herd.startTask("mock", dir, "Fix the tests");
+    await turn;
+    const [report] = reports(channel);
+    void channel.reply(report?.ref as MessageRef, "Also fix lint");
+    await until(() => tokens.length > 1 || herd.tasks()[0]?.stage === "working");
+    const token = tokens.at(-1) as string;
+    const ack = await herd.mcp(token, call("herd_ack", { text: "Fixing lint now" }));
+    expect(ack?.result).toEqual({ content: [{ type: "text", text: "sent" }] });
+    const sent = channel.messages.find(
+      (m) => m.view.kind === "text" && (m.view as TextView).text === "Fixing lint now",
+    );
+    expect(sent?.view).toMatchObject({ replyTo: channel.received[0] });
+    await until(() => reports(channel).length === 2);
+  });
+
+  it("herd_ack refuses a long line, and AgentHerd's own checks", async () => {
+    const { herd, tokens, clock } = await setup(profile(BACKGROUND));
+    const { turn } = await herd.startTask("mock", dir, "Build it");
+    await until(() => tokens.length > 0);
+    const token = tokens[0] as string;
+    const long = await herd.mcp(
+      token,
+      call("herd_ack", { text: Array.from({ length: 40 }, (_, i) => `w${i}`).join(" ") }),
+    );
+    expect(long?.result).toMatchObject({ isError: true });
+    expect(JSON.stringify(long?.result)).toContain("too long");
+    await herd.mcp(token, call("herd_report", { state: "progress", summary: "build running" }));
+    await turn;
+    await clock.advance(60_000);
+    await until(() => herd.tasks()[0]?.stage !== "working" || tokens.length > 1);
+    const check = await herd.mcp(tokens.at(-1) as string, call("herd_ack", { text: "Checking" }));
+    expect(JSON.stringify(check?.result)).toMatch(/isError|not needed/);
+  });
+
+  it("herd_report refuses a summary over 100 words", async () => {
+    const { herd, tokens } = await setup(profile(SLOW));
+    const { turn } = await herd.startTask("mock", dir, "Deploy");
+    await until(() => tokens.length > 0);
+    const summary = Array.from({ length: 120 }, (_, i) => `word${i}`).join(" ");
+    const res = await herd.mcp(
+      tokens[0] as string,
+      call("herd_report", { state: "ready", summary }),
+    );
+    expect(res?.result).toMatchObject({ isError: true });
+    expect(JSON.stringify(res?.result)).toContain("summary too long");
+    const zh = await herd.mcp(
+      tokens[0] as string,
+      call("herd_report", { state: "ready", summary: "部署好了，请在设置里打开新功能开关。" }),
+    );
+    expect(zh?.result).not.toMatchObject({ isError: true });
+    await turn;
   });
 });

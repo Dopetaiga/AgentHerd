@@ -426,7 +426,9 @@ export class GitHubWatch {
           store.audit("github.wake-error", { taskId: watch.taskId, message: error.message });
         });
     }
-    if (work.length > 0) {
+    // A task handed the work tells the owner itself (herd_ack, then its report); a separate
+    // notice would say the same twice (ADR 0049).
+    if (work.length > 0 && !wake) {
       const who = [...new Set(work.map((a) => a.login))].join(", ");
       const first = work[work.length - 1];
       await tell(
@@ -439,7 +441,7 @@ export class GitHubWatch {
       );
     }
     for (const a of approvals) await tell(texts.prApproved(watch.number, a.login));
-    if (failedNow.length > 0) {
+    if (failedNow.length > 0 && !wake) {
       await tell(texts.prChecksFailed(watch.number, failedNow.join(", "), wake), "alarm");
     }
     event(

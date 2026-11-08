@@ -108,7 +108,7 @@ turns:
     expect(report?.fullReply).toBe(LONG);
   });
 
-  it("falls back to the original reply when the summary turn calls tools", async () => {
+  it("cuts the reply and attaches it whole when the summary turn calls tools", async () => {
     const { channel, herd } = await setup(`
 turns:
   - - message: "${LONG}"
@@ -119,8 +119,10 @@ turns:
 `);
     await herd.run("mock", dir, "task");
     const [report] = reports(channel);
-    expect(report?.body).toBe(LONG);
-    expect(report?.summarized).toBe(false);
+    expect(report?.body.endsWith("…")).toBe(true);
+    expect(report?.body.length).toBeLessThan(LONG.length);
+    expect(report?.summarized).toBe(true);
+    expect(report?.fullReply).toBe(LONG);
   });
 });
 

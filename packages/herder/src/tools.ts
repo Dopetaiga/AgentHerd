@@ -4,6 +4,7 @@
 import { statSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
 import type { HerderHost, OwnerImage, Task } from "@agentherd/core";
+import { tooLong } from "@agentherd/core";
 import type { AgentTool, AgentToolResult } from "@agentherd/herder-loop";
 import { arr, obj, opt, str } from "@earendil-works/pi-schema";
 import { agentForModel } from "./agent-models.ts";
@@ -503,6 +504,8 @@ export function herderTools(
         "Asks the owner one question with suggested answers as buttons; AgentHerd adds an 「其他」 button for typing their own. End your turn after it.",
       parameters: askSchema,
       execute: async (_id: string, args: { question: string; options: string[] }) => {
+        const long = tooLong(args.question);
+        if (long !== undefined) throw new Error(`question ${long}`);
         const other = otherOption(host.locale);
         const options = args.options.map((o) => o.trim()).filter((o) => o !== "" && o !== other);
         const all = [...options.slice(0, 4), other];
@@ -515,9 +518,11 @@ export function herderTools(
     {
       name: "notify",
       label: "Tell the owner",
-      description: "Sends a short message to the owner.",
+      description: "Sends a short message to the owner, at most 100 words.",
       parameters: notifySchema,
       execute: async (_id: string, args: { text: string }) => {
+        const long = tooLong(args.text);
+        if (long !== undefined) throw new Error(long);
         await host.say(args.text);
         turn().notified = true;
         return ok("sent");
