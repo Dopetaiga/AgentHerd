@@ -303,7 +303,9 @@ export function renderCard(view: View, locale: Locale = DEFAULT_LOCALE): Record<
           ),
         );
       }
-      elements.push(actionRow(view.taskId, "relay", t.relayToTask));
+      if (view.result !== "done") {
+        elements.push(actionRow(view.taskId, "relay", t.relayToTask));
+      }
       const header: Record<string, unknown> = {
         title: { tag: "plain_text", content: `${REPORT_ICON[view.result]} ${view.title}` },
         template: reportTemplate(view.result),
