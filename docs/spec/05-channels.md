@@ -85,6 +85,11 @@ Long messages are folded, never shortened: over `foldChars` (default 400) the ca
 first lines and puts the rest in a collapsible panel; code blocks and logs are collapsed; over
 the card size limit the text is stored as a file and sent as a link.
 
+Feishu card markdown does not render LaTeX. Math spans (`$…$` that look like TeX, `$$…$$`,
+`\(…\)`, `\[…\]`) are written as plain Unicode text in the card: `$O(n \log \log n)$` shows as
+O(n log log n), `$x^2 \le \alpha$` as x² ≤ α; code is left alone and money like "$5" stays
+(`packages/channel-feishu/src/math.ts`). Only the display changes; the stored text is the agent's.
+
 Tool-call activity of agents is stored, not sent. Nothing the agent says to the owner is
 filtered ([ADR 0019](../adr/0019-relay-verbatim-board-and-reports.md)).
 
