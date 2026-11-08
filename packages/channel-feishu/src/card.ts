@@ -9,6 +9,7 @@ import type {
   View,
 } from "@agentherd/protocol";
 import { DEFAULT_LOCALE } from "@agentherd/protocol";
+import { readableMath } from "./math.ts";
 import type { CardTexts } from "./texts.ts";
 import { CARD_TEXTS } from "./texts.ts";
 
@@ -90,8 +91,9 @@ function actionRow(target: string, action: string, label: string): Record<string
   };
 }
 
+/** A markdown element; TeX math is written as plain text, which Feishu cards can show. */
 function markdown(content: string): Record<string, unknown> {
-  return { tag: "markdown", content };
+  return { tag: "markdown", content: readableMath(content) };
 }
 
 function makeCard(
@@ -275,7 +277,7 @@ export function renderCard(view: View, locale: Locale = DEFAULT_LOCALE): Record<
           stage: [{ text: t.stages[row.stage], color: stageColor(row.stage) }],
           project: row.project,
           agent: row.agent,
-          report: row.lastReport,
+          report: readableMath(row.lastReport),
           updated: clock(row.updatedAt),
         })),
       };
