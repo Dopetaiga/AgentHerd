@@ -177,9 +177,23 @@ describe("E2E-RESTART", () => {
     await first.herd.start();
     await first.channel.say(`/run mock ${dir} Long job`);
     await until(() => first.herd.openTasks()[0]?.stage === "working");
+    // Feishu takes a while to answer.
+    const send = first.channel.send.bind(first.channel);
+    first.channel.send = async (view) => {
+      await new Promise((r) => setTimeout(r, 200));
+      return send(view);
+    };
 
     await first.herd.stop();
     expect(texts(first.channel)).toContain(T.stoppingTasks(["Long job"]));
     expect(unended(store)).toEqual([]);
+    // The cut-off turn's report went out before the stop finished, so the next start has
+    // nothing left to send again.
+    expect(first.channel.ofKind("report")).toHaveLength(1);
+    expect(store.outbox()).toEqual([]);
+    const second = herdOn(store);
+    await second.herd.start();
+    await new Promise((r) => setTimeout(r, 100));
+    expect(second.channel.ofKind("report")).toEqual([]);
   });
 });
