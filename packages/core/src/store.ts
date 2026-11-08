@@ -20,6 +20,7 @@ import {
 import {
   HERDER_LOG_TABLE_SQL,
   HERDER_TURNS_TABLE_SQL,
+  INTAKE_WATCHES_TABLE_SQL,
   LATEST_SCHEMA_VERSION,
   LEGACY_HERDER_STATE_KEY,
   MAIL_WATCHES_TABLE_SQL,
@@ -142,6 +143,10 @@ export class Store {
       if (version < 11) {
         this.db.exec(MAIL_WATCHES_TABLE_SQL);
         this.db.prepare("UPDATE schema_version SET version = ?").run(11);
+      }
+      if (version < 12) {
+        this.db.exec(INTAKE_WATCHES_TABLE_SQL);
+        this.db.prepare("UPDATE schema_version SET version = ?").run(12);
       }
     }
 
@@ -536,6 +541,24 @@ export class Store {
     this.db.prepare("DELETE FROM mail_watches WHERE id = ?").run(id);
   }
 
+  saveIntakeWatch(watch: IntakeWatch): void {
+    this.db
+      .prepare("INSERT OR REPLACE INTO intake_watches(id, data_json, created_at) VALUES (?, ?, ?)")
+      .run(watch.id, JSON.stringify(watch), watch.createdAt);
+  }
+
+  /** New-work watches the owner asked for, oldest first (ADR 0052). */
+  intakeWatches(): IntakeWatch[] {
+    return this.db
+      .prepare("SELECT data_json FROM intake_watches ORDER BY created_at, id")
+      .all()
+      .map((r) => JSON.parse(String(r.data_json)) as IntakeWatch);
+  }
+
+  deleteIntakeWatch(id: string): void {
+    this.db.prepare("DELETE FROM intake_watches WHERE id = ?").run(id);
+  }
+
   /** The channel took the message, or it was given up. */
   deleteOutbox(id: string): void {
     this.db.prepare("DELETE FROM outbox WHERE id = ?").run(id);
@@ -661,6 +684,32 @@ export interface OutboxRow {
 }
 
 /** Mail the owner asked to be told about (docs/spec/04-herder.md "Mail"). */
+/** New work on GitHub the owner asked to be offered (ADR 0052). */
+export interface IntakeWatch {
+  id: string;
+  /** Issues assigned to the owner, or pull requests waiting for their review. */
+  kind: "issues" | "reviews";
+  /** `owner/name`; every repository when missing. */
+  repo?: string;
+  label?: string;
+  /** What the owner wants to hear about, in their words. */
+  about: string;
+  /** New items start a task without asking: the owner said so. */
+  auto: boolean;
+  createdAt: string;
+  /** Urls of items already seen, newest last. */
+  seen: string[];
+  /** Items offered with 「开任务 / 忽略」 the owner has not answered yet. */
+  offers: IntakeOffer[];
+}
+
+export interface IntakeOffer {
+  id: string;
+  item: { kind: "issues" | "reviews"; repo: string; number: number; title: string; url: string };
+  /** The offer's message, to take its buttons away once answered. */
+  ref?: MessageRef;
+}
+
 export interface MailWatch {
   id: string;
   /** What the owner wants to hear about, in their words, e.g. "导师的邮件". */

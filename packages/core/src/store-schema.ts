@@ -111,7 +111,14 @@ export const MAIL_WATCHES_TABLE_SQL = `CREATE TABLE IF NOT EXISTS mail_watches(
   created_at TEXT NOT NULL
 );`;
 
-export const LATEST_SCHEMA_VERSION = 11;
+/** New-work watches the owner asked for (ADR 0052). */
+export const INTAKE_WATCHES_TABLE_SQL = `CREATE TABLE IF NOT EXISTS intake_watches(
+  id TEXT PRIMARY KEY,
+  data_json TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);`;
+
+export const LATEST_SCHEMA_VERSION = 12;
 
 export const SCHEMA_SQL = `
 CREATE TABLE sessions(
@@ -174,4 +181,5 @@ ${HERDER_LOG_TABLE_SQL}
 ${OUTBOX_TABLE_SQL}
 ${PR_WATCHES_TABLE_SQL}
 ${MAIL_WATCHES_TABLE_SQL}
+${INTAKE_WATCHES_TABLE_SQL}
 `;

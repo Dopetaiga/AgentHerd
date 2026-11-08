@@ -20,6 +20,7 @@ import { memorySnapshot, memoryTools, recallBlock } from "./memory.ts";
 import type { TierPlacement } from "./model-guide.ts";
 import {
   eventsPrompt,
+  intakePrompt,
   nowLine,
   ownerAnswerPrompt,
   ownerMessagePrompt,
@@ -64,6 +65,7 @@ export interface HerderModel {
 type Job = (
   | { kind: "owner"; text: string; images: OwnerImage[] }
   | { kind: "answer"; question: string; answer: string }
+  | { kind: "intake"; text: string; auto: boolean }
 ) & { recorded?: boolean };
 
 type Attempt = { ok: true } | { ok: false; message: string; acted: boolean; overflow: boolean };
@@ -171,6 +173,10 @@ export class Herder implements HerderPort {
     this.enqueue({ kind: "answer", question, answer });
   }
 
+  intake(text: string, auto: boolean): void {
+    this.enqueue({ kind: "intake", text, auto });
+  }
+
   /**
    * Reports and alarms already reach the owner by themselves, so an event starts no turn: the
    * Herder only repeated them. They go with the owner's next message as context.
@@ -254,6 +260,21 @@ export class Herder implements HerderPort {
           ? ""
           : await recallBlock(this.host.memory, job.text, this.host.embedder);
       if (recall !== "") prompt = `${prompt}\n\n${recall}`;
+    } else if (job.kind === "intake") {
+      // The item's title is someone else's words: it can name the project (repository name)
+      // but is quoted to the model as untrusted (ADR 0052).
+      this.turn = {
+        kind: "intake",
+        ownerText: job.text,
+        // Only the repository name may pick the project, not words of the title.
+        typedText: /\S+\/(\S+)#\d+/.exec(job.text)?.[1] ?? "",
+        images: [],
+        asked: false,
+        notified: false,
+        pickedDirs: [],
+      };
+      if (!job.recorded) this.host.recordTurn("event", job.text);
+      prompt = intakePrompt(job.text, job.auto);
     } else {
       const text = `${this.lastOwnerText}\n${job.answer}`;
       this.turn = {

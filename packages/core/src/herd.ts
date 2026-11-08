@@ -29,6 +29,7 @@ import {
   type OwnerImage,
 } from "./herder-port.ts";
 import { Inbox } from "./inbox.ts";
+import { Intake, type IntakeItem, type IntakeRequest, itemLine } from "./intake.ts";
 import { MailWatches } from "./mail-watch.ts";
 import { type JsonRpcMessage, McpGateway } from "./mcp-gateway.ts";
 import { Outbox } from "./outbox.ts";
@@ -66,6 +67,7 @@ export class Herd {
   private started = false;
   private herder: HerderPort | undefined;
   private readonly github: GitHubWatch | undefined;
+  private readonly intake: Intake | undefined;
   /** Mail the owner asked to hear about; only with connected apps (ADR 0048). */
   private readonly mail: MailWatches | undefined;
   /** Tasks cut off by the last stop or crash, asked about once the channel is up. */
@@ -136,6 +138,7 @@ export class Herd {
       herder: () => this.herder,
       mode: () => this.mode,
       github: () => this.github,
+      intake: () => this.intake,
     };
     this.relays = new Relay(this.ctx);
     this.runner = new TaskRunner(this.ctx, this.relays, this);
@@ -159,6 +162,16 @@ export class Herd {
         : new MailWatches(this.ctx, {
             apps: opts.apps,
             ...(opts.mailPollMinutes === undefined ? {} : { pollMinutes: opts.mailPollMinutes }),
+          });
+    this.intake =
+      opts.github === undefined
+        ? undefined
+        : new Intake(this.ctx, {
+            run: opts.github.run,
+            ...(opts.intakePollMinutes === undefined
+              ? {}
+              : { pollMinutes: opts.intakePollMinutes }),
+            start: (item, auto) => this.startIntake(item, auto),
           });
     this.herder = opts.herder?.(this.herderHost());
     this.github =
@@ -223,6 +236,16 @@ export class Herd {
               return this.mail.add(about, query);
             },
             unwatchMail: (id: string) => this.mail?.remove(id) ?? false,
+          }),
+      ...(this.intake === undefined
+        ? {}
+        : {
+            intakeWatches: () => this.intake?.list() ?? [],
+            watchIntake: async (request: IntakeRequest) => {
+              if (this.intake === undefined) throw new Error("GitHub is not set up");
+              return this.intake.add(request);
+            },
+            unwatchIntake: (id: string) => this.intake?.remove(id) ?? false,
           }),
       sources: () => this.ctx.sources.list(),
       checkModel: async (ref) => this.opts.agentModels?.check?.(ref) ?? { ok: true },
@@ -307,6 +330,7 @@ export class Herd {
     this.ctx.outbox.start();
     this.github?.start();
     this.mail?.start();
+    this.intake?.start();
     await this.endOldRelay(relay?.taskId);
     await this.askToResume();
     if (this.opts.closeStaleTasks !== false) {
@@ -411,6 +435,19 @@ export class Herd {
     return this.runner.endTask(taskId, why);
   }
 
+  /** Looks at the new-work watches now (tests). */
+  pollIntake(): Promise<void> {
+    return this.intake?.poll() ?? Promise.resolve();
+  }
+
+  /** Work for an item goes through the Herder, which finds the project and starts the task. */
+  private startIntake(item: IntakeItem, auto: boolean): boolean {
+    const herder = this.herder;
+    if (herder?.intake === undefined) return false;
+    herder.intake(itemLine(item), auto);
+    return true;
+  }
+
   /** Looks at the owner's mail watches now (tests). */
   pollMail(): Promise<void> {
     return this.mail?.poll() ?? Promise.resolve();
@@ -442,6 +479,7 @@ export class Herd {
     this.ctx.outbox.stop();
     this.github?.stop();
     this.mail?.stop();
+    this.intake?.stop();
     if (this.started) await this.opts.channel.stop();
     this.store.audit("herd.stopped", {});
     if (this.opts.store === undefined) this.store.close();

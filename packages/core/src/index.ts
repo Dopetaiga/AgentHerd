@@ -29,6 +29,16 @@ export type {
 export { HERDER_RETRY_TARGET } from "./herder-port.ts";
 export type { Answerable, InboxOptions, OwnerAnswer } from "./inbox.ts";
 export { BODY_MAX_LINES, DEFAULT_REMIND_MINUTES, Inbox, itemBody, itemView } from "./inbox.ts";
+export type { IntakeItem, IntakeKind, IntakeOptions, IntakeRequest } from "./intake.ts";
+export {
+  INTAKE_POLL_MINUTES,
+  INTAKE_TARGET,
+  INTAKE_WATCHES_MAX,
+  Intake,
+  itemLine,
+  searchArgs,
+  searchItems,
+} from "./intake.ts";
 export type { MailMessage, MailWatchOptions } from "./mail-watch.ts";
 export { fetchMail, MAIL_POLL_MINUTES, MAIL_WATCHES_MAX, MailWatches } from "./mail-watch.ts";
 export type {
@@ -121,6 +131,8 @@ export { SOURCE_DOWN_MINUTES, SourceHealth, sourceHint } from "./source-health.t
 export type {
   AuditRow,
   DecisionRow,
+  IntakeOffer,
+  IntakeWatch,
   MailWatch,
   SessionRow,
   StoredItem,

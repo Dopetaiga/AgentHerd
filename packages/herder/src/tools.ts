@@ -6,7 +6,7 @@ import { isAbsolute, join, resolve } from "node:path";
 import type { HerderHost, OwnerImage, Task } from "@agentherd/core";
 import { tooLong } from "@agentherd/core";
 import type { AgentTool, AgentToolResult } from "@agentherd/herder-loop";
-import { arr, obj, opt, str } from "@earendil-works/pi-schema";
+import { arr, bool, obj, opt, str } from "@earendil-works/pi-schema";
 import { agentForModel } from "./agent-models.ts";
 import { lessonsText, ownerPrefsText, pastLessons } from "./memory.ts";
 import { placeModels, TIERS, type TierPlacement, tiersText } from "./model-guide.ts";
@@ -15,7 +15,8 @@ import { composeTaskPrompt, HERDER_LABEL } from "./prompt.ts";
 
 /** What the current Herder turn is about. */
 export interface TurnContext {
-  kind: "owner" | "answer" | "event";
+  /** `intake`: new work the owner tapped 「开任务」 on, or their automatic watch found (ADR 0052). */
+  kind: "owner" | "answer" | "event" | "intake";
   /** The owner's words this turn may pass on: the message, or the one the answer belongs to. */
   ownerText: string;
   /**
@@ -162,6 +163,21 @@ function mailLines(host: HerderHost): string[] {
   ];
 }
 
+/** New-work watches (ADR 0052). */
+function intakeLines(host: HerderHost): string[] {
+  if (host.intakeWatches === undefined) return [];
+  const watches = host.intakeWatches();
+  return [
+    "New-work watches (AgentHerd offers new GitHub items with 「开任务 / 忽略」, or starts them when auto):",
+    ...(watches.length === 0
+      ? ["(none)"]
+      : watches.map(
+          (w) =>
+            `- ${w.id.slice(0, 8)} "${w.about}" kind=${w.kind}${w.repo === undefined ? "" : ` repo=${w.repo}`}${w.label === undefined ? "" : ` label=${w.label}`} auto=${w.auto}`,
+        )),
+  ];
+}
+
 /** Watched sources that stopped answering (ADR 0050). */
 function sourceLines(host: HerderHost): string[] {
   const down = host.sources?.() ?? [];
@@ -274,6 +290,26 @@ const mailWatchSchema = obj({
       "A Gmail search for that mail, e.g. from:prof@uni.edu, subject:offer, is:important, or in:inbox for all new mail.",
   }),
 });
+const intakeWatchSchema = obj({
+  kind: str({
+    description:
+      '"issues" for issues assigned to the owner, "reviews" for pull requests waiting for their review.',
+  }),
+  repo: opt(str({ description: "owner/name to watch only one repository; leave out for all." })),
+  label: opt(str({ description: "Only issues or pull requests with this label." })),
+  about: opt(str({ description: 'What the owner wants, in their words, e.g. "acme 的 bug".' })),
+  auto: opt(
+    bool({
+      description:
+        "true only when the owner said such items should start without asking (e.g. 「指派给我的 bug 直接做」). Default: ask.",
+    }),
+  ),
+});
+
+const intakeUnwatchSchema = obj({
+  watch: str({ description: "The watch's id prefix or words of what it is about." }),
+});
+
 const mailUnwatchSchema = obj({
   watch: str({ description: "Mail watch id prefix or words of what it is about" }),
 });
@@ -311,6 +347,7 @@ export function herderTools(
           `Relay: ${host.relayTaskId()?.slice(0, 8) ?? "none"}`,
           ...appLines(host),
           ...mailLines(host),
+          ...intakeLines(host),
           ...sourceLines(host),
         ];
         return ok(lines.join("\n"));
@@ -547,7 +584,73 @@ export function herderTools(
   if (host.watchMail !== undefined) {
     all.push(...mailTools(host, turn).map((t) => t as unknown as AgentTool));
   }
+  if (host.watchIntake !== undefined) {
+    all.push(...intakeTools(host, turn).map((t) => t as unknown as AgentTool));
+  }
   return all;
+}
+
+/** Only the owner's own words create or change a new-work watch (ADR 0052). */
+function ownerOnly(turn: () => TurnContext, what: string): void {
+  const kind = turn().kind;
+  if (kind === "event" || kind === "intake") throw new Error(`only the owner can ${what}`);
+}
+
+function oneIntake(host: HerderHost, query: string): { id: string; about: string } {
+  const q = normalize(query);
+  const found = (host.intakeWatches?.() ?? []).filter(
+    (w) => w.id.startsWith(query.trim()) || normalize(w.about).includes(q),
+  );
+  const only = found[0];
+  if (found.length === 1 && only !== undefined) return only;
+  if (found.length === 0) throw new Error(`no new-work watch matches "${query}"`);
+  throw new Error(
+    `several new-work watches match "${query}": ${found.map((w) => `${w.id.slice(0, 8)} "${w.about}"`).join(", ")}`,
+  );
+}
+
+function intakeTools(host: HerderHost, turn: () => TurnContext) {
+  return [
+    {
+      name: "intake_watch",
+      label: "Watch for new work",
+      description:
+        "Only when the owner asks to hear about new GitHub work (e.g. 「有指派给我的 issue 告诉我」, 「有人请我 review 就提醒我」): from now on AgentHerd checks GitHub every few minutes and offers each new item with 「开任务 / 忽略」. Set auto only when the owner said such items should start by themselves; calling again with the same kind/repo/label changes auto. Never start one on your own.",
+      parameters: intakeWatchSchema,
+      execute: async (
+        _id: string,
+        args: { kind: string; repo?: string; label?: string; about?: string; auto?: boolean },
+      ) => {
+        ownerOnly(turn, "ask for new-work watches");
+        if (args.kind !== "issues" && args.kind !== "reviews") {
+          throw new Error('kind must be "issues" or "reviews"');
+        }
+        const watch = await host.watchIntake?.({
+          kind: args.kind,
+          ...(args.repo === undefined ? {} : { repo: args.repo }),
+          ...(args.label === undefined ? {} : { label: args.label }),
+          ...(args.about === undefined ? {} : { about: args.about }),
+          ...(args.auto === undefined ? {} : { auto: args.auto }),
+        });
+        if (watch === undefined) throw new Error("GitHub cannot be watched here");
+        return ok(
+          `watching ${watch.id.slice(0, 8)} "${watch.about}" (auto: ${watch.auto}); tell the owner in one short line`,
+        );
+      },
+    },
+    {
+      name: "intake_unwatch",
+      label: "Stop watching for new work",
+      description: "Stops a new-work watch when the owner no longer wants those offers.",
+      parameters: intakeUnwatchSchema,
+      execute: async (_id: string, args: { watch: string }) => {
+        ownerOnly(turn, "stop new-work watches");
+        const watch = oneIntake(host, args.watch);
+        host.unwatchIntake?.(watch.id);
+        return ok(`stopped watching "${watch.about}"`);
+      },
+    },
+  ];
 }
 
 /** Mail watches exist only because the owner asked (ADR 0048). */
@@ -560,7 +663,7 @@ function mailTools(host: HerderHost, turn: () => TurnContext) {
         "Only when the owner asks to be told about some mail (e.g. 「导师来邮件提醒我」): from now on AgentHerd checks Gmail every few minutes and tells the owner about new mail matching the search. Never start one on your own.",
       parameters: mailWatchSchema,
       execute: async (_id: string, args: { about: string; query: string }) => {
-        if (turn().kind === "event") throw new Error("only the owner can ask for mail watches");
+        ownerOnly(turn, "ask for mail watches");
         const watch = await host.watchMail?.(args.about, args.query);
         if (watch === undefined) throw new Error("mail cannot be watched here");
         return ok(
@@ -574,7 +677,7 @@ function mailTools(host: HerderHost, turn: () => TurnContext) {
       description: "Stops a mail watch when the owner no longer wants those notices.",
       parameters: mailUnwatchSchema,
       execute: async (_id: string, args: { watch: string }) => {
-        if (turn().kind === "event") throw new Error("only the owner can stop mail watches");
+        ownerOnly(turn, "stop mail watches");
         const watch = oneWatch(host, args.watch);
         host.unwatchMail?.(watch.id);
         return ok(`stopped watching "${watch.about}"`);
