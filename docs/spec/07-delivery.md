@@ -56,6 +56,7 @@ Each milestone is split into plans under [`plans/`](../../plans/README.md).
 | E2E-RUN-FROM-CHAT | A direct message starts a session; the agent receives the owner's text verbatim plus a labeled context block; a completion report is sent | M2 | `packages/herder/test/e2e/herder.e2e.test.ts` |
 | E2E-RELAY | Owner starts a relay; messages reach the session without the Herder; `/end` and `relayIdleMinutes` end it | M2 | `packages/core/test/e2e/relay.e2e.test.ts` |
 | E2E-BOARD | A stage change updates the pinned board in place; no new message is sent | M2 | `packages/core/test/e2e/follow.e2e.test.ts` |
+| E2E-REPORT-RELAY | Feishu done reports have no relay button; blocked, failed and stopped reports keep it. Replying to a report still reaches the task. | M2 | `packages/channel-feishu/test/card-report.test.ts`, `packages/core/test/e2e/notify.e2e.test.ts` |
 | E2E-REPORT-SHORT | A task ends with a reply ≤ `reportMaxWords`; the report body is the reply verbatim | M2 | `packages/core/test/e2e/follow.e2e.test.ts` |
 | E2E-REPORT-LONG | A task ends with a longer reply; one summary prompt is sent to the same session; its answer is the body and the full reply is attached; no second summary prompt | M2 | `packages/core/test/e2e/follow.e2e.test.ts` |
 | E2E-FOLD | A relayed agent message over `foldChars` is sent folded and complete | M2 | |

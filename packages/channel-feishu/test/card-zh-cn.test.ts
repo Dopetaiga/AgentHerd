@@ -33,7 +33,7 @@ describe("renderCard zh-CN defaults", () => {
   });
 
   it("renders the report relay button label in Chinese", () => {
-    const elements = bodyElements(renderCard(makeReport()));
+    const elements = bodyElements(renderCard(makeReport({ result: "blocked" })));
     expect(must(elements[elements.length - 1])).toEqual(buttonRow("转接到这个任务", "r1", "relay"));
   });
 
