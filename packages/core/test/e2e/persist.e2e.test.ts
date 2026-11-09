@@ -168,7 +168,8 @@ describe("E2E-TASKS-KEPT (ADR 0039)", () => {
     const second = await boot(dir, FIRST);
     expect(second.herd.tasks()[0]).toMatchObject({ id: "t-crash", stage: "failed" });
     expect(second.store.task("t-crash")?.endedAt).toBeDefined();
-    expect(second.store.memory.jobs().map((j) => j.payload.taskId)).toEqual(["t-crash"]);
+    // AgentHerd going away is not the task's fault: no lesson (ADR 0054).
+    expect(second.store.memory.jobs()).toEqual([]);
   });
 });
 

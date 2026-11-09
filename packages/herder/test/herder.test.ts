@@ -101,24 +101,14 @@ describe("Herder", () => {
     expect(rec.audits.map((a) => a.type)).toEqual(["herder.turn"]);
   });
 
-  it("a reply over 100 words is written again once, then cut (ADR 0049)", async () => {
+  it("a long reply is said as it is: the Herder has no word limit (ADR 0054)", async () => {
     const { herder, rec, faux } = setup();
     const long = "这个任务正在跑测试，还要再等一会儿才能看到结果。".repeat(12);
-    faux.setResponses([
-      fauxAssistantMessage(long),
-      fauxAssistantMessage("测试还在跑，跑完告诉你。"),
-    ]);
+    faux.setResponses([fauxAssistantMessage(long)]);
     herder.ownerMessage("现在什么情况？");
     await herder.idle();
-    expect(rec.said).toEqual(["测试还在跑，跑完告诉你。"]);
-    expect(rec.audits.map((a) => a.type)).toContain("herder.reply.long");
-
-    faux.setResponses([fauxAssistantMessage(long), fauxAssistantMessage(long)]);
-    herder.ownerMessage("还要多久？");
-    await herder.idle();
-    const last = rec.said.at(-1) ?? "";
-    expect(last.endsWith("…")).toBe(true);
-    expect(last.length).toBeLessThan(long.length);
+    expect(rec.said).toEqual([long]);
+    expect(rec.audits.map((a) => a.type)).not.toContain("herder.reply.long");
   });
 
   it("after ask it sends no extra text; the answer comes back as a turn", async () => {

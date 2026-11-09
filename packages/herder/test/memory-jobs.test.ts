@@ -1,8 +1,8 @@
-import { CASE_JOB, REVIEW_JOB, Store } from "@agentherd/core";
+import { CASE_JOB, LESSON_JOB, REVIEW_JOB, Store } from "@agentherd/core";
 import { describe, expect, it } from "vitest";
 import {
-  CASE_SYSTEM,
   EXPERIENCE_SYSTEM,
+  LESSON_SYSTEM,
   MemoryWorker,
   parseJson,
   REVIEW_SYSTEM,
@@ -32,15 +32,13 @@ function setup(replies: Record<string, string[]>) {
   return { store, worker, asked: m.asked };
 }
 
-const CASE = JSON.stringify({
+const LESSON = JSON.stringify({
   skip: false,
-  abstract: "pi-desktop：排查打包签名失败，已修复",
   task_signature: "给 Electron 应用排查打包签名失败",
-  outcome: "done",
-  outcome_evidence: "打包成功",
-  procedure: ["先看 electron-builder 日志"],
-  anti_patterns: ["一开始重装了依赖，白费时间"],
+  lesson: "签名失败先看构建日志，别先重装依赖",
+  evidence: "重装依赖白费了时间，日志里直接是证书过期",
 });
+const SIGNALS = ["the owner prompted it 1 more time(s) after the first"];
 
 describe("parseJson", () => {
   it("reads JSON from a code fence", () => {
@@ -50,9 +48,9 @@ describe("parseJson", () => {
 });
 
 describe("MemoryWorker", () => {
-  it("writes a case from an ended task and a new lesson", async () => {
+  it("a task picked for a lesson adds experience and no case (ADR 0054)", async () => {
     const { store, worker, asked } = setup({
-      [CASE_SYSTEM]: [CASE],
+      [LESSON_SYSTEM]: [LESSON],
       [EXPERIENCE_SYSTEM]: [
         JSON.stringify({
           action: "add",
@@ -63,37 +61,31 @@ describe("MemoryWorker", () => {
     });
     store.addTranscript("t1", "prompt", "打包失败了，看看");
     store.addTranscript("t1", "agent", "签名证书过期，已更新，打包成功");
-    store.memory.enqueueJob(CASE_JOB, {
+    store.memory.enqueueJob(LESSON_JOB, {
       taskId: "t1",
       title: "pi-desktop：打包",
       cwd: "/u/pi-desktop",
       why: "done",
+      signals: SIGNALS,
     });
     await worker.drain();
     expect(asked[0]?.user).toContain("签名证书过期");
-    const kase = store.memory.list({ kinds: ["case"] })[0];
-    expect(kase).toMatchObject({
-      abstract: "pi-desktop：排查打包签名失败，已修复",
-      scope: "project:/u/pi-desktop",
-      sourceRef: "t1",
-    });
-    expect(kase?.body).toContain("教训：一开始重装了依赖");
-    expect(store.memory.list({ kinds: ["experience"] }).map((r) => r.abstract)).toEqual([
-      "签名失败先看构建日志",
+    expect(asked[0]?.user).toContain("Picked because: the owner prompted it");
+    expect(store.memory.list({ kinds: ["case"] })).toEqual([]);
+    const lessons = store.memory.list({ kinds: ["experience"] });
+    expect(lessons.map((r) => [r.abstract, r.scope, r.sourceRef])).toEqual([
+      ["签名失败先看构建日志", "project:/u/pi-desktop", "t1"],
     ]);
     expect(store.memory.jobs()[0]?.state).toBe("done");
 
-    // The same task again writes nothing.
-    store.memory.enqueueJob(CASE_JOB, { taskId: "t1" });
+    // The same task again asks nothing.
+    store.memory.enqueueJob(LESSON_JOB, { taskId: "t1", signals: SIGNALS });
     await worker.drain();
-    expect(store.memory.list({ kinds: ["case"] })).toHaveLength(1);
+    expect(asked).toHaveLength(2);
   });
 
   it("an update in a second project makes the lesson global", async () => {
-    const { store, worker } = setup({
-      [CASE_SYSTEM]: [CASE],
-      [EXPERIENCE_SYSTEM]: [],
-    });
+    const { store, worker } = setup({});
     const { ids } = store.memory.write(
       [
         {
@@ -106,11 +98,11 @@ describe("MemoryWorker", () => {
       { actor: "task", source: "task" },
     );
     const id = (ids[0] as string).slice(0, 8);
-    store.memory.enqueueJob(CASE_JOB, { taskId: "t2", cwd: "/u/b" });
+    store.memory.enqueueJob(LESSON_JOB, { taskId: "t2", cwd: "/u/b", signals: SIGNALS });
     store.addTranscript("t2", "prompt", "打包签名失败");
     store.addTranscript("t2", "agent", "看了构建日志，修好了");
     (worker as unknown as { deps: { complete: unknown } }).deps.complete = model({
-      [CASE_SYSTEM]: [CASE],
+      [LESSON_SYSTEM]: [LESSON],
       [EXPERIENCE_SYSTEM]: [
         JSON.stringify({
           action: "update",
@@ -127,16 +119,26 @@ describe("MemoryWorker", () => {
     ]);
   });
 
-  it("skips a task with nothing to learn; a bad reply retries later", async () => {
-    const { store, worker } = setup({ [CASE_SYSTEM]: ['{"skip": true}', "not json"] });
+  it("most picked tasks teach nothing; a bad reply retries later", async () => {
+    const { store, worker } = setup({ [LESSON_SYSTEM]: ['{"skip": true}', "not json"] });
     for (const t of ["t1", "t2"]) {
       store.addTranscript(t, "prompt", "hi");
       store.addTranscript(t, "agent", "hello");
-      store.memory.enqueueJob(CASE_JOB, { taskId: t });
+      store.memory.enqueueJob(LESSON_JOB, { taskId: t, signals: SIGNALS });
     }
     await worker.drain();
     expect(store.memory.list()).toEqual([]);
     expect(store.memory.jobs().map((j) => j.state)).toEqual(["pending", "done"]);
+  });
+
+  it("an old case job from before ADR 0054 asks no model", async () => {
+    const { store, worker, asked } = setup({});
+    store.addTranscript("t1", "prompt", "找 issue");
+    store.addTranscript("t1", "agent", "9 个");
+    store.memory.enqueueJob(CASE_JOB, { taskId: "t1", why: "done" });
+    await worker.drain();
+    expect(asked).toEqual([]);
+    expect(store.memory.jobs()[0]?.state).toBe("done");
   });
 
   it("a review keeps only what passes the memory checks", async () => {

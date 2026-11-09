@@ -102,6 +102,7 @@ describe("E2E-HERDER-VOICE (ADR 0053)", () => {
     const [report] = reports(channel);
     expect(report?.body).toBe("查完了，还剩 3 处。");
     expect(report?.fullReply).toBe("结论：3 处残留仍存在。清单已存 ~/notes.md");
+    expect(report?.fullReplyBy).toBe("Mock");
     expect(report?.result).toBe("done");
     expect(asked).toEqual([
       expect.objectContaining({
@@ -131,7 +132,7 @@ describe("E2E-HERDER-VOICE (ADR 0053)", () => {
     await turn;
     await until(() => reports(channel).length === 1);
     const [report] = reports(channel);
-    expect(report?.body).toBe("主管暂时说不了话，任务的原话在下面「完整回复」里。");
+    expect(report?.body).toBe("主管暂时说不了话，agent 的原话在下面。");
     expect(report?.fullReply).toBe("结论：3 处残留仍存在。清单已存 ~/notes.md");
   });
 

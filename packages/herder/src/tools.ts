@@ -4,7 +4,6 @@
 import { statSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
 import type { HerderHost, OwnerImage, Task } from "@agentherd/core";
-import { tooLong } from "@agentherd/core";
 import type { AgentTool, AgentToolResult } from "@agentherd/herder-loop";
 import { arr, bool, obj, oneOf, opt, str } from "@earendil-works/pi-schema";
 import { agentForModel } from "./agent-models.ts";
@@ -231,6 +230,33 @@ function anyTask(host: HerderHost, query: string): Task {
   );
 }
 
+/** Tasks task_search lists at most. */
+export const TASKS_FOUND_MAX = 10;
+
+const taskSearchSchema = obj({
+  query: str({ description: "Words to look for, e.g. 'pi-desktop issue'" }),
+});
+
+/**
+ * Tasks with any of the words in their title, project or last report, the ones matching more
+ * words first, then newest first.
+ */
+export function searchTasks(tasks: readonly Task[], query: string): Task[] {
+  const words = query
+    .toLowerCase()
+    .split(/[\s,，、]+/)
+    .filter((w) => w !== "");
+  if (words.length === 0) return [];
+  return tasks
+    .map((t) => {
+      const text = `${t.title}\n${t.project}\n${t.lastReport}`.toLowerCase();
+      return { t, hits: words.filter((w) => text.includes(w)).length };
+    })
+    .filter((x) => x.hits > 0)
+    .sort((a, b) => b.hits - a.hits || b.t.updatedAt.localeCompare(a.t.updatedAt))
+    .map((x) => x.t);
+}
+
 function taskLine(t: Task): string {
   return `- ${t.id.slice(0, 8)} [${t.stage}] "${t.title}" project=${t.project} agent=${t.agent} last="${t.lastReport}" updated=${t.updatedAt}`;
 }
@@ -362,6 +388,19 @@ export function herderTools(
           ...sourceLines(host),
         ];
         return ok(lines.join("\n"));
+      },
+    },
+    {
+      name: "task_search",
+      label: "Search past tasks",
+      description:
+        "Searches every task ever run (title, project, last report) for words, newest first. Use it for 'did we do this before', 'that task last week': what a task found or made is kept here, not in memory (ADR 0054).",
+      parameters: taskSearchSchema,
+      execute: async (_id: string, args: { query: string }) => {
+        const found = searchTasks(host.tasks(), args.query).slice(0, TASKS_FOUND_MAX);
+        return ok(
+          found.length === 0 ? `no task matches "${args.query}"` : found.map(taskLine).join("\n"),
+        );
       },
     },
     {
@@ -567,8 +606,6 @@ export function herderTools(
       parameters: askSchema,
       execute: async (_id: string, args: { question: string; options: string[] }) => {
         if (turn().kind === "event") throw new Error(SPEAK_IN_REPLY);
-        const long = tooLong(args.question);
-        if (long !== undefined) throw new Error(`question ${long}`);
         const other = otherOption(host.locale);
         const options = args.options.map((o) => o.trim()).filter((o) => o !== "" && o !== other);
         const all = [...options.slice(0, 4), other];
@@ -581,12 +618,10 @@ export function herderTools(
     {
       name: "notify",
       label: "Tell the owner",
-      description: "Sends a short message to the owner, at most 100 words.",
+      description: "Sends a message to the owner now, outside your reply.",
       parameters: notifySchema,
       execute: async (_id: string, args: { text: string }) => {
         if (turn().kind === "event") throw new Error(SPEAK_IN_REPLY);
-        const long = tooLong(args.text);
-        if (long !== undefined) throw new Error(long);
         await host.say(args.text);
         turn().notified = true;
         return ok("sent");

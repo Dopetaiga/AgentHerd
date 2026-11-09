@@ -216,16 +216,26 @@ turns:
     expect(live).toBe("");
   });
 
-  it("queues a memory case when the task ends", async () => {
+  it("a task that went fine leaves nothing in memory (ADR 0054)", async () => {
     const { herd } = await setup(`
 turns:
   - - message: "Fixed it."
     - end_turn: end_turn
 `);
     await herd.run("mock", dir, "Fix the flaky test");
+    expect(herd.store.memory.jobs()).toEqual([]);
+  });
+
+  it("a task that failed queues a lesson job with its signals (ADR 0054)", async () => {
+    const { herd } = await setup(`
+turns:
+  - - message: "Halfway."
+    - crash: 7
+`);
+    await expect(herd.run("mock", dir, "Fix the flaky test")).rejects.toThrow(/exited/);
     const taskId = herd.tasks()[0]?.id ?? "";
-    expect(herd.store.memory.jobs().map((j) => [j.kind, j.payload.taskId, j.payload.cwd])).toEqual([
-      ["case", taskId, dir],
-    ]);
+    const [job] = herd.store.memory.jobs();
+    expect([job?.kind, job?.payload.taskId, job?.payload.cwd]).toEqual(["lesson", taskId, dir]);
+    expect(job?.payload.signals).toContain("it failed");
   });
 });

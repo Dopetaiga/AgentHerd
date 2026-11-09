@@ -299,7 +299,7 @@ const zh: CoreTexts = {
   modelSwitched: (from, to, why) => `${from} 出错（${why}），还没动手，换成 ${to} 重跑`,
   voicedReplyHint:
     "[AgentHerd] 你的回复由 AgentHerd 的主管读，再由它用自己的话告诉负责人。每一轮结束时写清楚：做了什么或发现了什么、结果在哪（文件、提交、PR 链接）、还剩什么或需要负责人做什么。不要贴长代码或日志。下面是任务原文。",
-  herderUnvoiced: "主管暂时说不了话，任务的原话在下面「完整回复」里。",
+  herderUnvoiced: "主管暂时说不了话，agent 的原话在下面。",
   replyHint: (n) =>
     `[AgentHerd] 你的回复会在手机上阅读。每条回复不超过 ${n} 字，先写结论；细节写进文件或提交说明，不要贴长代码或日志。下面是任务原文。`,
   summaryPrompt: (n) =>
@@ -460,8 +460,7 @@ const en: CoreTexts = {
     `${from} failed (${why}) before doing anything; running again with ${to}`,
   voicedReplyHint:
     "[AgentHerd] AgentHerd's Herder reads your reply and tells the owner about it in its own words. End each turn with a complete, plain account: what you did or found, where the results are (files, commits, pull request links), and what is left or needs the owner. Do not paste long code or logs. The owner's task follows.",
-  herderUnvoiced:
-    "The Herder cannot speak right now; the agent's own words are under Full reply below.",
+  herderUnvoiced: "The Herder cannot speak right now; the agent's own words are below.",
   replyHint: (n) =>
     [
       "[AgentHerd] Your replies are read on a phone. Keep each reply under",

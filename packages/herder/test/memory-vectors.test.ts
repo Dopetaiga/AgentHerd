@@ -30,12 +30,12 @@ function seeded() {
     [
       {
         op: "add",
-        kind: "case",
+        kind: "experience",
         abstract: "pi-desktop：打包签名失败，换证书后修好",
         scope: "global",
       },
       { op: "add", kind: "experience", abstract: "梳理 issue 时先按标签筛", scope: "global" },
-      { op: "add", kind: "case", abstract: "AgentHerd：补测试", scope: "global" },
+      { op: "add", kind: "experience", abstract: "AgentHerd：补测试", scope: "global" },
     ],
     task,
   );

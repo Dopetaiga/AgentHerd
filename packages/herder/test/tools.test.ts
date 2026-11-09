@@ -10,6 +10,7 @@ import {
   isVerbatim,
   namedBy,
   resolveProject,
+  searchTasks,
   type TurnContext,
 } from "../src/tools.ts";
 import { fakeHost, task } from "./helpers.ts";
@@ -96,6 +97,7 @@ describe("tools", () => {
       "session_list",
       "session_prompt",
       "session_start",
+      "task_search",
     ]);
   });
 
@@ -494,15 +496,22 @@ describe("tools", () => {
     expect(ctx.asked && ctx.notified).toBe(true);
   });
 
-  it("ask and notify refuse a message over 100 words (ADR 0049)", async () => {
+  it("ask and notify take a long message: the Herder has no word limit (ADR 0054)", async () => {
     const { call, rec } = tools({});
     const long = "测试挂了，原因是配置文件里的端口被占用。".repeat(12);
-    await expect(call("notify", { text: long })).rejects.toThrow(/too long/);
-    await expect(call("ask", { question: long, options: ["好", "不好"] })).rejects.toThrow(
-      /too long/,
-    );
-    expect(rec.said).toEqual([]);
-    expect(rec.asked).toEqual([]);
+    await call("notify", { text: long });
+    expect(rec.said).toEqual([long]);
+  });
+
+  it("task_search finds any task by its words, best match first (ADR 0054)", async () => {
+    const old = { ...task("a1", "pi-desktop：找可做的 issue"), lastReport: "9 个可做" };
+    const other = { ...task("b2", "修构建"), project: "pi-desktop" };
+    const none = task("c3", "写周报");
+    expect(searchTasks([other, none, old], "pi-desktop issue").map((t) => t.id)).toEqual([
+      "a1",
+      "b2",
+    ]);
+    expect(searchTasks([none], " ")).toEqual([]);
   });
 });
 

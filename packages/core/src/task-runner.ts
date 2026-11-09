@@ -16,7 +16,7 @@ import {
   withModel,
 } from "./herd-context.ts";
 import type { OwnerImage } from "./herder-port.ts";
-import { CASE_JOB } from "./memory-store.ts";
+import { LESSON_JOB } from "./memory-store.ts";
 import { ACK_WORDS_MAX, tooLong } from "./owner-text.ts";
 import { onPermission } from "./permission.ts";
 import type { Relay } from "./relay.ts";
@@ -392,8 +392,8 @@ export class TaskRunner {
         f.task.stage = "failed";
         f.task.lastReport = ctx.texts.agentherdStopped;
       }
+      // Ended by AgentHerd going away, not by the work: nothing to learn (ADR 0054).
       ctx.store.audit("task.ended", { taskId: f.task.id, why: f.endedWhy });
-      this.queueCase(f, f.endedWhy ?? "");
       saveTask(ctx, f);
     }
     return crashed;
@@ -545,24 +545,36 @@ export class TaskRunner {
     await this.closeWorkspace(f);
     ctx.registry.set(taskId, "ended");
     ctx.store.audit("task.ended", { taskId, why });
-    this.queueCase(f, why);
+    this.queueLesson(f, why);
     if (this.relay.stored()?.taskId === taskId) {
       await this.relay.end("the task ended");
     }
     await ctx.board.flush();
   }
 
-  /** A case for the Herder's memory is written later from the conversation (ADR 0038). */
-  private queueCase(f: Following, why: string): void {
+  /**
+   * Most tasks teach nothing worth keeping: their record stays searchable, nothing is written to
+   * memory (ADR 0054). Only a task that went wrong or needed the owner again is looked at later,
+   * for a lesson. One AgentHerd itself stopped is never looked at.
+   */
+  private queueLesson(f: Following, why: string): void {
+    const { ctx } = this;
     const taskId = f.task.id;
-    if (this.ctx.store.transcript(taskId).length < 2) return;
-    this.ctx.store.memory.enqueueJob(CASE_JOB, {
+    if (why === ctx.texts.agentherdStopped) return;
+    if (ctx.store.transcript(taskId).length < 2) return;
+    const signals = lessonSignals(f);
+    if (signals.length === 0) {
+      ctx.store.audit("memory.lesson.none", { taskId });
+      return;
+    }
+    ctx.store.memory.enqueueJob(LESSON_JOB, {
       taskId,
       title: f.task.title,
       cwd: f.cwd,
       agent: f.task.agent,
       failed: f.failed,
       why,
+      signals,
     });
   }
 
@@ -638,6 +650,7 @@ export class TaskRunner {
     if (next === undefined) return;
     f.busy = true;
     f.idleTimer?.cancel();
+    if (next.wake !== true) f.ownerTurns = (f.ownerTurns ?? 0) + 1;
     const turn = this.runTurn(f, next.text, next.images, next.wake === true, next.trigger);
     this.turns.add(turn);
     try {
@@ -932,4 +945,19 @@ export function withImagePaths(text: string, images: OwnerImage[], texts: CoreTe
   if (images.length === 0) return text;
   const lines = images.map((i) => texts.imageAttached(i.path));
   return [text, ...lines].filter((l) => l !== "").join("\n");
+}
+
+/** Why a task may hold a lesson (ADR 0054); empty for a task that simply went well. */
+export function lessonSignals(f: Following): string[] {
+  const signals: string[] = [];
+  if (f.failed || f.task.stage === "failed") signals.push("it failed");
+  if (f.task.stage === "stuck" || f.report?.state === "blocked") signals.push("it got stuck");
+  if (f.alarm) signals.push("the watchdog raised an alarm");
+  if ((f.switches ?? 0) > 0 || (f.triedModels?.length ?? 0) > 0) {
+    signals.push("its model or agent had to be switched");
+  }
+  if ((f.ownerTurns ?? 0) > 1) {
+    signals.push(`the owner prompted it ${(f.ownerTurns ?? 0) - 1} more time(s) after the first`);
+  }
+  return signals;
 }

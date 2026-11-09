@@ -97,8 +97,8 @@ The Herder may add, never rewrite.
 
 | Group | Tools |
 | --- | --- |
-| Sessions | `session_start(project, name, profile?, ownerText, addedContext, model?)` (name: the task's short name, shown on the board and every report, [ADR 0034](../adr/0034-herder-names-tasks.md)) (model: `service/model` the agent can run, picked by the Herder, [ADR 0025](../adr/0025-herder-picks-model-per-task.md)), `session_prompt(sessionId, text, name?)` (name renames the task), `session_cancel(sessionId)` (stops the running turn), `session_end(sessionId)` (closes the task when the owner says it is finished; the case memory is written then), `session_list()` (also lists models, the agents that can run each, and the owner's model guide, [ADR 0026](../adr/0026-model-guide-for-the-herder.md)) |
-| Owner | `ask(text, options)` (AgentHerd adds 「其他」), `project_find(name)`, `notify(text)`, `relay_start(sessionId)`, `relay_end()`, `style_set(style)` (ADR 0053) |
+| Sessions | `session_start(project, name, profile?, ownerText, addedContext, model?)` (name: the task's short name, shown on the board and every report, [ADR 0034](../adr/0034-herder-names-tasks.md)) (model: `service/model` the agent can run, picked by the Herder, [ADR 0025](../adr/0025-herder-picks-model-per-task.md)), `session_prompt(sessionId, text, name?)` (name renames the task), `session_cancel(sessionId)` (stops the running turn), `session_end(sessionId)` (closes the task when the owner says it is finished), `session_list()` (also lists models, the agents that can run each, and the owner's model guide, [ADR 0026](../adr/0026-model-guide-for-the-herder.md)) |
+| Owner | `ask(text, options)` (AgentHerd adds 「其他」), `project_find(name)`, `notify(text)`, `relay_start(sessionId)`, `relay_end()`, `style_set(style)` (ADR 0053), `task_search(query)` (earlier tasks by title, project and last report; up to 10, [ADR 0054](../adr/0054-say-what-matters.md)) |
 | Read | `task_get`, `task_list`, `session_transcript`, `decisions_list`, `read`, `grep`, `list`, `git_log`, `git_diff` (read tools only inside known project directories) |
 | Context | `compress`, `decompress`, `search_context`, `acp_status`: fold finished parts of its own conversation, find and show them again ([ADR 0045](../adr/0045-herder-context-folded-by-the-model.md)) |
 
@@ -197,10 +197,13 @@ decisions during the task.
 With a Herder, the body is the Herder's own words ([ADR 0053](../adr/0053-the-herder-tells-task-results.md)):
 core calls `HerderPort.voice` with the task, how it ended, the agent's last reply and its
 `herd_report`; the Herder answers in its style, from its conversation with the owner, without
-adding or changing facts, and the agent's reply is always attached as "Full reply". `[quiet]`
+adding or changing facts, and the agent's reply is always attached, labeled with the agent's
+name (「Pi 的原话」, [ADR 0054](../adr/0054-say-what-matters.md)). How much it says follows what the owner asked: just the result
+in a sentence or two; every item, one sentence each, when the owner asked which ones or what
+each is; no word limit. `[quiet]`
 sends nothing. A `herd_report` that needs the owner (waiting, blocked, failed) is told the same
 way. When the Herder fails or takes over `VOICE_TIMEOUT_MS` (3 minutes) the body is
-「主管暂时说不了话，任务的原话在下面「完整回复」里。」 (a notice falls back to the agent's summary).
+「主管暂时说不了话，agent 的原话在下面。」 (a notice falls back to the agent's summary).
 Approval cards and other notices are not voiced.
 
 Without a Herder, the body is at most `reportMaxWords` (default 100, see "Message length") and is
@@ -342,8 +345,8 @@ counted with `Intl.Segmenter("zh", { granularity: "word" })`: Chinese is split i
 English by spaces, links count; text without word breaks is held to 8 characters per word
 (`packages/core/src/owner-text.ts`). The agent writes its own short text: a `herd_report`
 summary over 100 words or a `herd_ack` over 30 is refused with a tool error asking for a shorter
-one. The Herder's replies follow the same limit: a longer final reply is written again once
-(audited `herder.reply.long`), then cut; `ask` and `notify` refuse longer text. Relay and the
+one. The Herder has no word limit ([ADR 0054](../adr/0054-say-what-matters.md), replacing ADR 0049 for the Herder): its replies,
+`ask` and `notify` are sent as written; long messages are folded by the channel. Relay and the
 board are not limited.
 
 ### Reply length
@@ -361,6 +364,12 @@ The owner picks how the Herder talks ([ADR 0053](../adr/0053-the-herder-tells-ta
 SOUL.md), `secretary` 干练秘书 (Vercel's personal-agent template and nanobot). It is chosen in the
 first run, in Settings, or in chat (`style_set`, only on the owner's own messages), saved as
 `herderStyle` in `config.json`, and read every turn: the next message uses it.
+
+All three share one rule ([ADR 0054](../adr/0054-say-what-matters.md)): say what matters. Length follows what the owner asked,
+not a number: the result in a sentence or two when that is all they want, every item when they
+ask for a list, the whole of it when it matters. No filler, no steps, no 「结论：」 lines; when
+there is far too much, what matters plus where the rest is. The style texts no longer carry
+"say less" or "under three sentences".
 - Messages are folded in the channel, not shortened ([05-channels.md](05-channels.md#2-what-the-owner-sees)).
 
 ## 3. Approval pipeline

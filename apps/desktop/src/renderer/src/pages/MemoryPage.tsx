@@ -15,7 +15,7 @@ const KINDS: readonly { kind: Entry["kind"]; label: string; hint: string }[] = [
   { kind: "person", label: "人", hint: "你提到的人和他们负责什么" },
   { kind: "project", label: "项目", hint: "项目是什么、谁负责；路径只当线索" },
   { kind: "experience", label: "经验", hint: "从做过的任务里总结的做法，开新任务时会参考" },
-  { kind: "case", label: "案例", hint: "每个结束的任务留下的记录" },
+  { kind: "case", label: "案例", hint: "旧版本留下的任务记录，不再新增" },
 ];
 
 const SOURCE: Record<Entry["source"], string> = {
