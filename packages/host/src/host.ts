@@ -41,7 +41,7 @@ import {
   testModel,
 } from "@agentherd/herder";
 import type { AgentProfile, Channel, Locale, Mode, SetupUI } from "@agentherd/protocol";
-import { DEFAULT_LOCALE } from "@agentherd/protocol";
+import { DEFAULT_HERDER_STYLE, DEFAULT_LOCALE, HERDER_STYLES } from "@agentherd/protocol";
 import QRCode from "qrcode";
 import { Agents } from "./agents.ts";
 import type {
@@ -302,6 +302,14 @@ export class Host implements HostApi {
       mode: config.mode ?? "assist",
       locale,
       profiles: this.herdProfiles(),
+      // Read on every use, so a change from the settings page or the chat applies at once.
+      herderStyle: {
+        get: () => this.config().herderStyle ?? DEFAULT_HERDER_STYLE,
+        set: (style) => {
+          writeConfig(this.opts.home, { ...this.config(), herderStyle: style });
+          this.emitStatus();
+        },
+      },
       github: { run: this.opts.gh ?? runGh(withSystemProxy()) },
       ...(herder === undefined ? {} : { herder }),
       ...(this.opts.mcpSocket === undefined
@@ -528,6 +536,7 @@ export class Host implements HostApi {
       mode: this.herd?.getMode() ?? config.mode ?? "assist",
       locale: config.locale ?? DEFAULT_LOCALE,
       keepAwake: config.keepAwake ?? false,
+      herderStyle: config.herderStyle ?? DEFAULT_HERDER_STYLE,
       profiles: this.profileList.map((p) => p.id),
     };
   }
@@ -765,6 +774,14 @@ export class Host implements HostApi {
       this.herd?.setMode(patch.mode);
     }
     if (patch.keepAwake !== undefined) next.keepAwake = patch.keepAwake;
+    if (patch.herderStyle !== undefined) {
+      if (!HERDER_STYLES.includes(patch.herderStyle)) {
+        throw new Error(
+          `herderStyle must be one of ${HERDER_STYLES.join(", ")}, not "${patch.herderStyle}"`,
+        );
+      }
+      next.herderStyle = patch.herderStyle;
+    }
     writeConfig(this.opts.home, next);
     this.emitStatus();
     return this.status();

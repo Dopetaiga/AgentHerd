@@ -2,8 +2,9 @@ import type { SourceState } from "./source-health.ts";
 // What the Herd and the Herder know about each other (docs/spec/04-herder.md §1). The core does
 // not import the Herder or any model library: the CLI or the app passes a factory.
 
-import type { Locale } from "@agentherd/protocol";
+import type { HerderStyle, Locale, ReportResult } from "@agentherd/protocol";
 import type { IntakeRequest } from "./intake.ts";
+import type { HerdReport } from "./mcp-gateway.ts";
 import type { Completer, Embedder, MemoryStore } from "./memory-store.ts";
 import type { DecisionRow, IntakeWatch, MailWatch } from "./store.ts";
 import type { Task } from "./tasks.ts";
@@ -29,6 +30,22 @@ export interface HerderEvent {
   title: string;
   /** Text that came from an agent. Untrusted. */
   text: string;
+}
+
+/**
+ * A task's result for the Herder to tell the owner in its own words (ADR 0053). `report` is the end
+ * of a turn; `notice` is a herd_report that needs the owner now (waiting, blocked, failed).
+ */
+export interface VoiceRequest {
+  kind: "report" | "notice";
+  taskId: string;
+  title: string;
+  /** How the turn ended (report), or the herd_report state (notice). */
+  result: ReportResult | "waiting" | "blocked" | "failed";
+  /** The agent's last reply, verbatim. Untrusted. */
+  reply: string;
+  /** The agent's own herd_report of this turn, if any. Untrusted. */
+  report?: HerdReport;
 }
 
 /** Everything the Herder can do. There is deliberately nothing here that answers an item. */
@@ -83,6 +100,10 @@ export interface HerderHost {
   unwatchIntake?(id: string): boolean;
   /** Watched sources that are failing now (ADR 0050). */
   sources?(): SourceState[];
+  /** How the Herder talks (ADR 0053); absent → the default style. */
+  style?(): HerderStyle;
+  /** Changes it when the owner asks in chat. */
+  setStyle?(style: HerderStyle): void;
   audit(type: string, data: Record<string, unknown>): void;
   /** Keeps a line of the Herder's conversation with the owner (`herder_turns`). */
   recordTurn(role: HerderTurnRole, text: string, taskId?: string): void;
@@ -114,6 +135,11 @@ export interface HerderPort {
    * turn that may start a task for it. `text` names the item; its title is not the owner's.
    */
   intake?(text: string, auto: boolean): void;
+  /**
+   * Tells the owner a task's result in the Herder's words. Resolves with the message to send ("" to
+   * send nothing: the owner already heard it), or undefined when the Herder could not speak.
+   */
+  voice?(request: VoiceRequest): Promise<string | undefined>;
   /** Runs a message held after every model failed (the owner tapped 「重试」). */
   retry?(): void;
   stop(): Promise<void>;

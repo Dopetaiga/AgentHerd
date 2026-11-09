@@ -12,7 +12,7 @@ import type {
   Task,
   TranscriptEntry,
 } from "@agentherd/core";
-import type { Locale, Mode, Risk } from "@agentherd/protocol";
+import type { HerderStyle, Locale, Mode, Risk } from "@agentherd/protocol";
 
 export const API_VERSION = 1;
 
@@ -40,6 +40,8 @@ export interface HostStatus {
   mode: Mode;
   locale: Locale;
   keepAwake: boolean;
+  /** How the Herder talks to the owner (ADR 0053). */
+  herderStyle: HerderStyle;
   /** Agent profile ids the owner can start with /run. */
   profiles: string[];
 }
@@ -176,6 +178,7 @@ export type ModelProbe =
 export interface SettingsPatch {
   mode?: Mode;
   keepAwake?: boolean;
+  herderStyle?: HerderStyle;
 }
 
 /** Everything the host offers. Each method is one request on the socket. */

@@ -845,7 +845,12 @@ export class TaskRunner {
     let prompt = connection.acceptsImages ? text : withImagePaths(text, images, ctx.texts);
     // Every prompt carries the length hint (ADR 0036); follow-ups were long without it.
     if (history !== "") prompt = `${ctx.texts.priorConversation(history)}\n\n${prompt}`;
-    prompt = `${replyHint(ctx.opts.replyHintChars ?? REPLY_HINT_CHARS, ctx.texts)}\n\n${prompt}`;
+    // With a Herder that speaks for the task the agent writes for it, not for a phone (ADR 0053).
+    const hint =
+      ctx.herder()?.voice === undefined
+        ? replyHint(ctx.opts.replyHintChars ?? REPLY_HINT_CHARS, ctx.texts)
+        : ctx.texts.voicedReplyHint;
+    prompt = `${hint}\n\n${prompt}`;
     ctx.registry.set(sessionId, "working");
     ctx.watchdog.turnStarted(sessionId);
     try {

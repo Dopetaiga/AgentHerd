@@ -92,6 +92,11 @@ const RESULT: Record<Stage, ReportResult> = {
   queued: "stopped",
 };
 
+/** How a task at this stage ended, for the report card's color. */
+export function reportResult(stage: Stage): ReportResult {
+  return RESULT[stage];
+}
+
 /** "1h 5m", "12m", "40s". */
 export function formatDuration(ms: number): string {
   const s = Math.max(0, Math.round(ms / 1000));
@@ -112,7 +117,7 @@ export function reportView(
   texts: CoreTexts = CORE_TEXTS.en,
 ): ReportView {
   const duration = formatDuration(now.getTime() - new Date(task.startedAt).getTime());
-  const result = RESULT[task.stage];
+  const result = reportResult(task.stage);
   const view: ReportView = {
     kind: "report",
     taskId: task.id,

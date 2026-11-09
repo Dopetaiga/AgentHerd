@@ -52,9 +52,10 @@ export const HERD_REPORT_TOOL = {
   description:
     "Tell AgentHerd (and the owner) where this task stands. Call it when you finish, get stuck, " +
     "need the owner, or give up. state: progress | waiting (need the owner) | ready (done) | " +
-    "blocked | failed | dropped. summary: what the owner reads on the phone, one or two sentences " +
-    `and at most ${OWNER_WORDS_MAX} words: the result and what the owner has to do, not the steps ` +
-    "(details go in changes, tests, risks, links). A longer summary is refused. " +
+    "blocked | failed | dropped. summary: one or two plain sentences and at most " +
+    `${OWNER_WORDS_MAX} words: the result and what the owner has to do, not the steps (details go ` +
+    "in changes, tests, risks, links). A longer summary is refused. AgentHerd's Herder reads it " +
+    "with your reply and tells the owner in its own words; " +
     "waiting, blocked and failed reach the owner at once. If you end your turn while work you " +
     "started still runs in the background (a build, a test run, a subagent), call it with state " +
     "progress last: AgentHerd then checks back with you later instead of reporting the task done.",
