@@ -11,6 +11,8 @@ export interface CardTexts {
   reasonPrefix: string;
   showAll: string;
   fullReply: string;
+  /** The folded full reply, named after the agent who wrote it (ADR 0054). */
+  fullReplyBy: (agent: string) => string;
   automaticDecisions: string;
   boardHeader: string;
   noTasks: string;
@@ -41,6 +43,7 @@ export const CARD_TEXTS: Record<Locale, CardTexts> = {
     reasonPrefix: "理由：",
     showAll: "展开全部",
     fullReply: "完整回复",
+    fullReplyBy: (agent) => `${agent} 的原话`,
     automaticDecisions: "自动处理的审批",
     boardHeader: "任务看板",
     noTasks: "还没有任务。",
@@ -80,6 +83,7 @@ export const CARD_TEXTS: Record<Locale, CardTexts> = {
     reasonPrefix: "Reason: ",
     showAll: "Show all",
     fullReply: "Full reply",
+    fullReplyBy: (agent) => `${agent}'s own words`,
     automaticDecisions: "Automatic decisions",
     boardHeader: "Tasks",
     noTasks: "No tasks yet.",

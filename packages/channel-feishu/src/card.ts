@@ -322,7 +322,9 @@ export function renderCard(view: View, locale: Locale = DEFAULT_LOCALE): Record<
         elements.push(collapsiblePanel(t.showAll, view.body));
       }
       if (view.summarized && view.fullReply !== undefined) {
-        elements.push(collapsiblePanel(t.fullReply, view.fullReply));
+        const label =
+          view.fullReplyBy === undefined ? t.fullReply : t.fullReplyBy(view.fullReplyBy);
+        elements.push(collapsiblePanel(label, view.fullReply));
       }
       if (view.automaticDecisions.length > 0) {
         // Folded: the owner sees how many, and opens the list when they care (ADR 0049).

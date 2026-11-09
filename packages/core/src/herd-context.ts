@@ -184,6 +184,8 @@ export interface Following {
   triedModels?: string[];
   /** Agent or model switches so far. */
   switches?: number;
+  /** Turns the owner asked for (not AgentHerd's background checks); more than one may mean a correction. */
+  ownerTurns?: number;
   connection?: AgentConnection;
   agentSessionId?: string;
   offs: (() => void)[];

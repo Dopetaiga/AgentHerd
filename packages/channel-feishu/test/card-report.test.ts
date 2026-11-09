@@ -86,6 +86,13 @@ describe("renderCard report", () => {
     });
   });
 
+  it("names the agent on the full reply panel", () => {
+    const view = makeReport({ summarized: true, fullReply: "原话", fullReplyBy: "Pi" });
+    expect(bodyElements(renderCard(view, "zh-CN"))[1]).toMatchObject({
+      header: { title: { tag: "markdown", content: "Pi 的原话" } },
+    });
+  });
+
   it("omits the Full reply panel when not summarized", () => {
     expect(bodyElements(renderCard(makeReport({ fullReply: "the whole reply" }), "en"))).toEqual([
       { tag: "markdown", content: "short body" },

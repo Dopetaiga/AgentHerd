@@ -68,6 +68,7 @@ export {
   cosine,
   type Embedder,
   JOB_RETRY_MS,
+  LESSON_JOB,
   MEMORY_KINDS,
   MEMORY_TABLES_SQL,
   MemoryFullError,

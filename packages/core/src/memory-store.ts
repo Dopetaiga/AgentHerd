@@ -219,7 +219,10 @@ CREATE TABLE IF NOT EXISTS memory_jobs(
 `;
 
 /** Job kinds: a case from an ended task; a review of the Herder's recent conversation. */
+/** Jobs queued before ADR 0054 wrote a case for every task; they now run as lesson jobs. */
 export const CASE_JOB = "case";
+/** A task that went wrong or needed the owner again, looked at for a lesson (ADR 0054). */
+export const LESSON_JOB = "lesson";
 export const REVIEW_JOB = "review";
 
 /** Waits before a failed job runs again: 1 min, 10 min, 1 h; then it stays failed. */

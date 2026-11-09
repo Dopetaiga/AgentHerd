@@ -58,8 +58,8 @@ rules), rakazo (revisions, "data, not instructions" header).
 | `person` 人 | People the owner works with: who, role, how to reach | Herder in a turn, or review | Recall |
 | `project` 项目实体 | What a project is, repo, stack, common commands, people | Herder or task end; one entry per project, merged | Recall |
 | `note` 主管笔记 | Facts not tied to a project: environment, methods, model behaviour | Herder in a turn; may carry `until`; new replaces old | Resident |
-| `case` 案例 | One per ended task: goal, procedure, pitfalls, outcome | Background job at task end; never edited | Recall |
-| `experience` 经验 | Situation / approach / reflection drawn from cases | Background job from cases; upserted; global only when seen in ≥2 projects | Recall |
+| `case` 案例 | Old: one per ended task. No longer written ([ADR 0054](../adr/0054-say-what-matters.md)); old entries stay until removed | — | Not used for lessons |
+| `experience` 经验 | Situation / approach / reflection: a lesson | Lesson job, only for tasks with a signal (below); upserted; global only when seen in ≥2 projects | Recall |
 
 Not memory: what happened (→ `memory_log`), task transcripts (already in `transcript`), todos
 (→ schedules), project folders as facts (a folder in `project` is only a clue; `project_find`
@@ -86,7 +86,12 @@ Three ways in, all through the same code checks:
 
 1. In a turn, the Herder calls `memory` with `actions: [{op: add|replace|remove, kind, id?,
    content, evidence?, scope?, until?}]` (≤5, applied atomically).
-2. At task end, a job writes the `case` and updates `experience` entries (fast model).
+2. At task end, nothing is written by default ([ADR 0054](../adr/0054-say-what-matters.md)). A lesson job runs only when the
+   task failed, got stuck or blocked, raised a watchdog alarm, had its model or agent switched,
+   or needed more than one owner prompt; never when AgentHerd stopped it. The job (fast model)
+   answers `{"skip":true}` unless there is a lesson that helps the next task; a result, a list or
+   a follow-up request is not one. The owner can always say 「记住」 in chat. Earlier tasks are
+   found with `task_search`, not memory.
 3. After 6 owner turns or 2 idle minutes, a review job reads the new `herder_turns` and proposes
    writes (fast model). "Most conversations need no change."
 
@@ -116,7 +121,7 @@ Code checks (a rejected write is logged to `memory_log` with the reason):
   a new task, the top 10 are reranked by the fast model. If the vector model is missing, FTS alone.
   Measured on 105 items / 40 queries: FTS R@3 0.60, vectors 0.73, hybrid 0.75, hybrid + rerank 0.86.
 - The vector model (bge-small-zh-v1.5 q8, 24 MB, onnxruntime) is downloaded once into `<home>/models` from huggingface.co, falling back to hf-mirror.com; retried after 10 minutes on failure. There is no installer yet; ship it in the installer once there is one. Until it loads, search is keyword-only. A vector-only hit needs cosine ≥ 0.5.
-- When a task starts, hybrid search over cases and experience gives ≤10 candidates; the memory model (8 s timeout) keeps ≤3 that apply, which go into the task prompt's added context and the session_start result. Model failure keeps the search order; any memory failure never blocks the task.
+- When a task starts, hybrid search over experience gives ≤10 candidates; the memory model (8 s timeout) keeps ≤3 that apply, which go into the task prompt's added context and the session_start result. Model failure keeps the search order; any memory failure never blocks the task.
 - `memory_search(query)` tool for anything the recall missed, including `herder_turns`.
 - When a memory drives an action, the Herder says so ("按你说过的：…"). The owner's "不对" marks it
   superseded.
@@ -150,7 +155,7 @@ Each kind of message looks different, the same in Feishu and in the app:
 
 - Every prompt to an agent carries the length hint (was: first prompt only).
 - A report card shows a summary of ≤400 chars (was 600); longer replies are summarized by the fast
-  model. The full reply sits in a folded 「完整回复」 section of the card; the app shows the whole
+  model. The full reply sits in a folded 「<agent> 的原话」 section of the card (was 「完整回复」); the app shows the whole
   conversation.
 
 ## 5. Errors

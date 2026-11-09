@@ -46,9 +46,9 @@ export {
 } from "./memory.ts";
 export {
   CASE_INPUT_CHARS,
-  CASE_SYSTEM,
   EXPERIENCE_SYSTEM,
   JOB_TIMEOUT_MS,
+  LESSON_SYSTEM,
   MemoryWorker,
   type MemoryWorkerDeps,
   parseJson,

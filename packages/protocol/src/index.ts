@@ -177,6 +177,8 @@ export interface ReportView {
   /** True when the body is the agent's own summary of a longer reply. */
   summarized: boolean;
   fullReply?: string;
+  /** Who wrote the full reply: the agent's name, e.g. "Pi" (ADR 0054). */
+  fullReplyBy?: string;
   automaticDecisions: string[];
 }
 

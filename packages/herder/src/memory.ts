@@ -307,7 +307,7 @@ export async function pastLessons(
 ): Promise<MemoryRow[]> {
   try {
     const hits = await memory.searchHybrid(request, embedder, {
-      kinds: ["case", "experience"],
+      kinds: ["experience"],
       limit: LESSONS_CANDIDATES,
     });
     if (hits.length === 0) return [];

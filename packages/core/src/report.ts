@@ -128,6 +128,11 @@ export function reportView(
     summarized: body.summarized,
     automaticDecisions: [...task.automaticDecisions],
   };
-  if (body.fullReply !== undefined) view.fullReply = body.fullReply;
+  if (body.fullReply !== undefined) {
+    view.fullReply = body.fullReply;
+    // "Pi · deepseek/deepseek-flash" → "Pi": the card says whose words they are (ADR 0054).
+    const by = task.agent.split(" · ")[0]?.trim();
+    if (by !== undefined && by !== "") view.fullReplyBy = by;
+  }
   return view;
 }

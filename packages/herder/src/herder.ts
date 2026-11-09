@@ -8,7 +8,7 @@ import type {
   OwnerImage,
   VoiceRequest,
 } from "@agentherd/core";
-import { cutWords, fitsOwner, OWNER_WORDS_MAX, ownerWords, REVIEW_JOB } from "@agentherd/core";
+import { REVIEW_JOB } from "@agentherd/core";
 import { Agent, type AgentMessage, type AgentTool, type StreamFn } from "@agentherd/herder-loop";
 import { DEFAULT_HERDER_STYLE, type HerderStyle } from "@agentherd/protocol";
 import { guardCheck } from "@agentherd/rules";
@@ -348,21 +348,11 @@ export class Herder implements HerderPort {
       if (job.kind === "voice") job.done(undefined);
       return;
     }
-    let text = this.turn.asked ? "" : this.lastReply();
+    const text = this.turn.asked ? "" : this.lastReply();
     if (job.kind === "voice" && text.includes(QUIET)) {
       this.save();
       job.done("");
       return;
-    }
-    // At most OWNER_WORDS_MAX (ADR 0049): asked to write it again once, then cut.
-    if (text !== "" && !fitsOwner(text)) {
-      this.host.audit("herder.reply.long", { words: ownerWords(text) });
-      const again = await this.attempt(
-        `[AgentHerd] Your reply has ${ownerWords(text)} words; the owner reads at most ${OWNER_WORDS_MAX}. Write it again in at most ${OWNER_WORDS_MAX} words: the answer first, no steps. Do not call tools.`,
-        [],
-      );
-      const shorter = again.ok ? this.lastReply() : "";
-      text = cutWords(shorter !== "" ? shorter : text);
     }
     if (job.kind === "voice") {
       this.save();
