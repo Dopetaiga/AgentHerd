@@ -1,9 +1,16 @@
 // The Herder: one resident session on a light model (docs/spec/04-herder.md §1, ADR 0018).
 
 import type { CompressionState } from "@agentherd/context-kernel";
-import type { HerderEvent, HerderHost, HerderPort, OwnerImage } from "@agentherd/core";
+import type {
+  HerderEvent,
+  HerderHost,
+  HerderPort,
+  OwnerImage,
+  VoiceRequest,
+} from "@agentherd/core";
 import { cutWords, fitsOwner, OWNER_WORDS_MAX, ownerWords, REVIEW_JOB } from "@agentherd/core";
 import { Agent, type AgentMessage, type AgentTool, type StreamFn } from "@agentherd/herder-loop";
+import { DEFAULT_HERDER_STYLE, type HerderStyle } from "@agentherd/protocol";
 import { guardCheck } from "@agentherd/rules";
 import { type Api, isContextOverflow, type Model } from "@earendil-works/pi-ai";
 import {
@@ -24,8 +31,11 @@ import {
   nowLine,
   ownerAnswerPrompt,
   ownerMessagePrompt,
+  QUIET,
   systemPrompt,
+  voicePrompt,
 } from "./prompt.ts";
+import { stylePrompt } from "./style.ts";
 import {
   herderTools,
   otherOption,
@@ -66,6 +76,7 @@ type Job = (
   | { kind: "owner"; text: string; images: OwnerImage[] }
   | { kind: "answer"; question: string; answer: string }
   | { kind: "intake"; text: string; auto: boolean }
+  | { kind: "voice"; request: VoiceRequest; done: (words: string | undefined) => void }
 ) & { recorded?: boolean };
 
 type Attempt = { ok: true } | { ok: false; message: string; acted: boolean; overflow: boolean };
@@ -118,6 +129,8 @@ export class Herder implements HerderPort {
   /** When the last turn ran; after a long pause the memory in the system prompt is rebuilt. */
   private lastTurnAt = 0;
   private ownerTurnsSinceReview = 0;
+  /** The style in the system prompt now. */
+  private style: HerderStyle = DEFAULT_HERDER_STYLE;
   private reviewTimer: ReturnType<typeof setTimeout> | undefined;
 
   constructor(opts: HerderOptions) {
@@ -178,6 +191,15 @@ export class Herder implements HerderPort {
   }
 
   /**
+   * Tells the owner a task's result in the Herder's words (ADR 0053), after the turns queued
+   * before it. "" when it chose to say nothing; undefined when it could not speak.
+   */
+  voice(request: VoiceRequest): Promise<string | undefined> {
+    if (this.stopped) return Promise.resolve(undefined);
+    return new Promise((done) => this.enqueue({ kind: "voice", request, done }));
+  }
+
+  /**
    * Reports and alarms already reach the owner by themselves, so an event starts no turn: the
    * Herder only repeated them. They go with the owner's next message as context.
    */
@@ -201,6 +223,7 @@ export class Herder implements HerderPort {
     this.stopped = true;
     if (this.reviewTimer !== undefined) clearTimeout(this.reviewTimer);
     if (this.heldTimer !== undefined) clearTimeout(this.heldTimer);
+    for (const job of this.jobs) if (job.kind === "voice") job.done(undefined);
     this.jobs.length = 0;
     this.agent.abort();
     await this.running;
@@ -260,6 +283,18 @@ export class Herder implements HerderPort {
           ? ""
           : await recallBlock(this.host.memory, job.text, this.host.embedder);
       if (recall !== "") prompt = `${prompt}\n\n${recall}`;
+    } else if (job.kind === "voice") {
+      // Nothing the owner said: the turn may look things up but change nothing.
+      this.turn = {
+        kind: "event",
+        ownerText: "",
+        typedText: "",
+        images: [],
+        asked: false,
+        notified: false,
+        pickedDirs: [],
+      };
+      prompt = voicePrompt(job.request);
     } else if (job.kind === "intake") {
       // The item's title is someone else's words: it can name the project (repository name)
       // but is quoted to the model as untrusted (ADR 0052).
@@ -305,12 +340,20 @@ export class Herder implements HerderPort {
     }
     // In the message, not the system prompt, so the cached prefix stays the same.
     prompt = `${nowLine(this.now())}\n${prompt}`;
-    this.refreshMemory();
+    this.refreshSystemPrompt();
     this.host.audit("herder.turn", { kind: job.kind });
     const done = await this.runWithRetries(job, prompt, images);
     if (job.kind === "owner") this.countForReview();
-    if (!done) return;
+    if (!done) {
+      if (job.kind === "voice") job.done(undefined);
+      return;
+    }
     let text = this.turn.asked ? "" : this.lastReply();
+    if (job.kind === "voice" && text.includes(QUIET)) {
+      this.save();
+      job.done("");
+      return;
+    }
     // At most OWNER_WORDS_MAX (ADR 0049): asked to write it again once, then cut.
     if (text !== "" && !fitsOwner(text)) {
       this.host.audit("herder.reply.long", { words: ownerWords(text) });
@@ -320,6 +363,13 @@ export class Herder implements HerderPort {
       );
       const shorter = again.ok ? this.lastReply() : "";
       text = cutWords(shorter !== "" ? shorter : text);
+    }
+    if (job.kind === "voice") {
+      this.save();
+      // The task sends it, as its report; an empty reply means the Herder could not say it.
+      if (text !== "") this.host.recordTurn("herder", text, job.request.taskId);
+      job.done(text === "" ? undefined : text);
+      return;
     }
     if (text !== "") {
       this.host.recordTurn("herder", text);
@@ -392,7 +442,8 @@ export class Herder implements HerderPort {
     }
     if (result.ok) return true;
     this.host.audit("herder.error", { kind: job.kind, message: result.message });
-    if (this.stopped) return false;
+    // A task result goes out without the Herder's words; the owner is not told the Herder failed.
+    if (this.stopped || job.kind === "voice") return false;
     if (result.acted || errorKind(result.message) === "fatal") {
       await this.host.alert(this.host.texts.herderFailed(shortError(result.message)), false);
       return false;
@@ -432,7 +483,8 @@ export class Herder implements HerderPort {
 
   /** The rules, then how to fold, then the memory: what changes least comes first, for the cache. */
   private fullSystemPrompt(): string {
-    const base = `${systemPrompt(this.host.locale)}\n\n${this.context.systemPrompt()}`;
+    this.style = this.host.style?.() ?? DEFAULT_HERDER_STYLE;
+    const base = `${systemPrompt(this.host.locale)}\n\n${stylePrompt(this.style)}\n\n${this.context.systemPrompt()}`;
     const snapshot = this.host.memory === undefined ? "" : memorySnapshot(this.host.memory);
     return snapshot === "" ? base : `${base}\n\n${snapshot}`;
   }
@@ -441,11 +493,13 @@ export class Herder implements HerderPort {
    * The system prompt keeps the memory as it was when the conversation started, so the prompt
    * cache holds. After {@link MEMORY_REFRESH_MS} without a turn it is rebuilt with what was learnt.
    */
-  private refreshMemory(): void {
+  private refreshSystemPrompt(): void {
     const now = this.now();
     const stale = this.lastTurnAt !== 0 && now - this.lastTurnAt >= MEMORY_REFRESH_MS;
     this.lastTurnAt = now;
-    if (!stale || this.host.memory === undefined) return;
+    // A new style takes effect at once (ADR 0053); it costs one cache miss.
+    const restyled = (this.host.style?.() ?? DEFAULT_HERDER_STYLE) !== this.style;
+    if (!restyled && (!stale || this.host.memory === undefined)) return;
     const first = this.agent.state.messages[0];
     if (first?.role !== "system") return;
     const prompt = this.fullSystemPrompt();

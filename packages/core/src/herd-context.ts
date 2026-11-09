@@ -5,6 +5,7 @@ import type {
   AgentProfile,
   Channel,
   ChannelBinding,
+  HerderStyle,
   Locale,
   MessageRef,
   Mode,
@@ -68,6 +69,8 @@ export interface HerdOptions {
   backgroundCheckMinutes?: number;
   /** Language of the texts the owner reads. Default: Chinese. */
   locale?: Locale;
+  /** How the Herder talks (ADR 0053): read on every Herder turn, set when the owner asks in chat. */
+  herderStyle?: { get(): HerderStyle; set(style: HerderStyle): void };
   /** Creates the Herder. Without it, plain messages get the list of commands. */
   herder?: HerderFactory;
   /** Models a task can run with. Without it, agents use their own settings. */

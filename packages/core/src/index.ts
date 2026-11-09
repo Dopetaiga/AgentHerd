@@ -25,6 +25,7 @@ export type {
   HerderPort,
   HerderTurnRole,
   OwnerImage,
+  VoiceRequest,
 } from "./herder-port.ts";
 export { HERDER_RETRY_TARGET } from "./herder-port.ts";
 export type { Answerable, InboxOptions, OwnerAnswer } from "./inbox.ts";

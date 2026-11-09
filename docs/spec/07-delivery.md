@@ -62,3 +62,4 @@ Each milestone is split into plans under [`plans/`](../../plans/README.md).
 | E2E-FOLD | A relayed agent message over `foldChars` is sent folded and complete | M2 | |
 | E2E-HERDER-NO-APPROVE | The Herder has no way to allow an item; a Herder tool call that matches the guard list goes to the owner | M2 | `packages/herder/test/e2e/herder.e2e.test.ts`, `packages/herder/test/herder.test.ts` |
 | E2E-HERDER-CONTEXT | The Herder folds earlier messages with `compress`; after a restart on the same `herd.db` the next request shows the summary instead of them, and the log still has them | M2 | `packages/herder/test/e2e/herder.e2e.test.ts` |
+| E2E-HERDER-VOICE | A task's report is the Herder's words with the agent's reply as the full reply; `[quiet]` sends nothing; a failing or slow Herder (3 minutes) still lets the report out; a `waiting` herd_report is told in the Herder's words | M2 | `packages/core/test/e2e/voice.e2e.test.ts` |

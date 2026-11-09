@@ -56,3 +56,4 @@ Format and rules: [ADR 0001](0001-record-architecture-decisions.md).
 | [0050](0050-tell-the-owner-when-a-source-stops.md) | A watched source (gh, Gmail) failing for 30 minutes is told once and its return once; `gh` runs with the system proxy | Accepted |
 | [0051](0051-keep-following-pull-requests-after-they-close.md) | Pull request watches stay 14 days after a merge or close; pull requests the owner hands to a task are followed too | Accepted |
 | [0052](0052-offer-new-github-work-when-asked.md) | New GitHub work (issues assigned to the owner, reviews requested) is watched only when asked and offered with 「开任务 / 忽略」; `auto` watches start by themselves | Accepted |
+| [0053](0053-the-herder-tells-task-results.md) | The Herder tells every task result in its own words, the agent's reply one tap below; the owner picks one of three styles (friend, partner, secretary) copied from real personal agents | Accepted |

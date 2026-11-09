@@ -4,8 +4,8 @@
 // task-report.ts (reports, alarms, stages) and permission.ts.
 
 import { join } from "node:path";
-import type { AgentProfile, Inbound, Mode, Rule } from "@agentherd/protocol";
-import { DEFAULT_LOCALE } from "@agentherd/protocol";
+import type { AgentProfile, HerderStyle, Inbound, Mode, Rule } from "@agentherd/protocol";
+import { DEFAULT_HERDER_STYLE, DEFAULT_LOCALE } from "@agentherd/protocol";
 import { approveAppCalls } from "./app-calls.ts";
 import { Board } from "./board.ts";
 import { type Clock, systemClock } from "./clock.ts";
@@ -277,6 +277,12 @@ export class Herd {
               }
             : {}),
         }),
+      ...(this.opts.herderStyle === undefined
+        ? {}
+        : {
+            style: () => this.opts.herderStyle?.get() ?? DEFAULT_HERDER_STYLE,
+            setStyle: (style: HerderStyle) => this.opts.herderStyle?.set(style),
+          }),
       audit: (type, data) => this.store.audit(type, data),
       recordTurn: (role, text, taskId) => this.store.addHerderTurn(role, text, taskId),
       memory: this.store.memory,

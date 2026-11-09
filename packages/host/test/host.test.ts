@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { FakeChannel } from "@agentherd/channel-fake";
 import type { SecretStore } from "@agentherd/core";
 import { afterEach, describe, expect, it } from "vitest";
-import type { HostEvent } from "../src/api.ts";
+import type { HostEvent, SettingsPatch } from "../src/api.ts";
 import { readConfig, writeConfig } from "../src/config.ts";
 import { Host } from "../src/host.ts";
 import { connectHost, isHostRunning, serveApi, socketPath } from "../src/server.ts";
@@ -162,6 +162,28 @@ describe("Host", () => {
     });
     expect(readConfig(t.home)).toMatchObject({ mode: "observe", keepAwake: true });
     expect(() => t.host.updateSettings({ mode: "auto" })).toThrow(/observe or assist/);
+  });
+
+  it("saves the Herder's style and lets the Herder read and change it", async () => {
+    const t = makeHost(true);
+    await t.host.start();
+    expect(t.host.status().herderStyle).toBe("friend");
+    expect(t.host.updateSettings({ herderStyle: "secretary" })).toMatchObject({
+      herderStyle: "secretary",
+    });
+    expect(readConfig(t.home)).toMatchObject({ herderStyle: "secretary" });
+    // A style the app does not know is refused, as an old or broken client could send one.
+    const bad = JSON.parse('{"herderStyle":"boss"}') as SettingsPatch;
+    expect(() => t.host.updateSettings(bad)).toThrow(/herderStyle must be one of/);
+    // The Herd reads the style on every use and writes it back when the owner asks in chat.
+    const internals = t.host as unknown as {
+      herd?: { opts: { herderStyle?: { get(): string; set(style: "partner"): void } } };
+    };
+    const style = internals.herd?.opts.herderStyle;
+    expect(style?.get()).toBe("secretary");
+    style?.set("partner");
+    expect(readConfig(t.home)).toMatchObject({ herderStyle: "partner" });
+    expect(t.host.status().herderStyle).toBe("partner");
   });
 
   it("keeps Codex out of new tasks after it fails to start one", async () => {

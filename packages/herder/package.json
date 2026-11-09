@@ -14,13 +14,13 @@
     "@agentherd/context-kernel": "workspace:*",
     "@agentherd/core": "workspace:*",
     "@agentherd/herder-loop": "workspace:*",
+    "@agentherd/protocol": "workspace:*",
     "@agentherd/rules": "workspace:*",
     "@earendil-works/pi-ai": "1.5.0",
     "@earendil-works/pi-schema": "1.5.0"
   },
   "devDependencies": {
     "@agentherd/channel-fake": "workspace:*",
-    "@agentherd/mock-agent": "workspace:*",
-    "@agentherd/protocol": "workspace:*"
+    "@agentherd/mock-agent": "workspace:*"
   }
 }

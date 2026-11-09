@@ -27,6 +27,13 @@ export type ReportState = "progress" | "waiting" | "ready" | "blocked" | "failed
 
 export type Mode = "observe" | "assist" | "auto";
 
+/** How the Herder talks to the owner (ADR 0053); each is copied from a personal agent's persona. */
+export type HerderStyle = "friend" | "partner" | "secretary";
+
+export const HERDER_STYLES: readonly HerderStyle[] = ["friend", "partner", "secretary"];
+
+export const DEFAULT_HERDER_STYLE: HerderStyle = "friend";
+
 export type Risk = "low" | "medium" | "high";
 
 export interface AgentProfile {

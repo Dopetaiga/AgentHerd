@@ -16,6 +16,7 @@ import {
 import { useState } from "react";
 import { type FeishuFlow, FeishuQr, Mark } from "../components/FeishuSetup";
 import { Badge, Button, Group, IconTile, Row } from "../components/ui";
+import { HERDER_STYLE_LABELS, type HerderStyle } from "../herder-styles";
 import { applyModels, call, type ModelRef, useApp } from "../store";
 
 /** The column every step body sits in. */
@@ -249,11 +250,53 @@ function TestLine({
   );
 }
 
+/** The three ways the Herder can talk, each with a sample message about the same work. */
+export function StyleBody({
+  style,
+  onChoose,
+}: {
+  style: HerderStyle;
+  onChoose: (style: HerderStyle) => void;
+}) {
+  return (
+    <div className={`${BODY} flex flex-col gap-2.5`}>
+      {HERDER_STYLE_LABELS.map((s) => {
+        const selected = s.style === style;
+        const look = selected ? "border-accent bg-control-hover" : "border-line bg-surface";
+        return (
+          <label
+            key={s.style}
+            className={`flex w-full cursor-pointer flex-col gap-2 rounded-lg border px-4 py-3 text-left transition-colors hover:bg-hover has-[:focus-visible]:bg-hover ${look}`}
+          >
+            <input
+              type="radio"
+              name="herderStyle"
+              className="sr-only"
+              checked={selected}
+              onChange={() => onChoose(s.style)}
+            />
+            <span className="flex items-center gap-2">
+              <span className="font-medium text-ink text-md">{s.title}</span>
+              <span className="flex-1 text-ink-dim text-sm">{s.from}</span>
+              {selected && <Check size={16} className="text-accent-text" />}
+            </span>
+            <span className="rounded-md bg-canvas px-3 py-2 text-ink-2 text-sm leading-5">
+              {s.sample}
+            </span>
+          </label>
+        );
+      })}
+    </div>
+  );
+}
+
 /** What the owner set up, and what is left for later. */
 export function DoneBody() {
   const channel = useApp((s) => s.status?.channel);
   const services = useApp((s) => s.models?.services ?? []);
   const herder = useApp((s) => s.models?.roles.herder);
+  const style = useApp((s) => s.status?.herderStyle);
+  const styleTitle = HERDER_STYLE_LABELS.find((s) => s.style === style)?.title;
   const row = (ok: boolean) => (
     <IconTile tone={ok ? "green" : "gray"}>
       {ok ? <Check size={15} strokeWidth={2.25} /> : <span className="text-ink-dim">—</span>}
@@ -288,6 +331,11 @@ export function DoneBody() {
             ? `${herder.serviceId} / ${herder.model}`
             : "还没选，之后在「模型」页选"
         }
+      />
+      <Row
+        icon={row(styleTitle !== undefined)}
+        title="主管的说话风格"
+        description={styleTitle ?? "之后在「设置」里选"}
       />
     </Group>
   );

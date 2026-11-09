@@ -157,6 +157,9 @@ importers:
       '@agentherd/herder-loop':
         specifier: workspace:*
         version: link:../herder-loop
+      '@agentherd/protocol':
+        specifier: workspace:*
+        version: link:../protocol
       '@agentherd/rules':
         specifier: workspace:*
         version: link:../rules
@@ -173,9 +176,6 @@ importers:
       '@agentherd/mock-agent':
         specifier: workspace:*
         version: link:../mock-agent
-      '@agentherd/protocol':
-        specifier: workspace:*
-        version: link:../protocol
 
   packages/herder-loop:
     dependencies:

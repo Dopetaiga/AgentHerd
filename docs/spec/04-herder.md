@@ -98,7 +98,7 @@ The Herder may add, never rewrite.
 | Group | Tools |
 | --- | --- |
 | Sessions | `session_start(project, name, profile?, ownerText, addedContext, model?)` (name: the task's short name, shown on the board and every report, [ADR 0034](../adr/0034-herder-names-tasks.md)) (model: `service/model` the agent can run, picked by the Herder, [ADR 0025](../adr/0025-herder-picks-model-per-task.md)), `session_prompt(sessionId, text, name?)` (name renames the task), `session_cancel(sessionId)` (stops the running turn), `session_end(sessionId)` (closes the task when the owner says it is finished; the case memory is written then), `session_list()` (also lists models, the agents that can run each, and the owner's model guide, [ADR 0026](../adr/0026-model-guide-for-the-herder.md)) |
-| Owner | `ask(text, options)` (AgentHerd adds 「其他」), `project_find(name)`, `notify(text)`, `relay_start(sessionId)`, `relay_end()` |
+| Owner | `ask(text, options)` (AgentHerd adds 「其他」), `project_find(name)`, `notify(text)`, `relay_start(sessionId)`, `relay_end()`, `style_set(style)` (ADR 0053) |
 | Read | `task_get`, `task_list`, `session_transcript`, `decisions_list`, `read`, `grep`, `list`, `git_log`, `git_diff` (read tools only inside known project directories) |
 | Context | `compress`, `decompress`, `search_context`, `acp_status`: fold finished parts of its own conversation, find and show them again ([ADR 0045](../adr/0045-herder-context-folded-by-the-model.md)) |
 
@@ -194,8 +194,17 @@ When a task ends, the owner always gets a report ([05-channels.md](05-channels.m
 a title (task, project, agent, duration, result) added by code, the body, and the automatic
 decisions during the task.
 
-The body is at most `reportMaxWords` (default 100, see "Message length") and is chosen in
-this order ([ADR 0049](../adr/0049-short-messages-written-by-the-agent.md)):
+With a Herder, the body is the Herder's own words ([ADR 0053](../adr/0053-the-herder-tells-task-results.md)):
+core calls `HerderPort.voice` with the task, how it ended, the agent's last reply and its
+`herd_report`; the Herder answers in its style, from its conversation with the owner, without
+adding or changing facts, and the agent's reply is always attached as "Full reply". `[quiet]`
+sends nothing. A `herd_report` that needs the owner (waiting, blocked, failed) is told the same
+way. When the Herder fails or takes over `VOICE_TIMEOUT_MS` (3 minutes) the body is
+「主管暂时说不了话，任务的原话在下面「完整回复」里。」 (a notice falls back to the agent's summary).
+Approval cards and other notices are not voiced.
+
+Without a Herder, the body is at most `reportMaxWords` (default 100, see "Message length") and is
+chosen in this order ([ADR 0049](../adr/0049-short-messages-written-by-the-agent.md)):
 
 1. The turn's own `herd_report` summary, when its state is `ready`, `failed`, `blocked` or
    `waiting`.
@@ -207,7 +216,7 @@ this order ([ADR 0049](../adr/0049-short-messages-written-by-the-agent.md)):
    the reply cut after 100 words with "…".
 
 Whenever the body is not the reply, the full reply is attached ("Full reply", folded). Automatic
-decisions are folded under their count. The Herder never writes or shortens the body.
+decisions are folded under their count.
 
 ### Background work
 
@@ -339,9 +348,19 @@ board are not limited.
 
 ### Reply length
 
-- Every prompt AgentHerd sends to a session gets a labeled note (ADR 0036; was the first only): replies go to a
-  phone; keep each under `replyHintChars` (default 300); conclusion first; details in files
-  or commit messages; no long code or logs.
+- Every prompt AgentHerd sends to a session gets a labeled note (ADR 0036; was the first only).
+  With a Herder (ADR 0053): the Herder reads the reply and tells the owner; end each turn with
+  what was done or found, where the results are, and what is left or needs the owner; no long
+  code or logs. Without one: replies go to a phone; keep each under `replyHintChars` (default
+  300); conclusion first; details in files or commit messages; no long code or logs.
+
+### Style
+
+The owner picks how the Herder talks ([ADR 0053](../adr/0053-the-herder-tells-task-results.md)):
+`friend` 能干的朋友 (default, from open-instinct's persona), `partner` 有主见的搭档 (OpenClaw's
+SOUL.md), `secretary` 干练秘书 (Vercel's personal-agent template and nanobot). It is chosen in the
+first run, in Settings, or in chat (`style_set`, only on the owner's own messages), saved as
+`herderStyle` in `config.json`, and read every turn: the next message uses it.
 - Messages are folded in the channel, not shortened ([05-channels.md](05-channels.md#2-what-the-owner-sees)).
 
 ## 3. Approval pipeline

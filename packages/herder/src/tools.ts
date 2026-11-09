@@ -6,7 +6,7 @@ import { isAbsolute, join, resolve } from "node:path";
 import type { HerderHost, OwnerImage, Task } from "@agentherd/core";
 import { tooLong } from "@agentherd/core";
 import type { AgentTool, AgentToolResult } from "@agentherd/herder-loop";
-import { arr, bool, obj, opt, str } from "@earendil-works/pi-schema";
+import { arr, bool, obj, oneOf, opt, str } from "@earendil-works/pi-schema";
 import { agentForModel } from "./agent-models.ts";
 import { lessonsText, ownerPrefsText, pastLessons } from "./memory.ts";
 import { placeModels, TIERS, type TierPlacement, tiersText } from "./model-guide.ts";
@@ -276,6 +276,12 @@ const askSchema = obj({
   options: arr(str(), { minItems: 1, maxItems: 4 }),
 });
 const notifySchema = obj({ text: str() });
+const styleSchema = obj({
+  style: oneOf(["friend", "partner", "secretary"] as const, {
+    description:
+      "friend: a capable friend, warm and brief; partner: has opinions and says them; secretary: result first, no small talk",
+  }),
+});
 const findSchema = obj({
   name: str({ description: "The project's name as the owner said it, e.g. pi-desktop" }),
 });
@@ -560,6 +566,7 @@ export function herderTools(
         "Asks the owner one question with suggested answers as buttons; AgentHerd adds an 「其他」 button for typing their own. End your turn after it.",
       parameters: askSchema,
       execute: async (_id: string, args: { question: string; options: string[] }) => {
+        if (turn().kind === "event") throw new Error(SPEAK_IN_REPLY);
         const long = tooLong(args.question);
         if (long !== undefined) throw new Error(`question ${long}`);
         const other = otherOption(host.locale);
@@ -577,6 +584,7 @@ export function herderTools(
       description: "Sends a short message to the owner, at most 100 words.",
       parameters: notifySchema,
       execute: async (_id: string, args: { text: string }) => {
+        if (turn().kind === "event") throw new Error(SPEAK_IN_REPLY);
         const long = tooLong(args.text);
         if (long !== undefined) throw new Error(long);
         await host.say(args.text);
@@ -586,6 +594,22 @@ export function herderTools(
     },
   ];
   const all = tools.map((t) => t as unknown as AgentTool);
+  const setStyle = host.setStyle;
+  if (setStyle !== undefined) {
+    const styleTool = {
+      name: "style_set",
+      label: "Change how you talk",
+      description:
+        "Changes how you talk to the owner, only when the owner asks for it. Takes effect from your next message.",
+      parameters: styleSchema,
+      execute: async (_id: string, args: { style: "friend" | "partner" | "secretary" }) => {
+        ownerOnly(turn, "change how you talk");
+        setStyle(args.style);
+        return ok(`style is now ${args.style}`);
+      },
+    };
+    all.push(styleTool as unknown as AgentTool);
+  }
   if (host.watchMail !== undefined) {
     all.push(...mailTools(host, turn).map((t) => t as unknown as AgentTool));
   }
@@ -594,6 +618,9 @@ export function herderTools(
   }
   return all;
 }
+
+/** A task result is told in the Herder's reply, never in a separate message (ADR 0053). */
+const SPEAK_IN_REPLY = "while telling a task's result, put everything in your reply";
 
 /** Only the owner's own words create or change a new-work watch (ADR 0052). */
 function ownerOnly(turn: () => TurnContext, what: string): void {

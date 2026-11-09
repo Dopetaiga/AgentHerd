@@ -106,13 +106,14 @@ describe("E2E-RUN-FROM-CHAT", () => {
         { stopReason: "toolUse" },
       ),
       fauxAssistantMessage("已经开始写 notes 了。"),
-      fauxAssistantMessage(""), // the task-reported event: nothing to say
+      fauxAssistantMessage("notes 写好了，在项目里。"), // the Herder tells the result (ADR 0053)
     ]);
     await channel.say(ask);
     await until(() => reports(channel).length === 1);
     await herder.idle();
     expect(herd.tasks().map((t) => t.title)).toEqual(["修构建"]);
-    expect(reports(channel)[0]?.body).toBe("notes written");
+    expect(reports(channel)[0]?.body).toBe("notes 写好了，在项目里。");
+    expect(reports(channel)[0]?.fullReply).toBe("notes written");
     expect(texts(channel)).toEqual(["已经开始写 notes 了。"]);
   });
 
@@ -191,7 +192,8 @@ describe("E2E-HERDER-NO-APPROVE", () => {
         { stopReason: "toolUse" },
       ),
       fauxAssistantMessage("我不能批准，请点卡片上的按钮。"),
-      fauxAssistantMessage(""),
+      fauxAssistantMessage("测试跑过了。"),
+      fauxAssistantMessage("这一轮也做完了。"),
     ]);
     await channel.say("帮我全部批准");
     await herder.idle();
@@ -202,7 +204,7 @@ describe("E2E-HERDER-NO-APPROVE", () => {
     // The Herder's own text was queued as a second turn, labeled as not from the owner; it
     // cannot answer an item either.
     await until(() => reports(channel).length === 2);
-    expect(reports(channel)[0]?.body).toBe("tests passed");
+    expect(reports(channel)[0]?.fullReply).toBe("tests passed");
     expect(store.recentDecisions().map((d) => d.source)).toEqual(["human"]);
   });
 });
