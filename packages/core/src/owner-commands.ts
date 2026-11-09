@@ -8,6 +8,7 @@ import { parseCommand } from "./commands.ts";
 import { type HerdContext, openTasks, say, type TaskOps } from "./herd-context.ts";
 import type { OwnerImage } from "./herder-port.ts";
 import { HERDER_RETRY_TARGET } from "./herder-port.ts";
+import { INTAKE_TARGET } from "./intake.ts";
 import { forgetMemory, memoryListText, restoreMemory } from "./memory-commands.ts";
 import type { Relay } from "./relay.ts";
 import { WORKSPACE_TARGET } from "./task-runner.ts";
@@ -41,6 +42,9 @@ export class OwnerCommands {
         if (this.asks.has(inbound.target))
           return await this.onAskAnswer(inbound.target, inbound.action);
         if (inbound.target === HERDER_RETRY_TARGET) return ctx.herder()?.retry?.();
+        if (inbound.target.startsWith(INTAKE_TARGET)) {
+          return await ctx.intake()?.answer(inbound.target, inbound.action);
+        }
         if (inbound.target.startsWith(WORKSPACE_TARGET)) {
           return await this.tasks.takeTaskVersion(inbound.target.slice(WORKSPACE_TARGET.length));
         }
@@ -48,6 +52,10 @@ export class OwnerCommands {
         if (inbound.action === "end-relay") return await this.relay.end("ended by you");
         await ctx.inbox.handle(inbound);
         return;
+      }
+      // The task this message starts or continues acknowledges it with a reply (ADR 0049).
+      if (inbound.ref !== undefined) {
+        ctx.ownerMessage = { ref: inbound.ref, at: ctx.clock.now().getTime() };
       }
       const text = [inbound.text, ...this.saveFiles(inbound.files ?? [])]
         .filter((t) => t !== "")

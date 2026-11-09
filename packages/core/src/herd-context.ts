@@ -6,6 +6,7 @@ import type {
   Channel,
   ChannelBinding,
   Locale,
+  MessageRef,
   Mode,
   TextTone,
   TextView,
@@ -14,11 +15,15 @@ import type {
 import type { ExtraGuard } from "@agentherd/rules";
 import type { Board } from "./board.ts";
 import type { Clock, Timer } from "./clock.ts";
+import type { GitHubOptions, GitHubWatch } from "./github-watch.ts";
 import type { HerderFactory, HerderPort, OwnerImage } from "./herder-port.ts";
 import type { Inbox } from "./inbox.ts";
+import type { Intake } from "./intake.ts";
 import type { AppTools, HerdReport, McpGateway } from "./mcp-gateway.ts";
 import type { Completer, Embedder } from "./memory-store.ts";
+import type { Outbox } from "./outbox.ts";
 import type { Registry } from "./registry.ts";
+import type { SourceHealth } from "./source-health.ts";
 import type { Store } from "./store.ts";
 import type { Task } from "./tasks.ts";
 import type { CoreTexts } from "./texts.ts";
@@ -51,13 +56,16 @@ export interface HerdOptions {
   secrets?: Record<string, string>;
   /** Use this store instead of `<home>/herd.db` (tests pass `:memory:`). */
   store?: Store;
-  reportMaxChars?: number;
+  /** Words in a report body (ADR 0049); default OWNER_WORDS_MAX. */
+  reportMaxWords?: number;
   replyHintChars?: number;
   watchdogSeconds?: number;
   maxQuietMinutes?: number;
   boardDebounceMs?: number;
   relayIdleMinutes?: number;
   sessionIdleMinutes?: number;
+  /** Minutes before an agent with work running in the background is asked about it. */
+  backgroundCheckMinutes?: number;
   /** Language of the texts the owner reads. Default: Chinese. */
   locale?: Locale;
   /** Creates the Herder. Without it, plain messages get the list of commands. */
@@ -77,6 +85,17 @@ export interface HerdOptions {
   apps?: () => AppTools | undefined;
   /** Names of the owner's connected apps, for the Herder (e.g. ["Gmail"]). */
   appNames?: () => string[];
+  /** Minutes between two looks for new work (ADR 0052). */
+  intakePollMinutes?: number;
+  /** Minutes between two looks at the owner's mail watches (ADR 0048). */
+  mailPollMinutes?: number;
+  /** A watched source failing this long is told to the owner (default 30, ADR 0050). */
+  sourceDownMinutes?: number;
+  /**
+   * Follows pull requests tasks open on GitHub with `gh` (ADR 0047). Without it,
+   * nothing is followed.
+   */
+  github?: GitHubOptions;
 }
 
 /** How an agent's launch changes to run one model: env added, arguments appended. */
@@ -140,6 +159,18 @@ export interface Following {
   reopening?: Promise<void>;
   /** The agent's last `herd_report` in the current turn. */
   report?: HerdReport;
+  /** Tool calls of the turn when `report` came: later calls mean the agent went on working. */
+  reportAt?: number;
+  /** The report already sent to the owner when it came (waiting, blocked, failed). */
+  notified?: HerdReport;
+  /** The agent sent its `herd_ack` line in this turn. */
+  acked?: boolean;
+  /** The owner's message that asked for the current turn; the ack replies to it. */
+  trigger?: MessageRef;
+  /** The current turn is AgentHerd's own check on background work. */
+  waking?: boolean;
+  /** The turn ended with work still running in the background: checks so far, the next one. */
+  background?: { checks: number; timer?: Timer };
   /** Text and tool calls of the current turn. */
   turn: { text: string; toolCalls: number };
   /** Reply text since the last tool call, not yet in the transcript. */
@@ -162,6 +193,10 @@ export interface Following {
 export interface QueuedPrompt {
   text: string;
   images: OwnerImage[];
+  /** AgentHerd's own prompt asking about background work, not the owner's. */
+  wake?: boolean;
+  /** The owner's message this prompt answers. */
+  trigger?: MessageRef;
   resolve: (result: RunResult) => void;
   reject: (error: Error) => void;
 }
@@ -184,11 +219,21 @@ export interface HerdContext {
   readonly following: Map<string, Following>;
   /** Task tokens and answers for the agents' `agentherd` MCP server. */
   readonly mcp: McpGateway;
+  /** Messages for the owner, stored until the channel took them. */
+  readonly outbox: Outbox;
   readonly workspaces: Workspaces;
+  /** Whether the watched sources (GitHub, Gmail) still answer. */
+  readonly sources: SourceHealth;
+  /** Pull requests tasks opened, when `github` is set. */
+  github(): GitHubWatch | undefined;
+  /** New work the owner asked to be offered, when `github` is set (ADR 0052). */
+  intake(): Intake | undefined;
   /** The current Herder, if any. It can change at runtime. */
   herder(): HerderPort | undefined;
   /** The current mode. It can change at runtime. */
   mode(): Mode;
+  /** The owner's latest message, until a task's prompt takes it as its trigger. */
+  ownerMessage?: { ref: MessageRef; at: number };
 }
 
 /**
@@ -248,26 +293,24 @@ export async function say(
   taskLabel?: string,
   tone?: TextTone,
   taskId?: string,
+  replyTo?: MessageRef,
 ): Promise<void> {
   const view: TextView = { kind: "text", text };
   if (taskLabel !== undefined) view.taskLabel = taskLabel;
   if (tone !== undefined) view.tone = tone;
+  if (replyTo !== undefined) view.replyTo = replyTo;
   await send(ctx, view, taskId);
 }
 
 /**
- * Sends a view; a failure is audited, never thrown. A message about a task (a report, a relay
- * view, or `taskId` given) is remembered, so the owner's reply to it goes to that task (ADR 0043).
+ * Sends a view through the outbox: a failure is retried, never thrown. A message about a task (a
+ * report, a relay view, or `taskId` given) is remembered, so the owner's reply to it goes to that
+ * task (ADR 0043).
  */
 export async function send(ctx: HerdContext, view: View, taskId?: string): Promise<void> {
-  try {
-    const ref = await ctx.opts.channel.send(view);
-    const about =
-      taskId ?? (view.kind === "report" || view.kind === "relay" ? view.taskId : undefined);
-    if (about !== undefined && typeof ref?.id === "string") ctx.store.linkMessage(ref.id, about);
-  } catch (error) {
-    ctx.store.audit("send.error", { kind: view.kind, message: (error as Error).message });
-  }
+  const about =
+    taskId ?? (view.kind === "report" || view.kind === "relay" ? view.taskId : undefined);
+  await ctx.outbox.send(view, about);
 }
 
 export function firstLine(text: string): string {

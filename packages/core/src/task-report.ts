@@ -1,10 +1,10 @@
 // Task reports: the completion report, watchdog alarms, and the stage on the board.
 
 import type { AgentConnection } from "@agentherd/acp-client";
-import { type Following, firstLine, type HerdContext } from "./herd-context.ts";
+import { type Following, firstLine, type HerdContext, say } from "./herd-context.ts";
 import type { HerdReport } from "./mcp-gateway.ts";
 import {
-  REPORT_MAX_CHARS,
+  REPORT_MAX_WORDS,
   reportBody,
   reportView,
   type SummaryAnswer,
@@ -21,10 +21,11 @@ export function setReport(ctx: HerdContext, f: Following, text: string): void {
 
 /**
  * An agent's `herd_report` (docs/spec/09-agent-tools.md §2): its state sets the stage, its
- * summary the board line.
+ * summary the board line. Needing the owner, being stuck or failing reaches the owner at once.
  */
 export function applyReport(ctx: HerdContext, f: Following, report: HerdReport): void {
   f.report = report;
+  f.reportAt = f.turn.toolCalls;
   ctx.store.audit("task.herd_report", {
     taskId: f.task.id,
     state: report.state,
@@ -32,6 +33,22 @@ export function applyReport(ctx: HerdContext, f: Following, report: HerdReport):
   });
   setReport(ctx, f, report.summary);
   restage(ctx, f);
+  const state = report.state;
+  if (state !== "waiting" && state !== "blocked" && state !== "failed") return;
+  const last = f.notified;
+  if (last?.state === state && last.summary === report.summary) {
+    f.notified = report;
+    return;
+  }
+  f.notified = report;
+  ctx.store.audit("report.notified", { taskId: f.task.id, state });
+  void say(
+    ctx,
+    ctx.texts.reportNotice(state, report.summary),
+    f.task.title,
+    state === "waiting" ? undefined : "alarm",
+    f.task.id,
+  );
 }
 
 /** Recomputes the stage of a task from its session; updates the board if it changed. */
@@ -61,8 +78,7 @@ export async function askSummary(
 ): Promise<SummaryAnswer> {
   f.turn = { text: "", toolCalls: 0 };
   f.pending = "";
-  const max = ctx.opts.reportMaxChars ?? REPORT_MAX_CHARS;
-  const prompt = summaryPrompt(max, ctx.texts);
+  const prompt = summaryPrompt(ctx.opts.reportMaxWords ?? REPORT_MAX_WORDS, ctx.texts);
   ctx.store.addTranscript(f.task.id, "prompt", prompt);
   try {
     await connection.prompt(agentSessionId, prompt);
@@ -72,29 +88,39 @@ export async function askSummary(
   return { text: f.turn.text, toolCalls: f.turn.toolCalls };
 }
 
-/** Sends the completion report once per task. */
+/**
+ * Sends the completion report once per turn. `toOwner` false when the owner already got the
+ * agent's own report of this turn: the board and the Herder still learn it.
+ */
 export async function sendReport(
   ctx: HerdContext,
   f: Following,
   reply: string,
   ask: (() => Promise<SummaryAnswer>) | null,
+  toOwner = true,
 ): Promise<void> {
-  const max = ctx.opts.reportMaxChars ?? REPORT_MAX_CHARS;
+  // The agent's own report of a turn that ended normally speaks first (ADR 0049).
+  const own = ask !== null && f.report !== undefined && f.report.state !== "progress";
   const body = await reportBody(
     reply,
     ask ?? (() => Promise.reject(new Error("no summary turn"))),
-    max,
-    ctx.texts.noReply,
+    {
+      maxWords: ctx.opts.reportMaxWords ?? REPORT_MAX_WORDS,
+      noReply: ctx.texts.noReply,
+      ...(own && f.report !== undefined ? { summary: f.report.summary } : {}),
+    },
   );
   restage(ctx, f);
   const view = reportView(f.task, body, ctx.clock.now(), ctx.texts);
-  try {
-    const ref = await ctx.opts.channel.send(view);
-    // A reply to the report goes to the task (ADR 0043).
-    if (typeof ref?.id === "string") ctx.store.linkMessage(ref.id, f.task.id);
-    ctx.store.audit("report.sent", { taskId: f.task.id, summarized: body.summarized });
-  } catch (error) {
-    ctx.store.audit("report.error", { taskId: f.task.id, message: (error as Error).message });
+  if (toOwner) {
+    // Kept and retried until the channel takes it; a reply to it goes to the task (ADR 0043).
+    const ref = await ctx.outbox.send(view, f.task.id);
+    ctx.store.audit(ref === undefined ? "report.queued" : "report.sent", {
+      taskId: f.task.id,
+      summarized: body.summarized,
+    });
+  } else {
+    ctx.store.audit("report.already-sent", { taskId: f.task.id });
   }
   setReport(ctx, f, ctx.texts.reported(firstLine(body.body)));
   ctx.herder()?.event({
@@ -111,17 +137,15 @@ export async function onAlarm(ctx: HerdContext, alarm: Alarm): Promise<void> {
   f.alarm = true;
   ctx.store.audit("watchdog.alarm", { ...alarm });
   setReport(ctx, f, ctx.texts.watchdog(alarm.detail));
-  try {
-    const ref = await ctx.opts.channel.send({
+  await ctx.outbox.send(
+    {
       kind: "text",
       taskLabel: f.task.title,
       text: ctx.texts.watchdog(alarm.detail),
       tone: "alarm",
-    });
-    if (typeof ref?.id === "string") ctx.store.linkMessage(ref.id, f.task.id);
-  } catch (error) {
-    ctx.store.audit("watchdog.error", { message: (error as Error).message });
-  }
+    },
+    f.task.id,
+  );
   ctx.herder()?.event({
     kind: "watchdog",
     taskId: f.task.id,

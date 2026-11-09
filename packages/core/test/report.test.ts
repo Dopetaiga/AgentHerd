@@ -36,8 +36,10 @@ describe("reportBody", () => {
     expect(askSummary).not.toHaveBeenCalled();
   });
 
+  const long = Array.from({ length: 150 }, (_, i) => `word${i}`).join(" ");
+
   it("uses a good summary for a long reply, keeping the trimmed full reply", async () => {
-    const reply = `  ${"x".repeat(700)}  `;
+    const reply = `  ${long}  `;
     const result = await reportBody(
       reply,
       async (): Promise<SummaryAnswer> => ({
@@ -52,48 +54,64 @@ describe("reportBody", () => {
     });
   });
 
-  it("falls back to the reply when the summary called tools", async () => {
-    const reply = "x".repeat(700);
-    const result = await reportBody(
-      reply,
-      async (): Promise<SummaryAnswer> => ({
-        text: "a summary",
-        toolCalls: 1,
-      }),
-    );
-    expect(result).toEqual({ body: reply, summarized: false });
+  it("puts the agent's own herd_report summary first and keeps the reply (ADR 0049)", async () => {
+    const askSummary = vi.fn();
+    expect(
+      await reportBody(long, askSummary, { summary: "Fixed the bug; please merge PR #3." }),
+    ).toEqual({
+      body: "Fixed the bug; please merge PR #3.",
+      summarized: true,
+      fullReply: long,
+    });
+    expect(await reportBody("Done.", askSummary, { summary: "Done." })).toEqual({
+      body: "Done.",
+      summarized: false,
+    });
+    expect(askSummary).not.toHaveBeenCalled();
   });
 
-  it("falls back to the reply when the summary is empty", async () => {
-    const reply = "x".repeat(700);
-    const result = await reportBody(
-      reply,
-      async (): Promise<SummaryAnswer> => ({
-        text: "   ",
-        toolCalls: 0,
-      }),
-    );
-    expect(result).toEqual({ body: reply, summarized: false });
+  it("skips an own summary that is too long", async () => {
+    const result = await reportBody("Short reply.", vi.fn(), { summary: long });
+    expect(result).toEqual({ body: "Short reply.", summarized: false });
   });
 
-  it("falls back to the reply when the summary is too long", async () => {
-    const reply = "x".repeat(700);
-    const result = await reportBody(
-      reply,
-      async (): Promise<SummaryAnswer> => ({
-        text: "y".repeat(700),
-        toolCalls: 0,
-      }),
-    );
-    expect(result).toEqual({ body: reply, summarized: false });
+  it("counts Chinese in words, not characters", async () => {
+    const zh = "把设置页的保存按钮改好了，测试都通过。".repeat(6);
+    expect(zh.length).toBeGreaterThan(100);
+    const askSummary = vi.fn();
+    expect(await reportBody(zh, askSummary)).toEqual({ body: zh, summarized: false });
+    expect(askSummary).not.toHaveBeenCalled();
   });
 
-  it("falls back to the reply when askSummary throws", async () => {
-    const reply = "x".repeat(700);
-    const result = await reportBody(reply, async () => {
+  for (const [why, answer] of [
+    ["called tools", { text: "a summary", toolCalls: 1 }],
+    ["is empty", { text: "   ", toolCalls: 0 }],
+    ["is too long", { text: long, toolCalls: 0 }],
+  ] as const) {
+    it(`cuts the reply to the limit when the summary ${why}`, async () => {
+      const result = await reportBody(long, async (): Promise<SummaryAnswer> => answer);
+      expect(result.summarized).toBe(true);
+      expect(result.fullReply).toBe(long);
+      expect(result.body.endsWith("…")).toBe(true);
+      expect(result.body.startsWith("word0 word1")).toBe(true);
+      expect(result.body).toContain("word99");
+      expect(result.body).not.toContain("word100");
+    });
+  }
+
+  it("cuts the reply when askSummary throws", async () => {
+    const result = await reportBody(long, async () => {
       throw new Error("boom");
     });
-    expect(result).toEqual({ body: reply, summarized: false });
+    expect(result).toMatchObject({ summarized: true, fullReply: long });
+    expect(result.body).not.toContain("word100");
+  });
+
+  it("cuts text without word breaks too", async () => {
+    const blob = "x".repeat(2000);
+    const result = await reportBody(blob, async () => ({ text: "", toolCalls: 0 }));
+    expect(result.body.length).toBeLessThan(900);
+    expect(result.fullReply).toBe(blob);
   });
 });
 

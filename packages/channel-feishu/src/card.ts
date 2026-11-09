@@ -9,6 +9,7 @@ import type {
   View,
 } from "@agentherd/protocol";
 import { DEFAULT_LOCALE } from "@agentherd/protocol";
+import { readableMath } from "./math.ts";
 import type { CardTexts } from "./texts.ts";
 import { CARD_TEXTS } from "./texts.ts";
 
@@ -120,8 +121,9 @@ function escapeMarkdown(text: string): string {
   return text.replace(/([\\`*_[\]()<>#|])/g, "\\$1");
 }
 
+/** A markdown element; TeX math is written as plain text, which Feishu cards can show. */
 function markdown(content: string): Record<string, unknown> {
-  return { tag: "markdown", content };
+  return { tag: "markdown", content: readableMath(content) };
 }
 
 function makeCard(
@@ -305,7 +307,7 @@ export function renderCard(view: View, locale: Locale = DEFAULT_LOCALE): Record<
           stage: [{ text: t.stages[row.stage], color: stageColor(row.stage) }],
           project: row.project,
           agent: row.agent,
-          report: row.lastReport,
+          report: readableMath(row.lastReport),
           updated: clock(row.updatedAt),
         })),
       };
@@ -323,15 +325,17 @@ export function renderCard(view: View, locale: Locale = DEFAULT_LOCALE): Record<
         elements.push(collapsiblePanel(t.fullReply, view.fullReply));
       }
       if (view.automaticDecisions.length > 0) {
+        // Folded: the owner sees how many, and opens the list when they care (ADR 0049).
         elements.push(
-          markdown(
-            `**${t.automaticDecisions}**\n${view.automaticDecisions
-              .map((decision) => `- ${decision}`)
-              .join("\n")}`,
+          collapsiblePanel(
+            `${t.automaticDecisions} · ${view.automaticDecisions.length}`,
+            view.automaticDecisions.map((decision) => `- ${decision}`).join("\n"),
           ),
         );
       }
-      elements.push(actionRow(view.taskId, "relay", t.relayToTask));
+      if (view.result !== "done") {
+        elements.push(actionRow(view.taskId, "relay", t.relayToTask));
+      }
       const header: Record<string, unknown> = {
         title: { tag: "plain_text", content: `${REPORT_ICON[view.result]} ${view.title}` },
         template: reportTemplate(view.result),

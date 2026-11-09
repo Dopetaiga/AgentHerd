@@ -82,7 +82,43 @@ export const HERDER_LOG_TABLE_SQL = `CREATE TABLE IF NOT EXISTS herder_log(
 /** Where the Herder kept the tail of its conversation before schema version 8. */
 export const LEGACY_HERDER_STATE_KEY = "herder.messages";
 
-export const LATEST_SCHEMA_VERSION = 8;
+/**
+ * Schema 9: messages for the owner that are stored before they are sent and kept until the
+ * channel took them (docs/spec/04-herder.md "Delivery").
+ */
+export const OUTBOX_TABLE_SQL = `CREATE TABLE IF NOT EXISTS outbox(
+  id TEXT PRIMARY KEY,
+  view_json TEXT NOT NULL,
+  task_id TEXT,
+  attempts INTEGER NOT NULL DEFAULT 0,
+  next_at TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  error TEXT
+);`;
+
+/** Schema 10: pull requests tasks opened, followed on GitHub (docs/spec/04-herder.md "Pull requests"). */
+export const PR_WATCHES_TABLE_SQL = `CREATE TABLE IF NOT EXISTS pr_watches(
+  key TEXT PRIMARY KEY,
+  task_id TEXT NOT NULL,
+  data_json TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);`;
+
+/** Schema 11: mail the owner asked to be told about (docs/spec/04-herder.md "Mail"). */
+export const MAIL_WATCHES_TABLE_SQL = `CREATE TABLE IF NOT EXISTS mail_watches(
+  id TEXT PRIMARY KEY,
+  data_json TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);`;
+
+/** New-work watches the owner asked for (ADR 0052). */
+export const INTAKE_WATCHES_TABLE_SQL = `CREATE TABLE IF NOT EXISTS intake_watches(
+  id TEXT PRIMARY KEY,
+  data_json TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);`;
+
+export const LATEST_SCHEMA_VERSION = 12;
 
 export const SCHEMA_SQL = `
 CREATE TABLE sessions(
@@ -142,4 +178,8 @@ ${TASKS_TABLE_SQL}
 ${TASK_WORKSPACE_SQL}
 ${MESSAGE_TASKS_TABLE_SQL}
 ${HERDER_LOG_TABLE_SQL}
+${OUTBOX_TABLE_SQL}
+${PR_WATCHES_TABLE_SQL}
+${MAIL_WATCHES_TABLE_SQL}
+${INTAKE_WATCHES_TABLE_SQL}
 `;

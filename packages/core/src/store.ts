@@ -2,7 +2,7 @@ import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import type { StatementSync } from "node:sqlite";
 import { DatabaseSync } from "node:sqlite";
-import type { Decision, Item, MessageRef, Rule } from "@agentherd/protocol";
+import type { Decision, Item, MessageRef, Rule, View } from "@agentherd/protocol";
 import { redact } from "@agentherd/rules";
 import type { HerderTurnRole } from "./herder-port.ts";
 import { ftsQuery, MEMORY_TABLES_SQL, MemoryStore } from "./memory-store.ts";
@@ -20,9 +20,13 @@ import {
 import {
   HERDER_LOG_TABLE_SQL,
   HERDER_TURNS_TABLE_SQL,
+  INTAKE_WATCHES_TABLE_SQL,
   LATEST_SCHEMA_VERSION,
   LEGACY_HERDER_STATE_KEY,
+  MAIL_WATCHES_TABLE_SQL,
   MESSAGE_TASKS_TABLE_SQL,
+  OUTBOX_TABLE_SQL,
+  PR_WATCHES_TABLE_SQL,
   SCHEMA_SQL,
   STATE_TABLE_SQL,
   TASK_WORKSPACE_SQL,
@@ -127,6 +131,22 @@ export class Store {
           this.moveLegacyHerderMessages();
           this.db.prepare("UPDATE schema_version SET version = ?").run(8);
         });
+      }
+      if (version < 9) {
+        this.db.exec(OUTBOX_TABLE_SQL);
+        this.db.prepare("UPDATE schema_version SET version = ?").run(9);
+      }
+      if (version < 10) {
+        this.db.exec(PR_WATCHES_TABLE_SQL);
+        this.db.prepare("UPDATE schema_version SET version = ?").run(10);
+      }
+      if (version < 11) {
+        this.db.exec(MAIL_WATCHES_TABLE_SQL);
+        this.db.prepare("UPDATE schema_version SET version = ?").run(11);
+      }
+      if (version < 12) {
+        this.db.exec(INTAKE_WATCHES_TABLE_SQL);
+        this.db.prepare("UPDATE schema_version SET version = ?").run(12);
       }
     }
 
@@ -449,6 +469,101 @@ export class Store {
       .run(messageId, taskId, at.toISOString());
   }
 
+  /** Keeps a message for the owner until the channel took it. */
+  addOutbox(row: OutboxRow): void {
+    this.db
+      .prepare(
+        "INSERT OR REPLACE INTO outbox(id, view_json, task_id, attempts, next_at, created_at, error) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      )
+      .run(
+        row.id,
+        JSON.stringify(row.view),
+        row.taskId ?? null,
+        row.attempts,
+        row.nextAt,
+        row.createdAt,
+        row.error ?? null,
+      );
+  }
+
+  /** Messages the channel has not taken yet, oldest first. */
+  outbox(): OutboxRow[] {
+    return this.db
+      .prepare("SELECT * FROM outbox ORDER BY created_at, rowid")
+      .all()
+      .map((r) => ({
+        id: String(r.id),
+        view: JSON.parse(String(r.view_json)) as View,
+        ...(r.task_id === null ? {} : { taskId: String(r.task_id) }),
+        attempts: Number(r.attempts),
+        nextAt: String(r.next_at),
+        createdAt: String(r.created_at),
+        ...(r.error === null ? {} : { error: String(r.error) }),
+      }));
+  }
+
+  /** Saves how far AgentHerd has read a pull request a task opened. */
+  savePrWatch(watch: PrWatch): void {
+    this.db
+      .prepare(
+        "INSERT OR REPLACE INTO pr_watches(key, task_id, data_json, updated_at) VALUES (?, ?, ?, ?)",
+      )
+      .run(prKey(watch), watch.taskId, JSON.stringify(watch), new Date().toISOString());
+  }
+
+  /** Pull requests followed, oldest first. */
+  prWatches(): PrWatch[] {
+    return this.db
+      .prepare("SELECT data_json FROM pr_watches ORDER BY rowid")
+      .all()
+      .map((r) => JSON.parse(String(r.data_json)) as PrWatch);
+  }
+
+  deletePrWatch(watch: Pick<PrWatch, "repo" | "number">): void {
+    this.db.prepare("DELETE FROM pr_watches WHERE key = ?").run(prKey(watch));
+  }
+
+  saveMailWatch(watch: MailWatch): void {
+    this.db
+      .prepare("INSERT OR REPLACE INTO mail_watches(id, data_json, created_at) VALUES (?, ?, ?)")
+      .run(watch.id, JSON.stringify(watch), watch.createdAt);
+  }
+
+  /** Mail watches the owner asked for, oldest first. */
+  mailWatches(): MailWatch[] {
+    return this.db
+      .prepare("SELECT data_json FROM mail_watches ORDER BY created_at, id")
+      .all()
+      .map((r) => JSON.parse(String(r.data_json)) as MailWatch);
+  }
+
+  deleteMailWatch(id: string): void {
+    this.db.prepare("DELETE FROM mail_watches WHERE id = ?").run(id);
+  }
+
+  saveIntakeWatch(watch: IntakeWatch): void {
+    this.db
+      .prepare("INSERT OR REPLACE INTO intake_watches(id, data_json, created_at) VALUES (?, ?, ?)")
+      .run(watch.id, JSON.stringify(watch), watch.createdAt);
+  }
+
+  /** New-work watches the owner asked for, oldest first (ADR 0052). */
+  intakeWatches(): IntakeWatch[] {
+    return this.db
+      .prepare("SELECT data_json FROM intake_watches ORDER BY created_at, id")
+      .all()
+      .map((r) => JSON.parse(String(r.data_json)) as IntakeWatch);
+  }
+
+  deleteIntakeWatch(id: string): void {
+    this.db.prepare("DELETE FROM intake_watches WHERE id = ?").run(id);
+  }
+
+  /** The channel took the message, or it was given up. */
+  deleteOutbox(id: string): void {
+    this.db.prepare("DELETE FROM outbox WHERE id = ?").run(id);
+  }
+
   /** The task a message is about, if AgentHerd sent it for one. */
   taskOfMessage(messageId: string): string | undefined {
     const row = this.db
@@ -528,6 +643,84 @@ export class Store {
       throw error;
     }
   }
+}
+
+/** A pull request a task opened, as far as AgentHerd has read it. */
+export interface PrWatch {
+  /** `owner/name` */
+  repo: string;
+  number: number;
+  url: string;
+  taskId: string;
+  /** Ids of comments and reviews already handled. */
+  seen: string[];
+  /** Head commit whose failed checks were already handed to the task. */
+  ciFailedSha?: string;
+  /** Times the task was woken for this pull request. */
+  wakes: number;
+  createdAt: string;
+  /** Last comment, review or failed check; a watch quiet for long ends. */
+  activeAt: string;
+  /** Set once it merged or closed; the watch then keeps going for 14 quiet days (ADR 0051). */
+  closed?: "merged" | "closed";
+  /** The owner handed this pull request to the task; it need not be the task's own. */
+  handed?: boolean;
+}
+
+export function prKey(w: Pick<PrWatch, "repo" | "number">): string {
+  return `${w.repo.toLowerCase()}#${w.number}`;
+}
+
+/** A message for the owner waiting in the outbox. */
+export interface OutboxRow {
+  id: string;
+  view: View;
+  /** The task it is about: the owner's reply to it goes there. */
+  taskId?: string;
+  attempts: number;
+  /** When to try again (ISO). */
+  nextAt: string;
+  createdAt: string;
+  /** The last send error. */
+  error?: string;
+}
+
+/** Mail the owner asked to be told about (docs/spec/04-herder.md "Mail"). */
+/** New work on GitHub the owner asked to be offered (ADR 0052). */
+export interface IntakeWatch {
+  id: string;
+  /** Issues assigned to the owner, or pull requests waiting for their review. */
+  kind: "issues" | "reviews";
+  /** `owner/name`; every repository when missing. */
+  repo?: string;
+  label?: string;
+  /** What the owner wants to hear about, in their words. */
+  about: string;
+  /** New items start a task without asking: the owner said so. */
+  auto: boolean;
+  createdAt: string;
+  /** Urls of items already seen, newest last. */
+  seen: string[];
+  /** Items offered with 「开任务 / 忽略」 the owner has not answered yet. */
+  offers: IntakeOffer[];
+}
+
+export interface IntakeOffer {
+  id: string;
+  item: { kind: "issues" | "reviews"; repo: string; number: number; title: string; url: string };
+  /** The offer's message, to take its buttons away once answered. */
+  ref?: MessageRef;
+}
+
+export interface MailWatch {
+  id: string;
+  /** What the owner wants to hear about, in their words, e.g. "导师的邮件". */
+  about: string;
+  /** A Gmail search, e.g. `from:prof@uni.edu`. */
+  query: string;
+  createdAt: string;
+  /** Ids of messages already told, newest last. */
+  seen: string[];
 }
 
 /** A task as saved in herd.db (ADR 0039). */

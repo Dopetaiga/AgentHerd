@@ -1,9 +1,11 @@
+import type { SourceState } from "./source-health.ts";
 // What the Herd and the Herder know about each other (docs/spec/04-herder.md §1). The core does
 // not import the Herder or any model library: the CLI or the app passes a factory.
 
 import type { Locale } from "@agentherd/protocol";
+import type { IntakeRequest } from "./intake.ts";
 import type { Completer, Embedder, MemoryStore } from "./memory-store.ts";
-import type { DecisionRow } from "./store.ts";
+import type { DecisionRow, IntakeWatch, MailWatch } from "./store.ts";
 import type { Task } from "./tasks.ts";
 import type { CoreTexts } from "./texts.ts";
 
@@ -20,8 +22,10 @@ export interface OwnerImage {
 export type HerderTurnRole = "owner" | "answer" | "herder" | "ask" | "event";
 
 export interface HerderEvent {
-  kind: "task-reported" | "watchdog";
-  taskId: string;
+  kind: "task-reported" | "watchdog" | "github" | "mail" | "intake";
+  /** The task it is about; mail is about no task. */
+  taskId?: string;
+  /** The task's title, or for mail what the owner asked to hear about. */
   title: string;
   /** Text that came from an agent. Untrusted. */
   text: string;
@@ -68,6 +72,17 @@ export interface HerderHost {
   ask(text: string, options: string[]): Promise<void>;
   /** Names of the owner's connected apps; agents other than Pi use them (docs/spec/09-agent-tools.md §3). */
   apps?(): string[];
+  /** Mail the owner asked to hear about (ADR 0048); absent without connected apps. */
+  mailWatches?(): MailWatch[];
+  /** Starts telling the owner about mail matching a Gmail search; throws when Gmail cannot be read. */
+  watchMail?(about: string, query: string): Promise<MailWatch>;
+  unwatchMail?(id: string): boolean;
+  /** New-work watches (ADR 0052), when GitHub is set up. */
+  intakeWatches?(): IntakeWatch[];
+  watchIntake?(request: IntakeRequest): Promise<IntakeWatch>;
+  unwatchIntake?(id: string): boolean;
+  /** Watched sources that are failing now (ADR 0050). */
+  sources?(): SourceState[];
   audit(type: string, data: Record<string, unknown>): void;
   /** Keeps a line of the Herder's conversation with the owner (`herder_turns`). */
   recordTurn(role: HerderTurnRole, text: string, taskId?: string): void;
@@ -94,6 +109,11 @@ export interface HerderPort {
   ownerMessage(text: string, images?: OwnerImage[]): void;
   ownerAnswer(question: string, answer: string): void;
   event(event: HerderEvent): void;
+  /**
+   * New work the owner tapped 「开任务」 on, or a watch they made automatic found (ADR 0052): a
+   * turn that may start a task for it. `text` names the item; its title is not the owner's.
+   */
+  intake?(text: string, auto: boolean): void;
   /** Runs a message held after every model failed (the owner tapped 「重试」). */
   retry?(): void;
   stop(): Promise<void>;

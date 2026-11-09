@@ -1,6 +1,6 @@
 // A HerderHost that records what the Herder does, for unit tests.
 
-import type { HerderHost, MemoryStore, Task } from "@agentherd/core";
+import type { HerderHost, IntakeWatch, MailWatch, MemoryStore, Task } from "@agentherd/core";
 import { CORE_TEXTS } from "@agentherd/core";
 
 export interface Recorded {
@@ -41,6 +41,58 @@ export function task(id: string, title: string): Task {
   };
 }
 
+function mailHost(
+  watches: MailWatch[],
+): Pick<HerderHost, "mailWatches" | "watchMail" | "unwatchMail"> {
+  return {
+    mailWatches: () => watches,
+    watchMail: async (about, query) => {
+      const watch = {
+        id: `watch-${watches.length + 1}-0000`,
+        about,
+        query,
+        createdAt: "2026-11-04T00:00:00.000Z",
+        seen: [],
+      };
+      watches.push(watch);
+      return watch;
+    },
+    unwatchMail: (id) => {
+      const i = watches.findIndex((w) => w.id === id);
+      if (i >= 0) watches.splice(i, 1);
+      return i >= 0;
+    },
+  };
+}
+
+function intakeHost(
+  watches: IntakeWatch[],
+): Pick<HerderHost, "intakeWatches" | "watchIntake" | "unwatchIntake"> {
+  return {
+    intakeWatches: () => watches,
+    watchIntake: async (request) => {
+      const watch: IntakeWatch = {
+        id: `intake-${watches.length + 1}-0000`,
+        kind: request.kind,
+        ...(request.repo === undefined ? {} : { repo: request.repo }),
+        ...(request.label === undefined ? {} : { label: request.label }),
+        about: request.about ?? request.kind,
+        auto: request.auto === true,
+        createdAt: "2026-11-04T00:00:00.000Z",
+        seen: [],
+        offers: [],
+      };
+      watches.push(watch);
+      return watch;
+    },
+    unwatchIntake: (id) => {
+      const i = watches.findIndex((w) => w.id === id);
+      if (i >= 0) watches.splice(i, 1);
+      return i >= 0;
+    },
+  };
+}
+
 export function fakeHost(
   opts: {
     tasks?: Task[];
@@ -53,6 +105,10 @@ export function fakeHost(
     memory?: MemoryStore;
     apps?: string[];
     userHome?: string;
+    /** Mail watches kept in memory (ADR 0048). */
+    mail?: MailWatch[];
+    /** New-work watches kept in memory (ADR 0052). */
+    intake?: IntakeWatch[];
   } = {},
 ): {
   host: HerderHost;
@@ -115,6 +171,8 @@ export function fakeHost(
     audit: (type, data) => void rec.audits.push({ type, data }),
     recordTurn: (role, text) => void rec.turns.push({ role, text }),
     ...(opts.memory === undefined ? {} : { memory: opts.memory }),
+    ...(opts.mail === undefined ? {} : mailHost(opts.mail)),
+    ...(opts.intake === undefined ? {} : intakeHost(opts.intake)),
     getState: <T>(key: string) => rec.state.get(key) as T | undefined,
     setState: (key, value) => void rec.state.set(key, structuredClone(value)),
     herderLog: () => structuredClone(rec.log),

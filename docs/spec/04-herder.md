@@ -150,10 +150,15 @@ an alarm.
 | Agent report | MCP tool `herd_report` of the `agentherd` server, offered in `session/new` and `session/load` ([09-agent-tools.md](09-agent-tools.md)) |
 | Final reply | The agent's last message when the task's turn ends |
 | Watchdog | Timer, every `watchdogSeconds` (default 60) |
+| Pull requests | `gh`, every 2 minutes, for pull requests a task opened (see Pull requests) |
+| New work | `gh search`, every 5 minutes, only for watches the owner asked for (see New work) |
 
 `herd_report(state, summary, changes?, tests?, risks?, links?)`, with `state` one of
 `progress`, `waiting`, `ready`, `blocked`, `failed`, `dropped`. `summary` ≤ 600 characters.
 `progress` only updates the board; the other states end or pause the task and wake the Herder.
+`waiting`, `blocked` and `failed` are also sent to the owner at once ([ADR 0046](../adr/0046-tell-the-owner-at-the-right-time.md)):
+「需要你：」「卡住了：」「失败了：」 and the summary, linked to the task. The same report is not sent
+twice, and the end-of-turn report is left out when it would repeat it.
 Without `herd_report`, the stage comes from the stop reason and session state. A report holds
 for the turn it came in; the next prompt starts without one.
 
@@ -189,22 +194,148 @@ When a task ends, the owner always gets a report ([05-channels.md](05-channels.m
 a title (task, project, agent, duration, result) added by code, the body, and the automatic
 decisions during the task.
 
-The body is chosen by size:
+The body is at most `reportMaxWords` (default 100, see "Message length") and is chosen in
+this order ([ADR 0049](../adr/0049-short-messages-written-by-the-agent.md)):
 
-1. Final reply ≤ `reportMaxChars` (default 400, [ADR 0036](../adr/0036-message-cards-by-kind.md)): the reply, verbatim.
-2. Longer: AgentHerd sends the session one more prompt, labeled as from AgentHerd:
+1. The turn's own `herd_report` summary, when its state is `ready`, `failed`, `blocked` or
+   `waiting`.
+2. The final reply, verbatim, when it fits.
+3. Longer: AgentHerd sends the session one more prompt, labeled as from AgentHerd, asking for one
+   or two sentences of at most 100 words for the owner (the result and what the owner must do,
+   no steps), no tools. The answer is the body.
+4. The summary turn is asked once. If it fails, calls tools, or is still too long, the body is
+   the reply cut after 100 words with "…".
 
-   ```text
-   [AgentHerd] Summarize for the owner what you did in this task, in at most 400 characters:
-   what changed, what you verified, outputs (files, commits, PR), risks or open parts.
-   Do not call tools.
-   ```
+Whenever the body is not the reply, the full reply is attached ("Full reply", folded). Automatic
+decisions are folded under their count. The Herder never writes or shortens the body.
 
-   The answer is the body. The full final reply is attached ("Full reply").
-3. The summary turn is asked once. If it fails, calls tools, or is still too long, the body
-   is the original reply, folded.
+### Background work
 
-The Herder never writes or shortens the body.
+A turn that ends normally with the agent's last word a `herd_report` `progress` (no tool call
+after it) still has work running (a build, tests, a subagent). No report is sent; the board says
+「后台还在运行：<summary>」. After `backgroundCheckMinutes` (default 5) AgentHerd prompts the
+session to check on it: still running → `progress` again, finished → a normal reply. After 6
+checks the report goes out anyway. A prompt from the owner ends the wait and gets its own report;
+ending the task cancels it ([ADR 0046](../adr/0046-tell-the-owner-at-the-right-time.md)).
+
+### Acknowledgement
+
+An agent may call `herd_ack` once per turn with one line (≤ 30 words) about what it is
+starting; the owner gets it at once, as a reply to the owner's message that started the turn
+when there is one ([09-agent-tools.md](09-agent-tools.md), ADR 0049). Turns AgentHerd starts
+itself (background checks) are not acknowledged.
+
+### Delivery
+
+Messages for the owner (texts, reports, alarms, relay views) go through an outbox in herd.db
+(table `outbox`): stored first, deleted once the channel took them. A failed send is retried
+after 2 s, doubling up to 60 s; after 24 h it is dropped and audited (`send.dropped`). What a
+crash or stop left unsent goes out right after the next start. The board, approval cards and
+Herder questions are sent on their own paths.
+
+### Pull requests
+
+A task's pull requests are followed on GitHub with the owner's `gh` login, like super-agent
+follows its tickets' pull requests ([ADR 0047](../adr/0047-follow-the-pull-requests-tasks-open.md)).
+
+- **Which.** At the end of each turn, links `https://github.com/<owner>/<repo>/pull/<n>` in the
+  agent's reply and `herd_report` summary are read. One is followed when its author is the `gh`
+  user, it was opened after the task started and it is open; a pull request the agent only
+  mentioned is not. Links in what the owner sends a task (the starting request, later prompts)
+  are followed whoever opened them and in any state (`handed`, ADR 0051). Table `pr_watches` (schema 9) keeps the task, the comment and review ids
+  already handled, the head commit whose failed checks were handed over, and the wake count.
+- **When.** Every 2 minutes (`github.pollMinutes`). A task that is working, or whose ended turn is
+  not looked at yet, is skipped: while a task works, what its account writes on GitHub is the
+  agent's. After a turn, new comments by the `gh` user are marked as the agent's own.
+- **People.** New comments, reviews with text, line comments and `CHANGES_REQUESTED` wake the
+  task with one prompt that quotes them (labeled as from GitHub, not from the owner); the owner
+  hears from the task itself (`herd_ack`, then its report), not from a separate notice
+  (ADR 0049). An ended task is started again, as with any prompt (ADR 0039). A bare approval is
+  only told: 「PR #n 已被 login 批准」.
+- **Bots** (`type: Bot` or a login ending in `[bot]`) are marked seen and never wake or notify.
+- **Checks.** When every check of the head commit finished and some failed, the task gets the
+  names and how to read the logs, once per head commit; the owner hears only what the task
+  reports.
+- **End.** Merged or closed: the owner is told once (「PR #n 已合并」/「已关闭，没有合并」) and the
+  Herder gets an event; the watch stays (`closed`), so later comments still wake the task, whose
+  prompt says the pull request is closed (ADR 0051). Checks of a closed pull request are
+  ignored; reopening is told once. A watch with no activity for 14 days ends silently.
+  At most 20 wakes per pull request; later activity is only told.
+- **Failures.** `gh` missing, logged out or offline is audited (`github.error`) once per distinct
+  error; after 30 minutes the owner is told once (see Source health). `gh` runs with the
+  system proxy. `agentherd run` does not follow pull requests.
+
+### Mail
+
+Mail is watched only when the owner asks for it ([ADR 0048](../adr/0048-watch-mail-only-when-asked.md)).
+
+- **Asking.** 「导师来邮件提醒我」: the Herder calls `mail_watch` with the owner's words (`about`)
+  and a Gmail search (`query`); `mail_unwatch` stops it; `session_list` lists watches. Only an
+  owner turn can add or stop one. The tools exist only when the owner has connected apps
+  (Composio, [09-agent-tools.md](09-agent-tools.md) §3). There is no setting.
+- **Looking.** While at least one watch exists, every 3 minutes (`mailPollMinutes`) each search
+  runs as `(<query>) after:<created>` with `GMAIL_FETCH_EMAILS` through
+  `COMPOSIO_MULTI_EXECUTE_TOOL`. With no watch nothing is polled. Creating a watch runs the
+  search once and fails when Gmail cannot answer.
+- **Telling.** New matches are sent once: 「新邮件（<about>）：」 then sender, subject, a preview
+  of at most 40 characters and the Gmail link, at most 3 per message and then 「还有 N 封」; the
+  whole message stays within 100 words (fewer mails, then no previews, then cut; ADR 0049). The Herder's conversation gets the same
+  as an event line marked as mail. Table `mail_watches` (schema 10) keeps watches and the ids
+  told; they survive restarts.
+- **Failures** are audited (`mail.error`) once per distinct error; after 30 minutes the owner
+  is told once (see Source health).
+
+### New work
+
+New GitHub work is offered only when the owner asks for it ([ADR 0052](../adr/0052-offer-new-github-work-when-asked.md)).
+
+- **Asking.** 「有指派给我的 issue 告诉我」「有人请我 review 就提醒我」: the Herder calls
+  `intake_watch` with `kind` `issues` (open issues assigned to the owner) or `reviews`
+  (open pull requests requesting their review), optionally `repo` and `label`, and `auto`
+  only when the owner said such items start by themselves. The same kind/repo/label again only
+  changes `auto`. `intake_unwatch` stops one; `session_list` lists them. Only an owner
+  turn can add, change or stop one. The tools exist only when `gh` is set up.
+- **Looking.** While a watch exists, every 5 minutes (`intakePollMinutes`) each watch runs
+  `gh search issues --assignee=@me` or `gh search prs --review-requested=@me` with
+  `--state=open`. Creating a watch searches once; what is there already is not new, and a
+  failing `gh` refuses the watch. Failures count for source health as `github`.
+- **Offering.** A new item is sent once as a question card: 「有指派给你的 issue：<repo> #n
+  <title>（链接）。要开任务吗？」 with 「开任务」「忽略」. Core handles the tap: the card shows the
+  choice; 「开任务」 gives the Herder an intake turn with the item's line. With `auto` the owner
+  gets 「按你的规则开工：…」 and the intake turn runs at once. The Herder's conversation gets every
+  new item as an event marked as new GitHub work. Table `intake_watches` (schema 12) keeps
+  watches, seen items and unanswered offers.
+- **The intake turn** may start a task. The title is quoted as not from the owner; only the
+  repository's name picks a project without asking (ADR 0043), otherwise the Herder asks which
+  folder. The task's prompt has the item's link, so its pull request is followed (ADR 0051).
+
+### Source health
+
+A source that stops answering is told once ([ADR 0050](../adr/0050-tell-the-owner-when-a-source-stops.md)).
+
+- `SourceHealth` (`packages/core/src/source-health.ts`) keeps, per source (`github`, `mail`),
+  the first failure, the last error and whether the owner was told, in store state
+  `sources.health`.
+- After 30 minutes of failures with no success (`sourceDownMinutes`) the owner gets one alarm
+  message: which updates stopped and, when the error tells, what to do (`gh auth login`,
+  install `gh`, reconnect Gmail). Audit `source.down`. The first success after it is told once
+  (「PR 提醒恢复了。」, `source.up`).
+- Removing the last mail watch forgets mail's failures. `session_list` shows failing sources
+  to the Herder.
+- The host passes the system proxy to `gh` as `HTTPS_PROXY`/`HTTP_PROXY` (Windows registry
+  Internet Settings, macOS `scutil --proxy`) unless the environment has one
+  (`packages/host/src/proxy.ts`).
+
+### Message length
+
+Every message to the owner is at most 100 words ([ADR 0049](../adr/0049-short-messages-written-by-the-agent.md)),
+counted with `Intl.Segmenter("zh", { granularity: "word" })`: Chinese is split into words,
+English by spaces, links count; text without word breaks is held to 8 characters per word
+(`packages/core/src/owner-text.ts`). The agent writes its own short text: a `herd_report`
+summary over 100 words or a `herd_ack` over 30 is refused with a tool error asking for a shorter
+one. The Herder's replies follow the same limit: a longer final reply is written again once
+(audited `herder.reply.long`), then cut; `ask` and `notify` refuse longer text. Relay and the
+board are not limited.
 
 ### Reply length
 

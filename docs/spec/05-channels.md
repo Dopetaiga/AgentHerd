@@ -71,7 +71,7 @@ The owner talks to one bot in a direct chat. What it sends there:
 | Task board | One pinned card. Rows: task, stage, project, agent, last report, updated. Tasks that need the owner come first. Updated in place by code when a stage changes; a select menu under the table starts a relay. | Only when first sent |
 | Item card | An approval or an agent question. One card per item, labeled with its task. At most one open card per session; newer items for the same session queue behind it. Updated in place with the final state: "Allowed by you", "Allowed by rule", "Denied". | Yes |
 | Agent text | During a relay: everything the agent says, verbatim, with a task prefix | Yes |
-| Completion report | Every time a task ends (done, blocked, failed): title, what was done, verification, outputs, risks, automatic decisions; buttons "Relay to this task" and "Full transcript" | Yes |
+| Completion report | Every time a task ends (done, blocked, failed): title, what was done, verification, outputs, risks, automatic decisions; long replies and decisions are folded. Feishu shows "Relay to this task" only for non-done results. Replying to any report still reaches that task. | Yes |
 | Relay status | While a relay is active: "Talking to <task>", "End relay" button | When it starts and ends |
 | Reminder | Every `remindMinutes` (default 30) while an item is open | Yes |
 | Daily digest | On by default, can be turned off. Done today, still running, automatic decisions with reasons, decisions marked wrong | Yes |
@@ -88,6 +88,11 @@ one line, and a cut path hid which folder was meant. Both send the same `{target
 Long messages are folded, never shortened: over `foldChars` (default 400) the card shows the
 first lines and puts the rest in a collapsible panel; code blocks and logs are collapsed; over
 the card size limit the text is stored as a file and sent as a link.
+
+Feishu card markdown does not render LaTeX. Math spans (`$…$` that look like TeX, `$$…$$`,
+`\(…\)`, `\[…\]`) are written as plain Unicode text in the card: `$O(n \log \log n)$` shows as
+O(n log log n), `$x^2 \le \alpha$` as x² ≤ α; code is left alone and money like "$5" stays
+(`packages/channel-feishu/src/math.ts`). Only the display changes; the stored text is the agent's.
 
 Tool-call activity of agents is stored, not sent. Nothing the agent says to the owner is
 filtered ([ADR 0019](../adr/0019-relay-verbatim-board-and-reports.md)).

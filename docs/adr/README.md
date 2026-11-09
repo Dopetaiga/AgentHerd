@@ -49,3 +49,10 @@ Format and rules: [ADR 0001](0001-record-architecture-decisions.md).
 | [0043](0043-tasks-work-on-hidden-copies.md) | Tasks in a git project work on a hidden copy synced each turn; a project named once starts without asking; replies reach their task | Accepted |
 | [0044](0044-codex-runs-relay-models.md) | Codex runs any model of the owner's own OpenAI-compatible services, with its own CODEX_HOME | Accepted |
 | [0045](0045-herder-context-folded-by-the-model.md) | The Herder keeps its whole conversation and folds it itself with billion-context's kernel (copied into the repo) | Accepted |
+| [0046](0046-tell-the-owner-at-the-right-time.md) | Background work holds the report; waiting/blocked/failed reach the owner at once; `herd_ack`; messages kept in an outbox until sent | Accepted |
+| [0047](0047-follow-the-pull-requests-tasks-open.md) | Pull requests a task opened are followed with `gh`: people's comments and failed checks wake the task, a merge or close is told once | Accepted |
+| [0048](0048-watch-mail-only-when-asked.md) | Mail is watched only when the owner asks the Herder: a Gmail search polled through Composio every 3 minutes while a watch exists | Accepted |
+| [0049](0049-short-messages-written-by-the-agent.md) | Every message to the owner is at most 100 words; the agent writes its own summary and acknowledgement, too-long ones are refused | Accepted |
+| [0050](0050-tell-the-owner-when-a-source-stops.md) | A watched source (gh, Gmail) failing for 30 minutes is told once and its return once; `gh` runs with the system proxy | Accepted |
+| [0051](0051-keep-following-pull-requests-after-they-close.md) | Pull request watches stay 14 days after a merge or close; pull requests the owner hands to a task are followed too | Accepted |
+| [0052](0052-offer-new-github-work-when-asked.md) | New GitHub work (issues assigned to the owner, reviews requested) is watched only when asked and offered with 「开任务 / 忽略」; `auto` watches start by themselves | Accepted |

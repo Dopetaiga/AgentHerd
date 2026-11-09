@@ -6,6 +6,7 @@ import { join } from "node:path";
 import {
   chooseModel,
   emptyModelSettings,
+  type GhRun,
   Herd,
   type JsonRpcMessage,
   type ModelRef,
@@ -16,6 +17,7 @@ import {
   putService,
   RESIDENT_CAPS,
   removeService,
+  runGh,
   type SecretStore,
   UnknownTokenError,
 } from "@agentherd/core";
@@ -72,6 +74,7 @@ import { LocalEmbedder } from "./embedder.ts";
 import { mcpServerFor } from "./mcp-socket.ts";
 import { probeModels } from "./probe.ts";
 import { availableProfiles } from "./profiles.ts";
+import { withSystemProxy } from "./proxy.ts";
 import { RuntimeStore } from "./runtimes.ts";
 import { type VerifyOptions, verifyProfile } from "./verify.ts";
 
@@ -113,6 +116,8 @@ export interface HostOptions {
   fetchers?: Fetchers;
   /** HTTP for probeModels (tests). Default: global fetch. */
   fetch?: typeof fetch;
+  /** Runs `gh` for following pull requests tasks open (tests replace it). */
+  gh?: GhRun;
   target?: string;
   exists?: (path: string) => boolean;
   /** Options for verifyAgent (tests). */
@@ -297,6 +302,7 @@ export class Host implements HostApi {
       mode: config.mode ?? "assist",
       locale,
       profiles: this.herdProfiles(),
+      github: { run: this.opts.gh ?? runGh(withSystemProxy()) },
       ...(herder === undefined ? {} : { herder }),
       ...(this.opts.mcpSocket === undefined
         ? {}
