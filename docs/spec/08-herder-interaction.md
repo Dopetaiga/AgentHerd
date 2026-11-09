@@ -140,7 +140,7 @@ Each kind of message looks different, the same in Feishu and in the app:
 | Speaker | Look | Colour |
 | --- | --- | --- |
 | Herder talking | Plain text, no card | — |
-| Herder asks | Card 「主管问你」, option buttons + 「其他」 | purple |
+| Herder asks | Card 「主管问你」, option buttons (long answers and paths as full-width boxes) + 「其他」 | purple |
 | Task report, done | Card 「✅ 任务名」, subtitle project · agent · time, body summary | green |
 | Task report, running | Card 「⏳ 任务名」 | blue |
 | Task report, failed | Card 「❌ 任务名」, body the reason | red |
