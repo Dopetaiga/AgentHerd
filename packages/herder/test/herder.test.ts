@@ -12,7 +12,7 @@ import {
   streamSimple,
 } from "@earendil-works/pi-ai/compat";
 import { afterEach, describe, expect, it } from "vitest";
-import { Herder, type HerderOptions, IMAGE_SEEN_NOTE } from "../src/herder.ts";
+import { beforeToolMarkup, Herder, type HerderOptions, IMAGE_SEEN_NOTE } from "../src/herder.ts";
 import { QUIET } from "../src/prompt.ts";
 import { fakeHost, task } from "./helpers.ts";
 
@@ -516,6 +516,25 @@ describe("Herder voice (ADR 0053)", () => {
     result: "done",
     reply: "结论：3 处残留仍存在。清单已存 ~/notes.md",
   };
+
+  it("tool calls written as text never reach the owner (DeepSeek DSML)", async () => {
+    const leaked =
+      '<acp tokens="144" type="text">text</｜｜DSML｜｜ parameter>\n</｜｜DSML｜｜ invoke>';
+    expect(beforeToolMarkup(leaked)).toBe("");
+    expect(beforeToolMarkup('查完了。\n<｜DSML｜invoke name="x">')).toBe("查完了。");
+    expect(beforeToolMarkup("a | b ｜ c")).toBe("a | b ｜ c");
+
+    const { herder, rec, faux } = voiced();
+    faux.setResponses([fauxAssistantMessage(leaked)]);
+    expect(await herder.voice(request)).toBeUndefined();
+    expect(rec.audits.map((a) => a.type)).toContain("herder.reply.markup");
+
+    faux.setResponses([fauxAssistantMessage(leaked)]);
+    herder.ownerMessage("现在什么情况？");
+    await herder.idle();
+    expect(rec.said).toEqual([]);
+    expect(rec.alerts.length).toBe(1);
+  });
 
   it("tells a task's result in its own words; the agent's reply is quoted, not followed", async () => {
     const { herder, rec, faux } = voiced();

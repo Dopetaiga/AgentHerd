@@ -205,6 +205,9 @@ sends nothing. A `herd_report` that needs the owner (waiting, blocked, failed) i
 way. When the Herder fails or takes over `VOICE_TIMEOUT_MS` (3 minutes) the body is
 「主管暂时说不了话，agent 的原话在下面。」 (a notice falls back to the agent's summary).
 Approval cards and other notices are not voiced.
+A reply holding tool-call syntax written as text (DeepSeek's DSML, `<｜DSML｜…`) is never sent:
+a voice reply falls back as if the Herder failed; an owner reply keeps the text before it, or
+alerts `herderFailed` when nothing is left (audited `herder.reply.markup`).
 
 Without a Herder, the body is at most `reportMaxWords` (default 100, see "Message length") and is
 chosen in this order ([ADR 0049](../adr/0049-short-messages-written-by-the-agent.md)):

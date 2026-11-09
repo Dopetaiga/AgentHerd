@@ -348,7 +348,23 @@ export class Herder implements HerderPort {
       if (job.kind === "voice") job.done(undefined);
       return;
     }
-    const text = this.turn.asked ? "" : this.lastReply();
+    const raw = this.turn.asked ? "" : this.lastReply();
+    // A model that writes its tool calls as text (DeepSeek's DSML) must not reach the owner.
+    const text = beforeToolMarkup(raw);
+    if (text !== raw) this.host.audit("herder.reply.markup", { kind: job.kind });
+    if (job.kind === "voice" && text !== raw) {
+      this.save();
+      job.done(undefined);
+      return;
+    }
+    if (job.kind === "owner" && raw !== "" && text === "") {
+      this.save();
+      await this.host.alert(
+        this.host.texts.herderFailed("the model wrote broken tool calls"),
+        false,
+      );
+      return;
+    }
     if (job.kind === "voice" && text.includes(QUIET)) {
       this.save();
       job.done("");
@@ -606,4 +622,21 @@ function withoutImages(m: AgentMessage): AgentMessage {
       { type: "text", text: IMAGE_SEEN_NOTE },
     ],
   };
+}
+
+/**
+ * Tool-call syntax some models write as plain text instead of calling the tool: DeepSeek's DSML
+ * (`<｜DSML｜invoke>`, `</｜｜DSML｜｜ parameter>`) and its special tokens (`<｜tool▁calls▁begin｜>`).
+ */
+const TOOL_MARKUP = /<\/?[｜|]+\s*DSML|<[｜|]tool▁|<[｜|]end▁of▁sentence/;
+
+/** The text before any leaked tool-call markup, trimmed; the text itself when there is none. */
+export function beforeToolMarkup(text: string): string {
+  const at = text.search(TOOL_MARKUP);
+  if (at < 0) return text;
+  // A broken context tag right before the markup is not text for the owner either.
+  return text
+    .slice(0, at)
+    .replace(/<acp\b[^>]*>?[^<]*$/, "")
+    .trim();
 }
