@@ -90,6 +90,36 @@ function actionRow(target: string, action: string, label: string): Record<string
   };
 }
 
+/** Longer answers, and any path, do not fit a one-line button on a phone. */
+const ANSWER_BUTTON_MAX = 15;
+
+function fitsButton(label: string): boolean {
+  return [...label].length <= ANSWER_BUTTON_MAX && !label.includes("/");
+}
+
+/**
+ * A whole-width clickable box for a long answer: Feishu cuts a button to one line, so a path like
+ * /Users/me/learnspace/PI-Desktop lost the part that tells two folders apart. The box wraps the
+ * full text and sends the same {target, action} as a button.
+ */
+function answerBox(target: string, action: string, label: string): Record<string, unknown> {
+  return {
+    tag: "interactive_container",
+    width: "fill",
+    has_border: true,
+    border_color: "grey",
+    corner_radius: "8px",
+    padding: "8px 12px 8px 12px",
+    behaviors: [{ type: "callback", value: { target, action } }],
+    elements: [{ tag: "markdown", content: escapeMarkdown(label) }],
+  };
+}
+
+/** Paths and names stay as typed, not turned into emphasis or links. */
+function escapeMarkdown(text: string): string {
+  return text.replace(/([\\`*_[\]()<>#|])/g, "\\$1");
+}
+
 function markdown(content: string): Record<string, unknown> {
   return { tag: "markdown", content };
 }
@@ -314,7 +344,15 @@ export function renderCard(view: View, locale: Locale = DEFAULT_LOCALE): Record<
     case "ask": {
       const elements: Record<string, unknown>[] = [markdown(view.text)];
       if (view.final !== undefined) elements.push(markdown(t.askAnswered(view.final)));
-      else for (const o of view.options) elements.push(actionRow(view.askId, o.action, o.label));
+      else {
+        for (const o of view.options) {
+          elements.push(
+            fitsButton(o.label)
+              ? actionRow(view.askId, o.action, o.label)
+              : answerBox(view.askId, o.action, o.label),
+          );
+        }
+      }
       return makeCard(
         {
           title: { tag: "plain_text", content: t.askHeader },

@@ -81,6 +81,10 @@ Herder talk has no header; Herder questions are purple 「主管问你」; repor
 the task name and a subtitle (result · project · agent · time), coloured by result; a task's
 messages are blue ⏳, alarms orange ⚠️, errors red ❌; approvals are orange 「⚠️ 等你确认 · 任务名」.
 
+A Herder question shows short answers as buttons. An answer over 15 characters, or any path, is a
+whole-width clickable box (`interactive_container`) with the full text wrapped: a Feishu button is
+one line, and a cut path hid which folder was meant. Both send the same `{target, action}`.
+
 Long messages are folded, never shortened: over `foldChars` (default 400) the card shows the
 first lines and puts the rest in a collapsible panel; code blocks and logs are collapsed; over
 the card size limit the text is stored as a file and sent as a link.
