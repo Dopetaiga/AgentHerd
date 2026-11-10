@@ -148,29 +148,96 @@ describe("E2E-DUPLICATE-ACTION", () => {
   });
 });
 
-describe("E2E-REMIND", () => {
-  it("an open item gets reminders and is never decided by time", async () => {
+describe("E2E-REMIND (ADR 0056)", () => {
+  it("an open item gets one reminder, then closes as not done after an hour", async () => {
     const clock = new FakeClock();
-    const { channel, store, herd } = await setup(ONE_PERMISSION("allow"), {
-      clock,
-      remindMinutes: 30,
-    });
+    const { channel, store, herd } = await setup(ONE_PERMISSION("deny"), { clock });
     const run = herd.run("mock", dir, "go");
     const card = await channel.waitFor(isOpenItem);
     const itemId = (card.view as ItemView).itemId;
     await clock.advance(29 * 60_000);
     expect(channel.ofKind("text")).toHaveLength(0);
     await clock.advance(2 * 60_000);
-    await clock.advance(30 * 60_000);
     await new Promise((r) => setImmediate(r));
     const reminders = channel.ofKind("text");
-    expect(reminders).toHaveLength(2);
-    expect(reminders[0]?.view.text).toBe("Still waiting for you: Run rm -rf ./*");
-    expect(store.decisionsFor(itemId)).toHaveLength(0);
+    expect(reminders).toHaveLength(1);
+    expect(reminders[0]?.view.text).toContain("Still waiting for you: Run rm -rf ./*");
     expect(store.getItem(itemId)?.state).toBe("open");
-    await channel.tap(itemId, "allow");
+    await clock.advance(30 * 60_000);
+    const result = await run;
+    expect(result.stopReason).toBe("end_turn");
+    expect(store.decisionsFor(itemId)[0]).toMatchObject({
+      action: "deny",
+      reason: "no answer in time",
+    });
+    expect((card.view as ItemView).final).toBe("No answer in 1 hour; the step was not done");
+    expect(channel.ofKind("text")).toHaveLength(1);
+  });
+
+  it("「先不管」 closes it at once as not done", async () => {
+    const { channel, store, herd } = await setup(ONE_PERMISSION("deny"));
+    const run = herd.run("mock", dir, "go");
+    const card = await channel.waitFor(isOpenItem);
+    const itemId = (card.view as ItemView).itemId;
+    await channel.tap(itemId, "skip");
     await run;
-    await clock.advance(60 * 60_000);
-    expect(channel.ofKind("text")).toHaveLength(2);
+    expect(store.decisionsFor(itemId)[0]).toMatchObject({
+      action: "deny",
+      reason: "owner: not now",
+    });
+    expect((card.view as ItemView).final).toBe("Left by you: the step was not done");
+  });
+});
+
+describe("E2E-BATCH (ADR 0056)", () => {
+  it("approvals of two tasks share one card; 「allow 2」 and 「allow all」 answer them", async () => {
+    const { channel, store, herd } = await setup(ONE_PERMISSION("allow"));
+    const first = herd.run("mock", dir, "one");
+    const card = await channel.waitFor(isOpenItem);
+    const second = herd.run("mock", dir, "two");
+    await channel.waitFor((m) => m === card && (m.view as ItemView).lines?.length === 2);
+    expect(channel.ofKind("item")).toHaveLength(1);
+    const view = card.view as ItemView;
+    expect(view.title).toBe("2 requests waiting for you");
+    expect(view.options.map((o) => o.action)).toEqual(["allow-all", "skip-all"]);
+    const [one, two] = view.lines ?? [];
+    await channel.say("allow 2");
+    await second;
+    expect(store.getItem(two?.itemId as string)?.state).toBe("decided");
+    expect(store.getItem(one?.itemId as string)?.state).toBe("open");
+    expect((card.view as ItemView).lines?.[1]?.final).toBe("Allowed by you");
+    await channel.tap(view.itemId, "allow-all");
+    await first;
+    expect((card.view as ItemView).final).toBe("All handled");
+    expect(store.decisionsFor(one?.itemId as string)[0]?.action).toBe("allow");
+  });
+});
+
+describe("E2E-LEAVES-MAC (ADR 0056)", () => {
+  it("git push asks the owner", async () => {
+    const { channel, herd } = await setup(ONE_PERMISSION("allow", "git push origin main"));
+    const run = herd.run("mock", dir, "go");
+    const card = await channel.waitFor(isOpenItem);
+    expect((card.view as ItemView).reason).toBe(
+      "leaves your Mac: pushes to a remote; needs your confirmation",
+    );
+    await channel.tap((card.view as ItemView).itemId, "allow");
+    await run;
+  });
+
+  it("a push the owner allowed for the task runs without a card, and is kept on the task", async () => {
+    const { channel, store, herd } = await setup(ONE_PERMISSION("allow", "git push origin main"));
+    const { taskId, turn } = await herd.startTask(
+      "mock",
+      dir,
+      "fix it and push",
+      undefined,
+      undefined,
+      undefined,
+      ["push"],
+    );
+    expect((await turn).stopReason).toBe("end_turn");
+    expect(channel.ofKind("item")).toHaveLength(0);
+    expect(store.task(taskId)?.task.allowedSteps).toEqual(["push"]);
   });
 });

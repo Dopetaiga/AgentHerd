@@ -6,6 +6,7 @@
 import { join } from "node:path";
 import type { AgentProfile, HerderStyle, Inbound, Mode, Rule } from "@agentherd/protocol";
 import { DEFAULT_HERDER_STYLE, DEFAULT_LOCALE } from "@agentherd/protocol";
+import type { OutboundStep } from "@agentherd/rules";
 import { approveAppCalls } from "./app-calls.ts";
 import { Board } from "./board.ts";
 import { type Clock, systemClock } from "./clock.ts";
@@ -95,6 +96,7 @@ export class Herd {
       store: this.store,
       clock: this.clock,
       ...(opts.remindMinutes === undefined ? {} : { remindMinutes: opts.remindMinutes }),
+      ...(opts.timeoutMinutes === undefined ? {} : { timeoutMinutes: opts.timeoutMinutes }),
       ...(opts.secrets === undefined ? {} : { secrets: opts.secrets }),
       texts: this.texts,
     });
@@ -259,8 +261,16 @@ export class Herd {
       removeSchedule: (id: string) => this.schedules.remove(id),
       sources: () => this.ctx.sources.list(),
       checkModel: async (ref) => this.opts.agentModels?.check?.(ref) ?? { ok: true },
-      startTask: async (profileId, cwd, title, prompt, model, images) => {
-        const { taskId, turn } = await this.startTask(profileId, cwd, title, prompt, model, images);
+      startTask: async (profileId, cwd, title, prompt, model, images, allowed) => {
+        const { taskId, turn } = await this.startTask(
+          profileId,
+          cwd,
+          title,
+          prompt,
+          model,
+          images,
+          allowed,
+        );
         turn.catch(() => {});
         return taskId;
       },
@@ -428,8 +438,9 @@ export class Herd {
     prompt: string = ownerText,
     model?: string,
     images?: OwnerImage[],
+    allowed?: readonly OutboundStep[],
   ): Promise<{ taskId: string; turn: Promise<RunResult> }> {
-    return this.runner.startTask(profileId, cwd, ownerText, prompt, model, images);
+    return this.runner.startTask(profileId, cwd, ownerText, prompt, model, images, allowed);
   }
 
   /** Sends a prompt to an open task. Queued while a turn runs; settles when its turn ends. */

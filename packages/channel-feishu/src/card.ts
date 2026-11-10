@@ -1,5 +1,6 @@
 import type {
   ItemOption,
+  ItemView,
   Locale,
   ReportResult,
   Risk,
@@ -231,11 +232,51 @@ function collapsiblePanel(title: string, content: string): Record<string, unknow
   };
 }
 
+/** Buttons in one row. */
+function buttonRow(target: string, options: readonly ItemOption[]): Record<string, unknown> {
+  return {
+    tag: "column_set",
+    columns: options.map((option) => ({
+      tag: "column",
+      width: "auto",
+      elements: [itemButton(target, option)],
+    })),
+  };
+}
+
+/** Several approvals on one card (ADR 0056): numbered lines, each with its buttons. */
+function renderItemLines(view: ItemView, t: CardTexts): Record<string, unknown> {
+  const elements: Record<string, unknown>[] = [];
+  for (const line of view.lines ?? []) {
+    const task =
+      line.taskLabel === undefined ? "" : ` <font color='grey'>· ${line.taskLabel}</font>`;
+    elements.push(markdown(`**${line.n}. ${line.title}**${task}`));
+    elements.push(markdown(`\`\`\`\n${escapeCodeFence(line.body)}\n\`\`\``));
+    if (line.reason !== undefined) {
+      elements.push(markdown(`${t.reasonPrefix}<font color='grey'>${line.reason}</font>`));
+    }
+    if (line.final !== undefined) elements.push(markdown(`**${line.final}**`));
+    else elements.push(buttonRow(line.itemId, line.options));
+    elements.push({ tag: "hr" });
+  }
+  if (view.final !== undefined) {
+    elements.push(markdown(`**${view.final}**`));
+  } else {
+    if (view.body !== "") elements.push(markdown(`<font color='grey'>${view.body}</font>`));
+    elements.push(buttonRow(view.itemId, view.options));
+  }
+  return makeCard(
+    itemHeader(view.title, view.risk, view.final !== undefined ? "grey" : "orange", t),
+    elements,
+  );
+}
+
 /** Render a channel-neutral view as Feishu Card JSON 2.0. */
 export function renderCard(view: View, locale: Locale = DEFAULT_LOCALE): Record<string, unknown> {
   const t = CARD_TEXTS[locale];
   switch (view.kind) {
     case "item": {
+      if (view.lines !== undefined) return renderItemLines(view, t);
       const elements: Record<string, unknown>[] = [markdown(`**${view.title}**`)];
       elements.push(markdown(`\`\`\`\n${escapeCodeFence(view.body)}\n\`\`\``));
       if (view.reason !== undefined) {

@@ -119,6 +119,20 @@ describe("tools", () => {
     );
   });
 
+  it("session_start passes the steps leaving the Mac the owner asked for (ADR 0056)", async () => {
+    const dir = tmpdir();
+    const { call, rec } = tools({ ownerText: `在 ${dir} 里修一下构建，做完推上去开个 PR` });
+    const result = await call("session_start", {
+      name: "修构建",
+      project: dir,
+      profile: "mock",
+      ownerText: "修一下构建，做完推上去开个 PR",
+      allowed: ["push", "pull-request", "push"],
+    });
+    expect(rec.started[0]?.allowed).toEqual(["push", "pull-request"]);
+    expect(JSON.stringify(result)).toContain("Allowed without asking: push, pull-request");
+  });
+
   it("session_start refuses reworded text, unknown profiles, missing dirs and event turns", async () => {
     const dir = tmpdir();
     const owner = tools({ ownerText: "修一下构建" });

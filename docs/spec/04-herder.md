@@ -400,7 +400,9 @@ there is far too much, what matters plus where the rest is. The style texts no l
 flowchart TD
   E["Permission request or agent question"] --> G{"Mass delete or extraGuards match?"}
   G -- yes --> O["Owner, risk = high"]
-  G -- no --> R{"Owner rule match?"}
+  G -- no --> X{"Leaves the Mac, not allowed for the task,<br/>no deny rule?"}
+  X -- yes --> O
+  X -- no --> R{"Owner rule match?"}
   R -- yes --> D["Decision (source = rule)"]
   R -- no --> RV{"Reviewer configured?"}
   RV -- no --> O2["Approved (auto-approved; observe mode: owner)"]
@@ -411,10 +413,21 @@ flowchart TD
 
 Items from different sessions are processed in parallel. The Herder is not on this path.
 
-Since [ADR 0029](../adr/0029-only-mass-deletes-ask-the-owner.md) only a mass delete
-(`packages/rules/src/mass-delete.ts`) and the owner's `extraGuards` entries reach the owner from
-an agent; everything else is approved. The built-in guard list below applies to the Herder's own
-tool calls.
+From an agent, three things reach the owner
+([ADR 0056](../adr/0056-leaving-the-mac-asks-and-questions-close.md), which replaced ADR 0029's
+"only a mass delete"): a mass delete (`packages/rules/src/mass-delete.ts`), the owner's
+`extraGuards` entries, and a step that leaves the Mac (`packages/rules/src/outbound.ts`: push,
+pull-request, merge, comment, publish, deploy, send — git push, gh pr create/merge, gh issue
+comment, npm publish, deploy CLIs, mail, app tools that send). Steps the owner's request asked
+for pass for that task (`session_start` `allowed`, kept as `tasks.allowed_steps_json`); an
+owner's deny rule beats the check; allow rules do not. Everything else is approved. The built-in
+guard list below applies to the Herder's own tool calls.
+
+An open approval gets one reminder after `remindMinutes` (30) and closes as not done after
+`timeoutMinutes` (60): the agent gets a deny and goes on. 「先不管」 does the same at once.
+Approvals that come up together share one card; the owner taps per line, 「全部批准」, or replies
+「都批」 / 「批 1、3」 / 「拒 2」. A Herder question closes when the owner writes in the chat instead
+(the Herder hears it may be the answer) or after `timeoutMinutes` (the Herder does not ask again).
 
 ### Guard list (always to the owner)
 

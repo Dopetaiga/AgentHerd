@@ -20,6 +20,7 @@ export interface Recorded {
     prompt: string;
     model?: string;
     images?: string[];
+    allowed?: string[];
   }[];
   prompted: { taskId: string; text: string; images?: string[] }[];
   renamed: { taskId: string; name: string }[];
@@ -188,8 +189,9 @@ export function fakeHost(
     apps: () => opts.apps ?? [],
     checkModel: async (ref) =>
       opts.failing?.includes(ref) ? { ok: false, message: "down" } : { ok: true },
-    startTask: async (profileId, cwd, title, prompt, model, images) => {
+    startTask: async (profileId, cwd, title, prompt, model, images, allowed) => {
       rec.started.push({
+        ...(allowed === undefined ? {} : { allowed: [...allowed] }),
         profileId,
         cwd,
         title,

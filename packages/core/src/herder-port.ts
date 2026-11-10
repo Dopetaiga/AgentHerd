@@ -3,6 +3,7 @@ import type { SourceState } from "./source-health.ts";
 // not import the Herder or any model library: the CLI or the app passes a factory.
 
 import type { HerderStyle, Locale, ReportResult } from "@agentherd/protocol";
+import type { OutboundStep } from "@agentherd/rules";
 import type { IntakeRequest } from "./intake.ts";
 import type { HerdReport } from "./mcp-gateway.ts";
 import type { Completer, Embedder, MemoryStore } from "./memory-store.ts";
@@ -24,7 +25,8 @@ export interface OwnerImage {
 export type HerderTurnRole = "owner" | "answer" | "herder" | "ask" | "event";
 
 export interface HerderEvent {
-  kind: "task-reported" | "watchdog" | "github" | "mail" | "intake";
+  /** `ask-closed`: one of the Herder's own questions closed without a pick (ADR 0056). */
+  kind: "task-reported" | "watchdog" | "github" | "mail" | "intake" | "ask-closed";
   /** The task it is about; mail is about no task. */
   taskId?: string;
   /** The task's title, or for mail what the owner asked to hear about. */
@@ -75,6 +77,8 @@ export interface HerderHost {
     prompt: string,
     model?: string,
     images?: OwnerImage[],
+    /** Steps leaving the Mac the owner allowed for this task in their request (ADR 0056). */
+    allowed?: readonly OutboundStep[],
   ): Promise<string>;
   promptTask(taskId: string, text: string, images?: OwnerImage[]): void;
   /** A new short name for a task, when its work changed. */

@@ -4,10 +4,12 @@ import { randomUUID } from "node:crypto";
 import { mkdirSync, statSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import type { AskView, Inbound, InboundFile, InboundImage, MessageRef } from "@agentherd/protocol";
+import type { Timer } from "./clock.ts";
 import { parseCommand } from "./commands.ts";
 import { type HerdContext, openTasks, say, type TaskOps } from "./herd-context.ts";
 import type { OwnerImage } from "./herder-port.ts";
 import { HERDER_RETRY_TARGET } from "./herder-port.ts";
+import { DEFAULT_TIMEOUT_MINUTES } from "./inbox.ts";
 import { INTAKE_TARGET } from "./intake.ts";
 import { forgetMemory, memoryListText, restoreMemory } from "./memory-commands.ts";
 import type { Relay } from "./relay.ts";
@@ -17,7 +19,7 @@ import { taskTitle } from "./tasks.ts";
 
 export class OwnerCommands {
   /** Open questions from the Herder, by ask id. */
-  private readonly asks = new Map<string, { ref: MessageRef; view: AskView }>();
+  private readonly asks = new Map<string, { ref: MessageRef; view: AskView; timer: Timer }>();
 
   private readonly ctx: HerdContext;
   private readonly relay: Relay;
@@ -53,6 +55,14 @@ export class OwnerCommands {
         await ctx.inbox.handle(inbound);
         return;
       }
+      // "都批" or "批 1、3" answers the open approval card (ADR 0056).
+      if (
+        (inbound.images ?? []).length === 0 &&
+        (inbound.files ?? []).length === 0 &&
+        (await ctx.inbox.handleText(inbound.text))
+      ) {
+        return;
+      }
       // The task this message starts or continues acknowledges it with a reply (ADR 0049).
       if (inbound.ref !== undefined) {
         ctx.ownerMessage = { ref: inbound.ref, at: ctx.clock.now().getTime() };
@@ -79,7 +89,35 @@ export class OwnerCommands {
       options: options.map((label, i) => ({ action: String(i), label })),
     };
     const ref = await this.ctx.opts.channel.send(view);
-    this.asks.set(askId, { ref, view });
+    const minutes = this.ctx.opts.timeoutMinutes ?? DEFAULT_TIMEOUT_MINUTES;
+    // Nobody answered: the card closes and the Herder hears it, without asking again (ADR 0056).
+    const timer = this.ctx.clock.after(minutes * 60_000, () => {
+      void this.closeAsk(askId, this.ctx.texts.askTimedOut(minutes), {
+        why: `nobody answered in ${minutes} minutes. Do not ask it again; mention it once if it still matters, and do not act on it.`,
+        audit: "herder.ask.timed-out",
+      });
+    });
+    this.asks.set(askId, { ref, view, timer });
+  }
+
+  /** Closes an open Herder question without a pick; the Herder hears why. */
+  private async closeAsk(
+    askId: string,
+    final: string,
+    how: { why: string; audit: string },
+  ): Promise<void> {
+    const { ctx } = this;
+    const ask = this.asks.get(askId);
+    if (ask === undefined) return;
+    this.asks.delete(askId);
+    ask.timer.cancel();
+    ctx.store.audit(how.audit, { askId });
+    try {
+      await ctx.opts.channel.update(ask.ref, { ...ask.view, final });
+    } catch (error) {
+      ctx.store.audit("send.error", { kind: "ask", message: (error as Error).message });
+    }
+    ctx.herder()?.event({ kind: "ask-closed", title: ask.view.text, text: how.why });
   }
 
   /** Saves the owner's images under `<home>/attachments`, so agents can open them as files. */
@@ -191,6 +229,13 @@ export class OwnerCommands {
   }
 
   private async toHerder(text: string, images: OwnerImage[] = []): Promise<void> {
+    // The owner wrote instead of tapping: open questions close; the message may be the answer.
+    for (const askId of [...this.asks.keys()]) {
+      await this.closeAsk(askId, this.ctx.texts.answeredInChat, {
+        why: "the owner wrote in the chat instead of picking. Their message below may be the answer; do not ask it again.",
+        audit: "herder.ask.answered-in-chat",
+      });
+    }
     const herder = this.ctx.herder();
     if (herder === undefined) await say(this.ctx, this.ctx.texts.noHerder);
     else if (images.length === 0) herder.ownerMessage(text);
@@ -203,6 +248,7 @@ export class OwnerCommands {
     const option = ask?.view.options.find((o) => o.action === action);
     if (ask === undefined || option === undefined) return;
     this.asks.delete(askId);
+    ask.timer.cancel();
     ctx.store.audit("herder.answer", { askId, answer: option.label });
     try {
       await ctx.opts.channel.update(ask.ref, { ...ask.view, final: option.label });

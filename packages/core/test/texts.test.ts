@@ -26,7 +26,7 @@ describe("core texts", () => {
       undefined,
       coreTexts("zh-CN"),
     );
-    expect(view.options.map((o) => o.label)).toEqual(["批准", "拒绝"]);
+    expect(view.options.map((o) => o.label)).toEqual(["批准", "拒绝", "先不管"]);
     expect(view.body).toContain("理由：跑测试");
   });
 

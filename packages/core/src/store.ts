@@ -31,6 +31,7 @@ import {
   SCHEDULES_TABLE_SQL,
   SCHEMA_SQL,
   STATE_TABLE_SQL,
+  TASK_ALLOWED_STEPS_SQL,
   TASK_WORKSPACE_SQL,
   TASKS_TABLE_SQL,
   TRANSCRIPT_TABLE_SQL,
@@ -153,6 +154,13 @@ export class Store {
       if (version < 13) {
         this.db.exec(SCHEDULES_TABLE_SQL);
         this.db.prepare("UPDATE schema_version SET version = ?").run(13);
+      }
+      if (version < 14) {
+        const columns = this.db.prepare("PRAGMA table_info(tasks)").all();
+        if (!columns.some((c) => c.name === "allowed_steps_json")) {
+          this.db.exec(TASK_ALLOWED_STEPS_SQL);
+        }
+        this.db.prepare("UPDATE schema_version SET version = ?").run(14);
       }
     }
 
@@ -444,8 +452,8 @@ export class Store {
       .prepare(
         `INSERT OR REPLACE INTO tasks(id, title, project, cwd, profile_id, agent, model, stage, last_report,
           started_at, updated_at, ended_at, ended_why, failed, agent_session_id, automatic_decisions_json,
-          workspace_json)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          workspace_json, allowed_steps_json)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         t.task.id,
@@ -465,6 +473,7 @@ export class Store {
         t.agentSessionId ?? null,
         r(JSON.stringify(t.task.automaticDecisions)),
         t.workspace === undefined ? null : JSON.stringify(t.workspace),
+        t.task.allowedSteps === undefined ? null : JSON.stringify(t.task.allowedSteps),
       );
   }
 
@@ -774,6 +783,9 @@ function toStoredTask(r: Record<string, unknown>): StoredTask {
     automaticDecisions: JSON.parse(String(r.automatic_decisions_json)) as string[],
   };
   if (typeof r.model === "string") task.model = r.model;
+  if (typeof r.allowed_steps_json === "string") {
+    task.allowedSteps = JSON.parse(r.allowed_steps_json) as Task["allowedSteps"] & object;
+  }
   const t: StoredTask = {
     task,
     cwd: String(r.cwd),

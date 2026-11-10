@@ -149,6 +149,26 @@ export interface ItemView {
   reason?: string;
   /** Final state shown after a decision, e.g. "Allowed by you". */
   final?: string;
+  /**
+   * Several approvals waiting at once, shown on one card (ADR 0056). Each line has its own
+   * buttons (target: the line's itemId); `options` then holds the buttons for all of them
+   * (target: this view's itemId), and title/body/reason describe the card as a whole.
+   */
+  lines?: ItemLine[];
+}
+
+/** One approval on a card that holds several (ADR 0056). */
+export interface ItemLine {
+  itemId: string;
+  /** 1-based number the owner can answer with ("批 1、3"). */
+  n: number;
+  taskLabel?: string;
+  title: string;
+  body: string;
+  risk: Risk;
+  reason?: string;
+  options: ItemOption[];
+  final?: string;
 }
 
 export interface BoardRow {
