@@ -100,6 +100,7 @@ The Herder may add, never rewrite.
 | Sessions | `session_start(project, name, profile?, ownerText, addedContext, model?)` (name: the task's short name, shown on the board and every report, [ADR 0034](../adr/0034-herder-names-tasks.md)) (model: `service/model` the agent can run, picked by the Herder, [ADR 0025](../adr/0025-herder-picks-model-per-task.md)), `session_prompt(sessionId, text, name?)` (name renames the task), `session_cancel(sessionId)` (stops the running turn), `session_end(sessionId)` (closes the task when the owner says it is finished), `session_list()` (also lists models, the agents that can run each, and the owner's model guide, [ADR 0026](../adr/0026-model-guide-for-the-herder.md)) |
 | Owner | `ask(text, options)` (AgentHerd adds 「其他」), `project_find(name)`, `notify(text)`, `relay_start(sessionId)`, `relay_end()`, `style_set(style)` (ADR 0053), `task_search(query)` (earlier tasks by title, project and last report; up to 10, [ADR 0054](../adr/0054-say-what-matters.md)) |
 | Read | `task_get`, `task_list`, `session_transcript`, `decisions_list`, `read`, `grep`, `list`, `git_log`, `git_diff` (read tools only inside known project directories) |
+| Schedules | `schedule_add(about, prompt, kind, at?, days?, hours?)`, `schedule_change(schedule, …, paused?)`, `schedule_remove(schedule)`: what the Herder does at set times, only when the owner asks ([ADR 0055](../adr/0055-schedules-the-herder-makes.md)) |
 | Context | `compress`, `decompress`, `search_context`, `acp_status`: fold finished parts of its own conversation, find and show them again ([ADR 0045](../adr/0045-herder-context-folded-by-the-model.md)) |
 
 There is no tool to approve an item, write files or run shell commands. Every Herder tool call
@@ -108,7 +109,8 @@ written to the audit log.
 
 ### When the Herder runs
 
-The Herder runs only when the owner writes to it or answers its question (ADR 0033). Task
+The Herder runs only when the owner writes to it or answers its question (ADR 0033), when a
+schedule the owner made is due (ADR 0055), or to tell a task's result (ADR 0053). Task
 reports and watchdog alarms reach the owner by themselves; the Herder gets them, quoted as agent
 data under "[Already sent to the owner]", in front of the owner's next message (the last 10), so
 it knows what happened without repeating it.
@@ -320,6 +322,26 @@ New GitHub work is offered only when the owner asks for it ([ADR 0052](../adr/00
 - **The intake turn** may start a task. The title is quoted as not from the owner; only the
   repository's name picks a project without asking (ADR 0043), otherwise the Herder asks which
   folder. The task's prompt has the item's link, so its pull request is followed (ADR 0051).
+
+### Schedules
+
+What the Herder does at set times, made only when the owner asks ([ADR 0055](../adr/0055-schedules-the-herder-makes.md)).
+
+- **Making.** 「每天早上 9 点看看 PI-Desktop 有没有新 issue」: the Herder calls `schedule_add`
+  with `about` (a short name), `prompt` (what to do then, complete on its own, including when to
+  stay quiet) and the time: `daily` at `HH:MM` (optional `days`, 1 Monday … 7 Sunday), `every`
+  N hours (1–168), or `once` at `YYYY-MM-DD HH:MM`, all in the Mac's local time. It holds at
+  once, without a confirmation card; the Herder restates it in one line so the owner can
+  correct it. `schedule_change` changes, pauses or resumes one, `schedule_remove` removes it,
+  `session_list` lists them. Only an owner turn can make, change or remove one. At most 20.
+- **Running.** Core looks every minute for due schedules (long timers are late after the Mac
+  slept). A due schedule gives the Herder a scheduled turn: its prompt as the owner's words,
+  so it may answer, start a task (`ownerText` is the prompt) or reply `[quiet]` to say nothing.
+  A scheduled turn cannot make schedules, watches or memory. Times missed while AgentHerd was
+  off or the Mac slept run once on start, not once per missed time. A `once` schedule is
+  removed after it ran.
+- **Keeping.** Table `schedules` (schema 13). The app's 「定时任务」 page lists them with the
+  next run, and pauses, resumes or removes one.
 
 ### Source health
 

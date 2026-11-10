@@ -6,6 +6,7 @@ import type { Decision, Item, MessageRef, Rule, View } from "@agentherd/protocol
 import { redact } from "@agentherd/rules";
 import type { HerderTurnRole } from "./herder-port.ts";
 import { ftsQuery, MEMORY_TABLES_SQL, MemoryStore } from "./memory-store.ts";
+import type { Schedule } from "./schedules.ts";
 import {
   type AuditRow,
   type DecisionRow,
@@ -27,6 +28,7 @@ import {
   MESSAGE_TASKS_TABLE_SQL,
   OUTBOX_TABLE_SQL,
   PR_WATCHES_TABLE_SQL,
+  SCHEDULES_TABLE_SQL,
   SCHEMA_SQL,
   STATE_TABLE_SQL,
   TASK_WORKSPACE_SQL,
@@ -147,6 +149,10 @@ export class Store {
       if (version < 12) {
         this.db.exec(INTAKE_WATCHES_TABLE_SQL);
         this.db.prepare("UPDATE schema_version SET version = ?").run(12);
+      }
+      if (version < 13) {
+        this.db.exec(SCHEDULES_TABLE_SQL);
+        this.db.prepare("UPDATE schema_version SET version = ?").run(13);
       }
     }
 
@@ -557,6 +563,24 @@ export class Store {
 
   deleteIntakeWatch(id: string): void {
     this.db.prepare("DELETE FROM intake_watches WHERE id = ?").run(id);
+  }
+
+  saveSchedule(schedule: Schedule): void {
+    this.db
+      .prepare("INSERT OR REPLACE INTO schedules(id, data_json, created_at) VALUES (?, ?, ?)")
+      .run(schedule.id, JSON.stringify(schedule), schedule.createdAt);
+  }
+
+  /** What the Herder does at set times (ADR 0055), oldest first. */
+  schedules(): Schedule[] {
+    return this.db
+      .prepare("SELECT data_json FROM schedules ORDER BY created_at, id")
+      .all()
+      .map((r) => JSON.parse(String(r.data_json)) as Schedule);
+  }
+
+  deleteSchedule(id: string): void {
+    this.db.prepare("DELETE FROM schedules WHERE id = ?").run(id);
   }
 
   /** The channel took the message, or it was given up. */

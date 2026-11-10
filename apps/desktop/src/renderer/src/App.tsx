@@ -4,6 +4,7 @@ import {
   Bot,
   Boxes,
   Brain,
+  CalendarClock,
   ListTodo,
   Loader2,
   type LucideIcon,
@@ -20,6 +21,7 @@ import { AgentsPage } from "./pages/AgentsPage";
 import { HerdersPage } from "./pages/HerdersPage";
 import { MemoryPage } from "./pages/MemoryPage";
 import { ModelsPage } from "./pages/ModelsPage";
+import { SchedulesPage } from "./pages/SchedulesPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { TasksPage } from "./pages/TasksPage";
 import { type Page, startStore, useApp } from "./store";
@@ -28,6 +30,7 @@ const NAV: { page: Page; label: string; icon: LucideIcon }[] = [
   { page: "tasks", label: "任务", icon: ListTodo },
   { page: "herders", label: "主管", icon: Bot },
   { page: "memory", label: "记忆", icon: Brain },
+  { page: "schedules", label: "定时任务", icon: CalendarClock },
   { page: "agents", label: "Agent", icon: SquareTerminal },
   { page: "models", label: "模型", icon: Boxes },
   { page: "settings", label: "设置", icon: Settings },
@@ -42,6 +45,10 @@ const HEADERS: Record<Page, { title: string; hint: string }> = {
   memory: {
     title: "记忆",
     hint: "主管长期记住的事；不对就改掉或忘掉，飞书里也能用 /记忆 查看",
+  },
+  schedules: {
+    title: "定时任务",
+    hint: "主管按时去做的事；在飞书里跟主管说就能加，这里可以暂停或删除",
   },
   agents: { title: "Agent", hint: "替你干活的编程 Agent；在飞书里用 /run 开任务" },
   models: { title: "模型", hint: "管理模型服务和 Key，选审查用的模型" },
@@ -132,6 +139,8 @@ function CurrentPage() {
       return <HerdersPage />;
     case "memory":
       return <MemoryPage />;
+    case "schedules":
+      return <SchedulesPage />;
     case "agents":
       return <AgentsPage />;
     case "models":

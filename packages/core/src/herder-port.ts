@@ -6,6 +6,7 @@ import type { HerderStyle, Locale, ReportResult } from "@agentherd/protocol";
 import type { IntakeRequest } from "./intake.ts";
 import type { HerdReport } from "./mcp-gateway.ts";
 import type { Completer, Embedder, MemoryStore } from "./memory-store.ts";
+import type { Schedule, ScheduleInput, SchedulePatch } from "./schedules.ts";
 import type { DecisionRow, IntakeWatch, MailWatch } from "./store.ts";
 import type { Task } from "./tasks.ts";
 import type { CoreTexts } from "./texts.ts";
@@ -98,6 +99,11 @@ export interface HerderHost {
   intakeWatches?(): IntakeWatch[];
   watchIntake?(request: IntakeRequest): Promise<IntakeWatch>;
   unwatchIntake?(id: string): boolean;
+  /** What the Herder does at set times (ADR 0055). */
+  schedules?(): Schedule[];
+  addSchedule?(input: ScheduleInput): Schedule;
+  changeSchedule?(id: string, patch: SchedulePatch): Schedule;
+  removeSchedule?(id: string): boolean;
   /** Watched sources that are failing now (ADR 0050). */
   sources?(): SourceState[];
   /** How the Herder talks (ADR 0053); absent → the default style. */
@@ -135,6 +141,8 @@ export interface HerderPort {
    * turn that may start a task for it. `text` names the item; its title is not the owner's.
    */
   intake?(text: string, auto: boolean): void;
+  /** A schedule is due (ADR 0055): its words come back as a turn of their own. */
+  scheduled?(schedule: Schedule): void;
   /**
    * Tells the owner a task's result in the Herder's words. Resolves with the message to send ("" to
    * send nothing: the owner already heard it), or undefined when the Herder could not speak.

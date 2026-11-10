@@ -1,7 +1,14 @@
 // A HerderHost that records what the Herder does, for unit tests.
 
-import type { HerderHost, IntakeWatch, MailWatch, MemoryStore, Task } from "@agentherd/core";
-import { CORE_TEXTS } from "@agentherd/core";
+import type {
+  HerderHost,
+  IntakeWatch,
+  MailWatch,
+  MemoryStore,
+  Schedule,
+  Task,
+} from "@agentherd/core";
+import { CORE_TEXTS, checkWhen, nextRun } from "@agentherd/core";
 
 export interface Recorded {
   said: string[];
@@ -93,6 +100,42 @@ function intakeHost(
   };
 }
 
+const NOW = new Date("2026-11-04T00:00:00.000Z");
+
+function scheduleHost(
+  list: Schedule[],
+): Pick<HerderHost, "schedules" | "addSchedule" | "changeSchedule" | "removeSchedule"> {
+  return {
+    schedules: () => list,
+    addSchedule: (input) => {
+      const when = checkWhen(input.when);
+      const schedule: Schedule = {
+        id: `sched-${list.length + 1}-0000`,
+        ...input,
+        when,
+        paused: false,
+        createdAt: NOW.toISOString(),
+        nextAt: nextRun(when, NOW)?.toISOString() ?? NOW.toISOString(),
+      };
+      list.push(schedule);
+      return schedule;
+    },
+    changeSchedule: (id, patch) => {
+      const i = list.findIndex((s) => s.id === id);
+      const old = list[i];
+      if (old === undefined) throw new Error("no such schedule");
+      const changed: Schedule = { ...old, ...patch };
+      list[i] = changed;
+      return changed;
+    },
+    removeSchedule: (id) => {
+      const i = list.findIndex((s) => s.id === id);
+      if (i >= 0) list.splice(i, 1);
+      return i >= 0;
+    },
+  };
+}
+
 export function fakeHost(
   opts: {
     tasks?: Task[];
@@ -109,6 +152,8 @@ export function fakeHost(
     mail?: MailWatch[];
     /** New-work watches kept in memory (ADR 0052). */
     intake?: IntakeWatch[];
+    /** Schedules kept in memory (ADR 0055). */
+    schedules?: Schedule[];
   } = {},
 ): {
   host: HerderHost;
@@ -173,6 +218,7 @@ export function fakeHost(
     ...(opts.memory === undefined ? {} : { memory: opts.memory }),
     ...(opts.mail === undefined ? {} : mailHost(opts.mail)),
     ...(opts.intake === undefined ? {} : intakeHost(opts.intake)),
+    ...(opts.schedules === undefined ? {} : scheduleHost(opts.schedules)),
     getState: <T>(key: string) => rec.state.get(key) as T | undefined,
     setState: (key, value) => void rec.state.set(key, structuredClone(value)),
     herderLog: () => structuredClone(rec.log),

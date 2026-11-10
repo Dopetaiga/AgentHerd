@@ -2,7 +2,7 @@ import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { FakeChannel } from "@agentherd/channel-fake";
-import type { SecretStore } from "@agentherd/core";
+import type { Herd, SecretStore } from "@agentherd/core";
 import { afterEach, describe, expect, it } from "vitest";
 import type { HostEvent, SettingsPatch } from "../src/api.ts";
 import { readConfig, writeConfig } from "../src/config.ts";
@@ -184,6 +184,36 @@ describe("Host", () => {
     style?.set("partner");
     expect(readConfig(t.home)).toMatchObject({ herderStyle: "partner" });
     expect(t.host.status().herderStyle).toBe("partner");
+  });
+
+  it("shows the Herder's schedules and lets the owner pause and remove them (ADR 0055)", async () => {
+    const off = makeHost(false);
+    await off.host.start();
+    expect(off.host.schedules()).toEqual({ schedules: [], ready: false });
+    expect(() => off.host.setSchedulePaused("x", true)).toThrow(/not running/);
+
+    const t = makeHost(true);
+    await t.host.start();
+    expect(t.host.schedules()).toEqual({ schedules: [], ready: true });
+    // Schedules are made in chat by the Herder; here the test adds one the same way.
+    const herd = (t.host as unknown as { herd: Herd }).herd;
+    const made = herd.schedules.add({
+      about: "看新 issue",
+      prompt: "看看 PI-Desktop 有没有新 issue",
+      when: { kind: "daily", at: "09:00", days: [1, 2, 3, 4, 5] },
+    });
+    expect(t.host.schedules().schedules).toMatchObject([{ id: made.id, paused: false }]);
+
+    const paused = t.host.setSchedulePaused(made.id, true).schedules[0];
+    expect(paused?.paused).toBe(true);
+    expect(paused?.nextAt).toBeUndefined();
+    const resumed = t.host.setSchedulePaused(made.id, false).schedules[0];
+    expect(resumed?.paused).toBe(false);
+    expect(resumed?.nextAt).toBeDefined();
+
+    expect(t.host.removeSchedule(made.id).schedules).toEqual([]);
+    expect(() => t.host.removeSchedule(made.id)).toThrow(/no such schedule/);
+    expect(() => t.host.setSchedulePaused(made.id, true)).toThrow(/no such schedule/);
   });
 
   it("keeps Codex out of new tasks after it fails to start one", async () => {
