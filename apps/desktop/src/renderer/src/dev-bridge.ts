@@ -25,14 +25,17 @@ import type {
   ModelsView,
   ModelTiersView,
   RemoteHost,
+  SchedulesView,
   SetupState,
   Tier,
 } from "@agentherd/host/api";
 import type { Bridge } from "../../shared/bridge";
 import {
+  hoursFromNow,
   PLACEHOLDER_QR,
   providers,
   sampleMemory,
+  sampleSchedules,
   sampleServices,
   sampleTasks,
   sampleTranscript,
@@ -99,6 +102,7 @@ function installFakeBridge(): void {
 
   let setup: SetupState = { phase: "idle" };
   let memory: MemoryView = sampleMemory();
+  let schedules: SchedulesView = sampleSchedules(sim === "empty" || sim === "no-agent");
   let apps: AppsView =
     sim === "ready"
       ? {
@@ -337,6 +341,22 @@ function installFakeBridge(): void {
     tasks: () => delay(tasks),
     transcript: (taskId) => delay(sampleTranscript(taskId)),
     memories: () => delay(memory),
+    schedules: () => delay(schedules),
+    setSchedulePaused: (id, paused) => {
+      schedules = {
+        ...schedules,
+        schedules: schedules.schedules.map((s) => {
+          if (s.id !== id) return s;
+          const { nextAt: _, ...rest } = s;
+          return paused ? { ...rest, paused } : { ...rest, paused, nextAt: hoursFromNow(20) };
+        }),
+      };
+      return delay(schedules);
+    },
+    removeSchedule: (id) => {
+      schedules = { ...schedules, schedules: schedules.schedules.filter((s) => s.id !== id) };
+      return delay(schedules);
+    },
     editMemory: (id, text) => {
       memory = {
         ...memory,

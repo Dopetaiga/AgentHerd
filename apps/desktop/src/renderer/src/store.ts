@@ -29,7 +29,7 @@ export type ModelRef = NonNullable<Parameters<HostApi["chooseModel"]>[1]>;
 export type Stage = Task["stage"];
 export type Mode = HostStatus["mode"];
 
-export type Page = "tasks" | "herders" | "memory" | "agents" | "models" | "settings";
+export type Page = "tasks" | "herders" | "memory" | "schedules" | "agents" | "models" | "settings";
 
 export interface Toast {
   id: number;
@@ -61,7 +61,15 @@ interface AppState {
   dismissToast(id: number): void;
 }
 
-const PAGES: readonly Page[] = ["tasks", "herders", "memory", "agents", "models", "settings"];
+const PAGES: readonly Page[] = [
+  "tasks",
+  "herders",
+  "memory",
+  "schedules",
+  "agents",
+  "models",
+  "settings",
+];
 
 /** Set once the owner finished or skipped the first run. */
 const FIRST_RUN_DONE = "agentherd.firstRunDone";

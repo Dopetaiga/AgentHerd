@@ -1,10 +1,11 @@
 // Sample data for the in-memory dev bridge (dev-bridge.ts): a placeholder QR code,
-// tasks, model services and the provider catalog.
+// tasks, model services, the provider catalog and the Herder's schedules.
 
 import type {
   MemoryView,
   ModelsView,
   ProviderView,
+  SchedulesView,
   TasksView,
   TranscriptView,
 } from "@agentherd/host/api";
@@ -286,5 +287,48 @@ export function sampleMemory(): MemoryView {
       }),
     ],
     deleted: [mem("m8", "owner", "用英文写提交信息", { status: "deleted" })],
+  };
+}
+
+/** An ISO time some hours from now, so a preview's 下次 times look right. */
+export function hoursFromNow(hours: number): string {
+  return new Date(Date.now() + hours * 3_600_000).toISOString();
+}
+
+/** What the 定时任务 page shows in the browser preview; `empty` shows the empty state. */
+export function sampleSchedules(empty: boolean): SchedulesView {
+  if (empty) return { ready: true, schedules: [] };
+  const createdAt = "2026-11-05T10:00:00.000Z";
+  return {
+    ready: true,
+    schedules: [
+      {
+        id: "sch1",
+        about: "早上看 PI-Desktop 新 issue",
+        prompt: "看看 PI-Desktop 有没有新 issue，有好上手的就告诉我",
+        when: { kind: "daily", at: "09:00", days: [1, 2, 3, 4, 5] },
+        paused: false,
+        createdAt,
+        nextAt: hoursFromNow(18),
+      },
+      {
+        id: "sch2",
+        about: "盯着 #2000 的 CI",
+        prompt: "看一下 #2000 的 CI 过了没有，没过就告诉我哪里挂了",
+        when: { kind: "every", hours: 3 },
+        paused: false,
+        createdAt,
+        nextAt: hoursFromNow(2),
+        lastAt: createdAt,
+      },
+      {
+        id: "sch3",
+        about: "周报",
+        prompt: "汇总这周做完的任务，写一份周报",
+        when: { kind: "daily", at: "17:30", days: [5] },
+        paused: true,
+        createdAt,
+      },
+    ],
   };
 }

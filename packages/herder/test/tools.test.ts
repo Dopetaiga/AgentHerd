@@ -1,6 +1,7 @@
 import { mkdirSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import type { Schedule } from "@agentherd/core";
 import { describe, expect, it } from "vitest";
 import { placeModels, type TierPlacement } from "../src/model-guide.ts";
 import { CONTEXT_LABEL, composeTaskPrompt, OWNER_LABEL, quoteAgent } from "../src/prompt.ts";
@@ -652,6 +653,43 @@ describe("new-work watches (ADR 0052)", () => {
         /only the owner/,
       );
       expect(intake).toEqual([]);
+    }
+  });
+});
+
+describe("schedules (ADR 0055)", () => {
+  it("are made, listed, paused and removed when the owner asks", async () => {
+    expect(tools({}).names).not.toContain("schedule_add");
+    const schedules: Schedule[] = [];
+    const { call } = tools({}, { schedules });
+    const out = await call("schedule_add", {
+      about: "早上看新 issue",
+      prompt: "看看 ~/learnspace/PI-Desktop 有没有新 issue，没有就不用说",
+      kind: "daily",
+      at: "9:00",
+      days: [1, 2, 3, 4, 5],
+    });
+    expect(out).toContain('"早上看新 issue" Mon, Tue, Wed, Thu, Fri at 09:00');
+    expect(out).toContain("tell the owner");
+    expect(await call("session_list", {})).toContain('"早上看新 issue"');
+    await expect(call("schedule_add", { about: "x", prompt: "y", kind: "every" })).rejects.toThrow(
+      /every needs hours/,
+    );
+    expect(await call("schedule_change", { schedule: "早上", paused: true })).toContain("paused");
+    expect(schedules[0]?.paused).toBe(true);
+    expect(await call("schedule_remove", { schedule: "早上" })).toContain("removed");
+    expect(schedules).toEqual([]);
+    await expect(call("schedule_remove", { schedule: "早上" })).rejects.toThrow(/no schedule/);
+  });
+
+  it("are never made by an event, new work or a schedule itself", async () => {
+    for (const kind of ["event", "intake", "scheduled"] as const) {
+      const schedules: Schedule[] = [];
+      const { call } = tools({ kind }, { schedules });
+      await expect(
+        call("schedule_add", { about: "x", prompt: "y", kind: "every", hours: 1 }),
+      ).rejects.toThrow(/only the owner/);
+      expect(schedules).toEqual([]);
     }
   });
 });

@@ -59,6 +59,7 @@ import type {
   ModelTiersView,
   ProbeTarget,
   ProviderView,
+  SchedulesView,
   SettingsPatch,
   SetupState,
   TasksView,
@@ -607,6 +608,28 @@ export class Host implements HostApi {
     memory.setStatus(id, "active");
     memory.log("owner.restored", memory.get(id)?.abstract ?? "", id);
     return this.memories();
+  }
+
+  schedules(): SchedulesView {
+    const herd = this.herd;
+    if (herd === undefined) return { schedules: [], ready: false };
+    return { schedules: herd.schedules.list(), ready: true };
+  }
+
+  setSchedulePaused(id: string, paused: boolean): SchedulesView {
+    this.ownSchedules().change(id, { paused });
+    return this.schedules();
+  }
+
+  removeSchedule(id: string): SchedulesView {
+    if (!this.ownSchedules().remove(id)) throw new Error("no such schedule");
+    return this.schedules();
+  }
+
+  private ownSchedules() {
+    const herd = this.herd;
+    if (herd === undefined) throw new Error("AgentHerd is not running; connect Feishu first");
+    return herd.schedules;
   }
 
   private ownMemory() {
