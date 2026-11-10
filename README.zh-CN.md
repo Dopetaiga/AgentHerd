@@ -22,41 +22,26 @@
 ## 主要功能
 
 - **飞书就是遥控器。** 发一条消息就能派活；在手机上用卡片回答问题、批准、继续任务。扫一次码就接好。
-  [渠道](docs/spec/05-channels.md)
 - **会说人话的主管。** 主管是一个用轻量模型的 Agent：接你的消息，启动并跟进任务，每个结果都用自己的话告诉你，
   Agent 的原话点一下就能看。说话风格可以选：能干的朋友、有主见的搭档或干练的秘书。
-  [主管](docs/spec/04-herder.md) · [ADR 0053](docs/adr/0053-the-herder-tells-task-results.md)
 - **每个任务用对的 Agent 和模型。** Pi、Codex、DeepSeek Harness 通过
   [Agent Client Protocol](https://agentclientprotocol.com) 运行，用你自己的模型服务。主管选模型，Agent 跟着模型走；
-  第一轮就出错时自动换下一个模型。[Agent](docs/spec/03-agents.md) · [ADR 0031](docs/adr/0031-pick-the-agent-from-the-model.md)
+  第一轮就出错时自动换下一个模型。
 - **任务能一直接着做。** 每个任务在项目的隐藏副本里干活，结束后保留，之后还能继续。App 里能看到每个任务的完整对话。
-  [ADR 0043](docs/adr/0043-tasks-work-on-hidden-copies.md) · [ADR 0039](docs/adr/0039-tasks-kept-and-continued.md)
 - **只在必须的时候问你。** 普通的工具调用直接放行，一次删除大量文件才先问你。看门狗会发现卡住的任务，
-  急事先到，小事不打扰。[ADR 0029](docs/adr/0029-only-mass-deletes-ask-the-owner.md) · [ADR 0046](docs/adr/0046-tell-the-owner-at-the-right-time.md)
+  急事先到，小事不打扰。
 - **代码之外的事也帮你盯。** 跟进任务开出的 PR；GitHub 上的新 issue 和 review 以「开任务 / 忽略」的方式递给你；
-  你要求时帮你看邮件。[ADR 0047](docs/adr/0047-follow-the-pull-requests-tasks-open.md) · [ADR 0052](docs/adr/0052-offer-new-github-work-when-asked.md) · [ADR 0048](docs/adr/0048-watch-mail-only-when-asked.md)
+  你要求时帮你看邮件。
 - **一句话建定时任务。** 「工作日每天 9 点看看有没有新 issue」，主管就建好；Mac 睡着时错过的，醒来只补跑一次。
-  [ADR 0055](docs/adr/0055-schedules-the-herder-makes.md)
 - **记忆有用不啰嗦。** 整段对话都保留，旧的部分由主管自己折叠。只有任务出了问题才记一条经验，以前的结果去任务记录里查。
-  [ADR 0045](docs/adr/0045-herder-context-folded-by-the-model.md) · [ADR 0054](docs/adr/0054-say-what-matters.md)
 - **只在本机运行。** 没有 AgentHerd 服务器，Key 存在 `~/.agentherd/secrets.json`，只有你的账户能读。合上盖子 Agent 也能接着跑。
-  [安全](docs/spec/06-security.md) · [ADR 0011](docs/adr/0011-keep-running-with-lid-closed.md)
 
 ## 怎么工作
 
-```mermaid
-flowchart LR
-  you["你（飞书）"] <--> herder["主管<br/>（轻量模型）"]
-  herder --> host["你 Mac 上的 AgentHerd"]
-  host -- ACP --> pi["Pi"]
-  host -- ACP --> codex["Codex"]
-  host -- ACP --> dsh["DeepSeek Harness"]
-  host --> watch["GitHub · 邮件 · 定时任务"]
-```
+<p align="center"><img src="docs/images/architecture.zh-CN.svg" alt="AgentHerd 怎么工作" width="900"></p>
 
 AgentHerd 是一个 Electron 应用，里面是一个无界面的核心。核心通过 ACP 启动每个 Agent，按规则检查每一次工具调用，
 任务、记忆和主管的对话都存在本地一个 SQLite 文件里（`~/.agentherd/herd.db`）。只有主管跟你说话；你的原话原样交给 Agent。
-[架构](docs/spec/02-architecture.md) · [主管交互](docs/spec/08-herder-interaction.md)
 
 ## 开始使用
 
