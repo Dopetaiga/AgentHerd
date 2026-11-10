@@ -1,6 +1,6 @@
 # ADR 0029: Only a mass delete asks the owner; AgentHerd approves everything else
 
-- Status: Accepted
+- Status: Superseded by [ADR 0056](0056-leaving-the-mac-asks-and-questions-close.md) (the mass-delete check stays)
 - Date: 2026-11-05
 - Changes: the approval pipeline in [04-herder §3](../spec/04-herder.md#3-approval-pipeline)
 

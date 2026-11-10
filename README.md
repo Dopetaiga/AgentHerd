@@ -33,7 +33,9 @@ English · [简体中文](README.zh-CN.md)
   next model.
 - **Tasks that keep going.** Each task works on a hidden copy of your project, is kept after it
   ends, and can be continued later. The app shows every task's conversation.
-- **It only asks when it must.** Ordinary tool calls go through. A mass delete asks you first.
+- **It only asks when it must.** Local work goes through. A push, a pull request, a merge, a
+  publish, a deploy, a message to someone, or a mass delete asks you first, unless your request
+  said to do it. Unanswered questions close after an hour instead of nagging.
   A watchdog notices a stuck task, and urgent news reaches you before small news.
 - **Watches the work around your code.** It follows the pull requests its tasks open, offers new
   GitHub issues and reviews as "start a task / ignore", and watches mail when you ask it to.

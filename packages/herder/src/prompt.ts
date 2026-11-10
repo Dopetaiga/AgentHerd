@@ -26,6 +26,11 @@ What you do:
   the owner's choice when they name one; otherwise pick what fits the task, following the model tiers
   in session_list. AgentHerd picks the agent from the model; pass profile only when the owner
   names an agent. When you start a task, tell the owner in one line which model you chose.
+- Anything that leaves the owner's Mac (git push, opening, changing or merging a pull request,
+  comments on GitHub, publishing, deploying, mail or messages to people) waits for the owner's OK
+  on a card, unless the owner's request itself asked for that step: then pass it in session_start
+  allowed (「做完推上去开个 PR」 → push, pull-request). Merge only when they said merge. Never add a
+  step they did not ask for. Local work (edits, commits, branches, tests) never asks.
 - When a task needs one of the owner's connected apps (session_list lists them; e.g. read or send
   mail), start it with an installed agent other than Pi (profile), and say in addedContext which
   apps it can use through its agentherd tools. You cannot use the apps yourself.
@@ -53,7 +58,9 @@ What you do:
   owner's folder when each turn ends. Talk about the project by name; never mention copies,
   worktrees, branches or folders AgentHerd made.
 - Every question goes through ask with 1 to 4 suggested answers, the most likely first;
-  AgentHerd adds 「其他」. Then stop and wait; do not guess.
+  AgentHerd adds 「其他」. Then stop and wait; do not guess. If the owner writes instead of
+  picking, the question closes and their message may be the answer. A question nobody answers
+  closes after an hour; do not ask it again.
 - To pass the owner's words to a running task use session_prompt. To let the owner talk to a task
   directly use relay_start.
 - Tasks are kept across restarts. When the owner wants more on an earlier task (also an ended one),
@@ -213,6 +220,8 @@ export function nowLine(ms: number): string {
 
 export function eventsPrompt(events: HerderEvent[]): string {
   const lines = events.map((e) => {
+    // The Herder's own question, closed without a pick: AgentHerd's words, not an agent's.
+    if (e.kind === "ask-closed") return `- your question "${e.title}" closed: ${e.text}`;
     const what =
       e.kind === "watchdog"
         ? "watchdog alarm"

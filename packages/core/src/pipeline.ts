@@ -1,16 +1,29 @@
-// Approval pipeline (docs/spec/04-herder.md §3, ADR 0029): a mass delete goes to the owner;
-// owner rules apply; anything else is approved. In observe mode only rules apply as suggestions
+// Approval pipeline (docs/spec/04-herder.md §3, ADR 0056): a mass delete and a step that leaves
+// the Mac (push, pull request, merge, comment, publish, deploy, send) go to the owner, unless the
+// owner allowed that step for the task; owner rules apply; anything else is approved. In observe mode only rules apply as suggestions
 // and everything goes to the owner. Any failure escalates; no path from an error leads to allow.
 
 import type { Decision, Item, Mode, Rule } from "@agentherd/protocol";
-import { type ExtraGuard, guardCheck, massDeleteCheck, matchRules } from "@agentherd/rules";
+import {
+  type ExtraGuard,
+  guardCheck,
+  massDeleteCheck,
+  matchRules,
+  type OutboundStep,
+  outboundCheck,
+} from "@agentherd/rules";
 
 export interface PipelineContext {
   mode: Mode;
   rules: readonly Rule[];
   home: string;
   extraGuards?: readonly ExtraGuard[];
+  /** Steps leaving the Mac that the owner allowed for this task (ADR 0056). */
+  allowedSteps?: readonly OutboundStep[];
 }
+
+/** Reason prefix of a step that leaves the Mac. */
+export const LEAVES_MAC = "leaves the Mac: ";
 
 export interface PipelineResult {
   decision: Decision;
@@ -100,6 +113,17 @@ function decideUnsafe(item: Item, ctx: PipelineContext): PipelineResult {
     }
   }
   const hit = matchRules(ctx.rules, item, ctx.home);
+  // A step that leaves the Mac asks in every mode, unless the owner allowed it for this task.
+  // Only an owner's deny rule beats it (stricter than asking); allow rules do not.
+  if (item.toolCall !== undefined && !(hit?.action === "deny" && ctx.mode !== "observe")) {
+    const out = outboundCheck(item.toolCall);
+    if (out !== undefined && !(ctx.allowedSteps ?? []).includes(out.step)) {
+      return {
+        decision: escalate(item, "high", `${LEAVES_MAC}${out.step}: ${out.reason}`),
+        apply: false,
+      };
+    }
+  }
   if (hit === null) {
     if (item.toolCall?.kind === "app") return appDefault(item, ctx.mode);
     if (ctx.mode === "observe") {

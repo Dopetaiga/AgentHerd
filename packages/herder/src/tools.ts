@@ -12,6 +12,7 @@ import {
   type Task,
 } from "@agentherd/core";
 import type { AgentTool, AgentToolResult } from "@agentherd/herder-loop";
+import { OUTBOUND_STEPS, type OutboundStep } from "@agentherd/rules";
 import { arr, bool, int, num, obj, oneOf, opt, str } from "@earendil-works/pi-schema";
 import { agentForModel } from "./agent-models.ts";
 import { lessonsText, ownerPrefsText, pastLessons } from "./memory.ts";
@@ -426,6 +427,18 @@ const sessionStartSchema = obj({
         "Model name from session_list (e.g. deepseek-v4-pro); AgentHerd uses the first service offering it that answers. service/model picks one service. Omit to select from AgentHerd's configured models in tier order.",
     }),
   ),
+  allowed: opt(
+    arr(
+      oneOf(OUTBOUND_STEPS, {
+        description:
+          "push: git push; pull-request: open or change a pull request; merge: merge one; comment: comment or review on GitHub; publish: npm publish, releases; deploy; send: mail or messages to people",
+      }),
+      {
+        description:
+          'Steps leaving the Mac that the owner\'s request itself asks for, e.g. "做完推上去开个 PR" → ["push", "pull-request"]. They run without asking, for this task only. Never add a step the owner did not ask for; "merge" only when they said merge. Every other such step asks the owner.',
+      },
+    ),
+  ),
 });
 const taskSchema = obj({ task: str({ description: "Task id prefix or words of its title" }) });
 const promptSchema = obj({
@@ -613,6 +626,7 @@ export function herderTools(
           ownerText: string;
           addedContext?: string;
           model?: string;
+          allowed?: OutboundStep[];
         },
       ) => {
         const t = turn();
@@ -671,10 +685,21 @@ export function herderTools(
           .join("\n\n");
         const prompt = composeTaskPrompt(args.ownerText.trim(), added === "" ? undefined : added);
         const title = args.name.trim() || args.ownerText.trim();
+        const allowed = [...new Set(args.allowed ?? [])];
         const taskId =
-          t.images.length === 0
-            ? await host.startTask(profile, cwd, title, prompt, model)
-            : await host.startTask(profile, cwd, title, prompt, model, t.images);
+          allowed.length > 0
+            ? await host.startTask(
+                profile,
+                cwd,
+                title,
+                prompt,
+                model,
+                t.images.length === 0 ? undefined : t.images,
+                allowed,
+              )
+            : t.images.length === 0
+              ? await host.startTask(profile, cwd, title, prompt, model)
+              : await host.startTask(profile, cwd, title, prompt, model, t.images);
         const switched =
           picked?.switched === undefined
             ? ""
@@ -684,8 +709,12 @@ export function herderTools(
             ? ""
             : `\nGave the agent ${lessons.length} past record(s): ${lessons.map((l) => l.abstract).join("; ")}`;
         const where = cwd === undefined ? "a folder of its own (no project)" : cwd;
+        const free =
+          allowed.length === 0
+            ? "\nPushes, pull requests, merges, comments, publishing, deploys and messages will ask the owner."
+            : `\nAllowed without asking: ${allowed.join(", ")}; other steps leaving the Mac ask the owner.`;
         return ok(
-          `started task ${taskId.slice(0, 8)} in ${where} with ${profile}, ${model}${switched}${gave}`,
+          `started task ${taskId.slice(0, 8)} in ${where} with ${profile}, ${model}${switched}${gave}${free}`,
         );
       },
     },

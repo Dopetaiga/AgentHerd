@@ -13,7 +13,7 @@ import type {
   TextView,
   View,
 } from "@agentherd/protocol";
-import type { ExtraGuard } from "@agentherd/rules";
+import type { ExtraGuard, OutboundStep } from "@agentherd/rules";
 import type { Board } from "./board.ts";
 import type { Clock, Timer } from "./clock.ts";
 import type { GitHubOptions, GitHubWatch } from "./github-watch.ts";
@@ -52,6 +52,8 @@ export interface HerdOptions {
    */
   taskCopies?: boolean;
   remindMinutes?: number;
+  /** Approvals nobody answers close as not done after this many minutes (ADR 0056; default 60). */
+  timeoutMinutes?: number;
   extraGuards?: ExtraGuard[];
   /** Values to redact everywhere (secrets from env). */
   secrets?: Record<string, string>;
@@ -253,6 +255,7 @@ export interface TaskOps {
     prompt?: string,
     model?: string,
     images?: OwnerImage[],
+    allowed?: readonly OutboundStep[],
   ): Promise<{ taskId: string; turn: Promise<RunResult> }>;
   promptTask(taskId: string, text: string, images?: OwnerImage[]): Promise<RunResult>;
   interruptTask(taskId: string, text: string, images?: OwnerImage[]): Promise<RunResult>;

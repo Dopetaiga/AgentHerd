@@ -69,11 +69,11 @@ The owner talks to one bot in a direct chat. What it sends there:
 | Message | When | Notifies? |
 | --- | --- | --- |
 | Task board | One pinned card. Rows: task, stage, project, agent, last report, updated. Tasks that need the owner come first. Updated in place by code when a stage changes; a select menu under the table starts a relay. | Only when first sent |
-| Item card | An approval or an agent question. One card per item, labeled with its task. At most one open card per session; newer items for the same session queue behind it. Updated in place with the final state: "Allowed by you", "Allowed by rule", "Denied". | Yes |
+| Item card | An approval, labeled with its task, with 批准 / 拒绝 / 先不管. At most one open item per session; newer items for the same session queue behind it. Items of different sessions that are open together share one card: numbered lines with their own buttons, 「全部批准」 / 「都先不管」, and the owner can reply 「都批」 or 「批 1、3」 ([ADR 0056](../adr/0056-leaving-the-mac-asks-and-questions-close.md)). Updated in place with the final state: "Allowed by you", "Denied by you", "Left by you", "No answer in 1 hour; the step was not done". | Yes |
 | Agent text | During a relay: everything the agent says, verbatim, with a task prefix | Yes |
 | Completion report | Every time a task ends (done, blocked, failed): title, what was done, verification, outputs, risks, automatic decisions; long replies and decisions are folded. Feishu shows "Relay to this task" only for non-done results. Replying to any report still reaches that task. | Yes |
 | Relay status | While a relay is active: "Talking to <task>", "End relay" button | When it starts and ends |
-| Reminder | Every `remindMinutes` (default 30) while an item is open | Yes |
+| Reminder | Once, `remindMinutes` (default 30) after an item opened; it closes as not done at `timeoutMinutes` (default 60) | Yes |
 | Daily digest | On by default, can be turned off. Done today, still running, automatic decisions with reasons, decisions marked wrong | Yes |
 
 Each kind of message has its own look ([ADR 0036](../adr/0036-message-cards-by-kind.md), spec 08 §3):
