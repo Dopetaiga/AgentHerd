@@ -3,9 +3,17 @@
 
 import { statSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
-import type { HerderHost, OwnerImage, Task } from "@agentherd/core";
+import {
+  describeWhen,
+  type HerderHost,
+  type OwnerImage,
+  type Schedule,
+  type ScheduleWhen,
+  type Task,
+} from "@agentherd/core";
 import type { AgentTool, AgentToolResult } from "@agentherd/herder-loop";
-import { arr, bool, obj, oneOf, opt, str } from "@earendil-works/pi-schema";
+import { OUTBOUND_STEPS, type OutboundStep } from "@agentherd/rules";
+import { arr, bool, int, num, obj, oneOf, opt, str } from "@earendil-works/pi-schema";
 import { agentForModel } from "./agent-models.ts";
 import { lessonsText, ownerPrefsText, pastLessons } from "./memory.ts";
 import { placeModels, TIERS, type TierPlacement, tiersText } from "./model-guide.ts";
@@ -15,7 +23,8 @@ import { composeTaskPrompt, HERDER_LABEL } from "./prompt.ts";
 /** What the current Herder turn is about. */
 export interface TurnContext {
   /** `intake`: new work the owner tapped 「开任务」 on, or their automatic watch found (ADR 0052). */
-  kind: "owner" | "answer" | "event" | "intake";
+  /** `scheduled`: a schedule the owner made is due (ADR 0055); its saved words are the owner's. */
+  kind: "owner" | "answer" | "event" | "intake" | "scheduled";
   /** The owner's words this turn may pass on: the message, or the one the answer belongs to. */
   ownerText: string;
   /**
@@ -177,6 +186,138 @@ function intakeLines(host: HerderHost): string[] {
   ];
 }
 
+/** What the Herder does at set times (ADR 0055). */
+function scheduleLines(host: HerderHost): string[] {
+  if (host.schedules === undefined) return [];
+  const list = host.schedules();
+  return [
+    "Schedules (what you do at set times; the owner asked for each):",
+    ...(list.length === 0 ? ["(none)"] : list.map(scheduleLine)),
+  ];
+}
+
+export function scheduleLine(s: Schedule): string {
+  const next = s.paused ? "paused" : `next ${localTime(s.nextAt)}`;
+  return `- ${s.id.slice(0, 8)} "${s.about}" ${describeWhen(s.when)}, ${next}: ${s.prompt.replace(/\s+/g, " ").slice(0, 200)}`;
+}
+
+/** An ISO time as the owner's local "YYYY-MM-DD HH:MM". */
+function localTime(iso: string | undefined): string {
+  if (iso === undefined) return "-";
+  const d = new Date(iso);
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+/** The tool's `kind`/`at`/`days`/`hours` as a schedule time. */
+export function whenFrom(args: {
+  kind: string;
+  at?: string;
+  days?: number[];
+  hours?: number;
+}): ScheduleWhen {
+  if (args.kind === "every") {
+    if (args.hours === undefined) throw new Error("every needs hours");
+    return { kind: "every", hours: args.hours };
+  }
+  if (args.at === undefined) throw new Error(`${args.kind} needs at`);
+  if (args.kind === "once") return { kind: "once", at: args.at };
+  if (args.kind === "daily") {
+    return { kind: "daily", at: args.at, ...(args.days === undefined ? {} : { days: args.days }) };
+  }
+  throw new Error('kind must be "daily", "every" or "once"');
+}
+
+function oneSchedule(host: HerderHost, query: string): Schedule {
+  const q = normalize(query);
+  const found = (host.schedules?.() ?? []).filter(
+    (s) => s.id.startsWith(query.trim()) || normalize(s.about).includes(q),
+  );
+  const only = found[0];
+  if (found.length === 1 && only !== undefined) return only;
+  if (found.length === 0) throw new Error(`no schedule matches "${query}"`);
+  throw new Error(
+    `several schedules match "${query}": ${found.map((s) => `${s.id.slice(0, 8)} "${s.about}"`).join(", ")}`,
+  );
+}
+
+/** Schedules exist only because the owner asked, and hold at once (ADR 0055). */
+function scheduleTools(host: HerderHost, turn: () => TurnContext) {
+  const told = "; tell the owner in one short line what you will do and when, in their words";
+  return [
+    {
+      name: "schedule_add",
+      label: "Do something at set times",
+      description:
+        "Only when the owner asks you to do something at set times or later (e.g. 「每天早上 9 点看看 PI-Desktop 有没有新 issue」, 「明天下午三点提醒我交周报」). It holds at once: at each time `prompt` comes back to you as a turn and you do it then (answer, start a task, or say nothing). Never make one on your own.",
+      parameters: scheduleAddSchema,
+      execute: async (
+        _id: string,
+        args: {
+          about: string;
+          prompt: string;
+          kind: string;
+          at?: string;
+          days?: number[];
+          hours?: number;
+        },
+      ) => {
+        ownerOnly(turn, "make schedules");
+        const made = host.addSchedule?.({
+          about: args.about,
+          prompt: args.prompt,
+          when: whenFrom(args),
+        });
+        if (made === undefined) throw new Error("schedules are not available here");
+        return ok(`scheduled:\n${scheduleLine(made)}${told}`);
+      },
+    },
+    {
+      name: "schedule_change",
+      label: "Change a schedule",
+      description:
+        "Changes, pauses or resumes a schedule when the owner asks. Give kind with at/days/hours only to change when it runs.",
+      parameters: scheduleChangeSchema,
+      execute: async (
+        _id: string,
+        args: {
+          schedule: string;
+          about?: string;
+          prompt?: string;
+          paused?: boolean;
+          kind?: string;
+          at?: string;
+          days?: number[];
+          hours?: number;
+        },
+      ) => {
+        ownerOnly(turn, "change schedules");
+        const old = oneSchedule(host, args.schedule);
+        const changed = host.changeSchedule?.(old.id, {
+          ...(args.about === undefined ? {} : { about: args.about }),
+          ...(args.prompt === undefined ? {} : { prompt: args.prompt }),
+          ...(args.paused === undefined ? {} : { paused: args.paused }),
+          ...(args.kind === undefined ? {} : { when: whenFrom({ ...args, kind: args.kind }) }),
+        });
+        if (changed === undefined) throw new Error("schedules are not available here");
+        return ok(`changed:\n${scheduleLine(changed)}${told}`);
+      },
+    },
+    {
+      name: "schedule_remove",
+      label: "Remove a schedule",
+      description: "Removes a schedule when the owner no longer wants it.",
+      parameters: scheduleRemoveSchema,
+      execute: async (_id: string, args: { schedule: string }) => {
+        ownerOnly(turn, "remove schedules");
+        const old = oneSchedule(host, args.schedule);
+        host.removeSchedule?.(old.id);
+        return ok(`removed "${old.about}"`);
+      },
+    },
+  ];
+}
+
 /** Watched sources that stopped answering (ADR 0050). */
 function sourceLines(host: HerderHost): string[] {
   const down = host.sources?.() ?? [];
@@ -286,6 +427,18 @@ const sessionStartSchema = obj({
         "Model name from session_list (e.g. deepseek-v4-pro); AgentHerd uses the first service offering it that answers. service/model picks one service. Omit to select from AgentHerd's configured models in tier order.",
     }),
   ),
+  allowed: opt(
+    arr(
+      oneOf(OUTBOUND_STEPS, {
+        description:
+          "push: git push; pull-request: open or change a pull request; merge: merge one; comment: comment or review on GitHub; publish: npm publish, releases; deploy; send: mail or messages to people",
+      }),
+      {
+        description:
+          'Steps leaving the Mac that the owner\'s request itself asks for, e.g. "做完推上去开个 PR" → ["push", "pull-request"]. They run without asking, for this task only. Never add a step the owner did not ask for; "merge" only when they said merge. Every other such step asks the owner.',
+      },
+    ),
+  ),
 });
 const taskSchema = obj({ task: str({ description: "Task id prefix or words of its title" }) });
 const promptSchema = obj({
@@ -343,6 +496,48 @@ const intakeWatchSchema = obj({
   ),
 });
 
+const whenFields = {
+  kind: oneOf(["daily", "every", "once"] as const, {
+    description:
+      "daily: at a time on every day or on some weekdays; every: every N hours from now; once: one time at a date and time",
+  }),
+  at: opt(
+    str({
+      description:
+        'daily: "HH:MM"; once: "YYYY-MM-DD HH:MM". The owner\'s local time, the one in [Now: …].',
+    }),
+  ),
+  days: opt(
+    arr(int({ minimum: 1, maximum: 7 }), {
+      description: "daily only: weekdays, 1 Monday … 7 Sunday; leave out for every day",
+    }),
+  ),
+  hours: opt(num({ description: "every only: hours between runs, at least 1" })),
+};
+const scheduleAddSchema = obj({
+  about: str({
+    description: 'A short name in the owner\'s words, e.g. "早上看 PI-Desktop 新 issue".',
+  }),
+  prompt: str({
+    description:
+      "What you do at the time, as a message from the owner would say it, complete on its own: the project (folder or name), what to do or check, and when to stay quiet (e.g. 「没有新的就不用说」). It is all you will have then.",
+  }),
+  ...whenFields,
+});
+const scheduleChangeSchema = obj({
+  schedule: str({ description: "The schedule's id prefix or words of its name." }),
+  about: opt(str()),
+  prompt: opt(str()),
+  paused: opt(bool({ description: "true to pause, false to run it again" })),
+  kind: opt(whenFields.kind),
+  at: whenFields.at,
+  days: whenFields.days,
+  hours: whenFields.hours,
+});
+const scheduleRemoveSchema = obj({
+  schedule: str({ description: "The schedule's id prefix or words of its name." }),
+});
+
 const intakeUnwatchSchema = obj({
   watch: str({ description: "The watch's id prefix or words of what it is about." }),
 });
@@ -385,6 +580,7 @@ export function herderTools(
           ...appLines(host),
           ...mailLines(host),
           ...intakeLines(host),
+          ...scheduleLines(host),
           ...sourceLines(host),
         ];
         return ok(lines.join("\n"));
@@ -430,6 +626,7 @@ export function herderTools(
           ownerText: string;
           addedContext?: string;
           model?: string;
+          allowed?: OutboundStep[];
         },
       ) => {
         const t = turn();
@@ -488,10 +685,21 @@ export function herderTools(
           .join("\n\n");
         const prompt = composeTaskPrompt(args.ownerText.trim(), added === "" ? undefined : added);
         const title = args.name.trim() || args.ownerText.trim();
+        const allowed = [...new Set(args.allowed ?? [])];
         const taskId =
-          t.images.length === 0
-            ? await host.startTask(profile, cwd, title, prompt, model)
-            : await host.startTask(profile, cwd, title, prompt, model, t.images);
+          allowed.length > 0
+            ? await host.startTask(
+                profile,
+                cwd,
+                title,
+                prompt,
+                model,
+                t.images.length === 0 ? undefined : t.images,
+                allowed,
+              )
+            : t.images.length === 0
+              ? await host.startTask(profile, cwd, title, prompt, model)
+              : await host.startTask(profile, cwd, title, prompt, model, t.images);
         const switched =
           picked?.switched === undefined
             ? ""
@@ -501,8 +709,12 @@ export function herderTools(
             ? ""
             : `\nGave the agent ${lessons.length} past record(s): ${lessons.map((l) => l.abstract).join("; ")}`;
         const where = cwd === undefined ? "a folder of its own (no project)" : cwd;
+        const free =
+          allowed.length === 0
+            ? "\nPushes, pull requests, merges, comments, publishing, deploys and messages will ask the owner."
+            : `\nAllowed without asking: ${allowed.join(", ")}; other steps leaving the Mac ask the owner.`;
         return ok(
-          `started task ${taskId.slice(0, 8)} in ${where} with ${profile}, ${model}${switched}${gave}`,
+          `started task ${taskId.slice(0, 8)} in ${where} with ${profile}, ${model}${switched}${gave}${free}`,
         );
       },
     },
@@ -651,6 +863,9 @@ export function herderTools(
   if (host.watchIntake !== undefined) {
     all.push(...intakeTools(host, turn).map((t) => t as unknown as AgentTool));
   }
+  if (host.addSchedule !== undefined) {
+    all.push(...scheduleTools(host, turn).map((t) => t as unknown as AgentTool));
+  }
   return all;
 }
 
@@ -660,7 +875,9 @@ const SPEAK_IN_REPLY = "while telling a task's result, put everything in your re
 /** Only the owner's own words create or change a new-work watch (ADR 0052). */
 function ownerOnly(turn: () => TurnContext, what: string): void {
   const kind = turn().kind;
-  if (kind === "event" || kind === "intake") throw new Error(`only the owner can ${what}`);
+  if (kind === "event" || kind === "intake" || kind === "scheduled") {
+    throw new Error(`only the owner can ${what}`);
+  }
 }
 
 function oneIntake(host: HerderHost, query: string): { id: string; about: string } {

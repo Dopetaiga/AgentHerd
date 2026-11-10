@@ -68,6 +68,7 @@ function decideOne(ctx: HerdContext, base: Item, call: AppCall): PipelineResult 
     mode: ctx.mode(),
     rules: ctx.store.listRules(),
     home: ctx.opts.userHome,
+    allowedSteps: ctx.following.get(base.sessionId)?.task.allowedSteps ?? [],
   });
 }
 

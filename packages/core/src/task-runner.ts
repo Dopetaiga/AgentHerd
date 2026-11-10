@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { type AgentConnection, type StdioMcpServer, startAgent } from "@agentherd/acp-client";
 import type { AgentProfile, MessageRef } from "@agentherd/protocol";
+import type { OutboundStep } from "@agentherd/rules";
 import {
   type Following,
   firstLine,
@@ -78,6 +79,7 @@ export class TaskRunner {
     prompt: string = ownerText,
     model?: string,
     images: OwnerImage[] = [],
+    allowed: readonly OutboundStep[] = [],
   ): Promise<{ taskId: string; turn: Promise<RunResult> }> {
     const { ctx } = this;
     const found = ctx.opts.profiles.find((p) => p.id === profileId);
@@ -106,6 +108,7 @@ export class TaskRunner {
         startedAt: now,
         updatedAt: now,
         automaticDecisions: [],
+        ...(allowed.length === 0 ? {} : { allowedSteps: [...new Set(allowed)] }),
       },
       profile,
       cwd: workspace.cwd,

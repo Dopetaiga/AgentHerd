@@ -32,7 +32,7 @@ Format and rules: [ADR 0001](0001-record-architecture-decisions.md).
 | [0026](0026-model-guide-for-the-herder.md) | A model guide tells the Herder which models are strong; the owner can edit it | Superseded by 0028 |
 | [0027](0027-import-model-services-from-pi-desktop.md) | Import model services and keys from PI-Desktop | Withdrawn |
 | [0028](0028-model-tiers-by-drag.md) | Model tiers the owner arranges by dragging, filled in by name | Accepted |
-| [0029](0029-only-mass-deletes-ask-the-owner.md) | Only a mass delete asks the owner; AgentHerd approves everything else | Accepted |
+| [0029](0029-only-mass-deletes-ask-the-owner.md) | Only a mass delete asks the owner; AgentHerd approves everything else | Superseded by 0056 |
 | [0030](0030-switch-model-when-a-turn-breaks-before-acting.md) | Switch the model and run again when a task's first turn breaks before it acts | Accepted |
 | [0031](0031-pick-the-agent-from-the-model.md) | No agent choice: GPT models run in Codex, the rest in Pi; DSH only when named; OpenCode, Gemini CLI, Claude Code removed | Accepted |
 | [0032](0032-task-conversation-in-the-app.md) | Each task's conversation (prompts, replies, tool calls) opens from the 任务 page | Accepted |
@@ -58,3 +58,5 @@ Format and rules: [ADR 0001](0001-record-architecture-decisions.md).
 | [0052](0052-offer-new-github-work-when-asked.md) | New GitHub work (issues assigned to the owner, reviews requested) is watched only when asked and offered with 「开任务 / 忽略」; `auto` watches start by themselves | Accepted |
 | [0053](0053-the-herder-tells-task-results.md) | The Herder tells every task result in its own words, the agent's reply one tap below; the owner picks one of three styles (friend, partner, secretary) copied from real personal agents | Accepted |
 | [0054](0054-say-what-matters.md) | The Herder has no word limit and says what matters (length follows what the owner asked); the fold under a report is 「<agent> 的原话」; memory writes a lesson only for tasks that went wrong, no case per task | Accepted |
+| [0055](0055-schedules-the-herder-makes.md) | The Herder makes schedules (daily, every N hours, once) when the owner asks in chat; they hold at once and the Herder restates them; at the time the saved words come back as a turn that may answer, start a task or stay quiet | Accepted |
+| [0056](0056-leaving-the-mac-asks-and-questions-close.md) | Steps that leave the Mac (push, pull request, merge, comment, publish, deploy, send) ask the owner unless the request allowed them for the task; approvals remind once and close as not done after an hour, have 「先不管」 and share one card (「都批」/「批 1、3」); a Herder question closes when the owner writes instead or after an hour | Accepted |

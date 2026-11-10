@@ -3,6 +3,25 @@
 
 import type { Locale, ReportResult } from "@agentherd/protocol";
 
+/** Steps that leave the Mac (ADR 0056), as the owner reads them. */ const STEPS_ZH = {
+  push: "推送到远端",
+  "pull-request": "开或改 PR",
+  merge: "合并 PR",
+  comment: "在 GitHub 上评论或改 issue",
+  publish: "发布",
+  deploy: "部署",
+  send: "替你给别人发消息",
+};
+const STEPS_EN = {
+  push: "pushes to a remote",
+  "pull-request": "opens or changes a pull request",
+  merge: "merges a pull request",
+  comment: "writes on GitHub",
+  publish: "publishes",
+  deploy: "deploys",
+  send: "sends a message for you",
+};
+
 export interface CoreTexts {
   help: string;
   noHerder: string;
@@ -108,6 +127,23 @@ export interface CoreTexts {
   deniedByYou: string;
   expired(why: string): string;
   stillWaiting(title: string): string;
+  /** "先不管": the step is not done, and the agent goes on (ADR 0056). */
+  skip: string;
+  skippedByYou: string;
+  /** Card final when nobody answered in time: the step was not done. */
+  timedOut(minutes: number): string;
+  /** Why a step that leaves the Mac asks; `step` is one of OUTBOUND_STEPS. */
+  leavesMac(step: string): string;
+  /** A card with several approvals. */
+  manyWaiting(n: number): string;
+  manyHint: string;
+  allowAll: string;
+  skipAll: string;
+  allClosed: string;
+  /** A Herder question closed because the owner wrote in the chat instead. */
+  answeredInChat: string;
+  /** A Herder question nobody answered in time. */
+  askTimedOut(minutes: number): string;
   // Why an item expired or a task ended.
   turnEnded: string;
   agentStoppedWaiting: string;
@@ -268,7 +304,19 @@ const zh: CoreTexts = {
   allowedByYou: "你已批准",
   deniedByYou: "你已拒绝",
   expired: (why) => `已失效：${why}`,
-  stillWaiting: (t) => `还在等你处理：${t}`,
+  stillWaiting: (t) => `还在等你处理：${t}（没人回的话，到点就当这一步不做）`,
+  skip: "先不管",
+  skippedByYou: "你先不管：这一步没做",
+  timedOut: (m) => `${m >= 60 && m % 60 === 0 ? `${m / 60} 小时` : `${m} 分钟`}没人回，这一步没做`,
+  leavesMac: (step) =>
+    `会离开你的电脑：${(STEPS_ZH as Record<string, string>)[step] ?? step}，需要你确认`,
+  manyWaiting: (n) => `${n} 个请求等你批`,
+  manyHint: "可以一个个点，也可以直接回「都批」或「批 1、3」。",
+  allowAll: "全部批准",
+  skipAll: "都先不管",
+  allClosed: "都处理完了",
+  answeredInChat: "你在聊天里回了",
+  askTimedOut: (m) => `${m >= 60 && m % 60 === 0 ? `${m / 60} 小时` : `${m} 分钟`}没人回，先放下了`,
   turnEnded: "Agent 这一轮已结束",
   agentStoppedWaiting: "Agent 不再等待",
   agentherdStopped: "AgentHerd 已停止",
@@ -298,7 +346,7 @@ const zh: CoreTexts = {
   turnFailed: "这一轮执行失败",
   modelSwitched: (from, to, why) => `${from} 出错（${why}），还没动手，换成 ${to} 重跑`,
   voicedReplyHint:
-    "[AgentHerd] 你的回复由 AgentHerd 的主管读，再由它用自己的话告诉负责人。每一轮结束时写清楚：做了什么或发现了什么、结果在哪（文件、提交、PR 链接）、还剩什么或需要负责人做什么。不要贴长代码或日志。下面是任务原文。",
+    "[AgentHerd] 你的回复由 AgentHerd 的主管读，再由它用自己的话告诉负责人。每一轮结束时写清楚：做了什么或发现了什么、结果在哪（文件、提交、PR 链接）、还剩什么或需要负责人做什么。不要贴长代码或日志。推送、开或合并 PR、评论、发布、部署、给别人发消息都要等负责人点头；被拒或没人回就跳过那一步、接着做别的，最后说明。下面是任务原文。",
   herderUnvoiced: "主管暂时说不了话，agent 的原话在下面。",
   replyHint: (n) =>
     `[AgentHerd] 你的回复会在手机上阅读。每条回复不超过 ${n} 字，先写结论；细节写进文件或提交说明，不要贴长代码或日志。下面是任务原文。`,
@@ -427,7 +475,22 @@ const en: CoreTexts = {
   allowedByYou: "Allowed by you",
   deniedByYou: "Denied by you",
   expired: (why) => `Expired: ${why}`,
-  stillWaiting: (t) => `Still waiting for you: ${t}`,
+  stillWaiting: (t) =>
+    `Still waiting for you: ${t} (with no answer, the step is skipped when time is up)`,
+  skip: "Not now",
+  skippedByYou: "Left by you: the step was not done",
+  timedOut: (m) =>
+    `No answer in ${m >= 60 && m % 60 === 0 ? `${m / 60} hour${m === 60 ? "" : "s"}` : `${m} minutes`}; the step was not done`,
+  leavesMac: (step) =>
+    `leaves your Mac: ${(STEPS_EN as Record<string, string>)[step] ?? step}; needs your confirmation`,
+  manyWaiting: (n) => `${n} requests waiting for you`,
+  manyHint: 'Tap each one, or reply "allow all" or "allow 1, 3".',
+  allowAll: "Allow all",
+  skipAll: "None now",
+  allClosed: "All handled",
+  answeredInChat: "You answered in the chat",
+  askTimedOut: (m) =>
+    `No answer in ${m >= 60 && m % 60 === 0 ? `${m / 60} hour${m === 60 ? "" : "s"}` : `${m} minutes`}; set aside`,
   turnEnded: "the agent's turn ended",
   agentStoppedWaiting: "the agent stopped waiting",
   agentherdStopped: "AgentHerd stopped",
@@ -459,7 +522,7 @@ const en: CoreTexts = {
   modelSwitched: (from, to, why) =>
     `${from} failed (${why}) before doing anything; running again with ${to}`,
   voicedReplyHint:
-    "[AgentHerd] AgentHerd's Herder reads your reply and tells the owner about it in its own words. End each turn with a complete, plain account: what you did or found, where the results are (files, commits, pull request links), and what is left or needs the owner. Do not paste long code or logs. The owner's task follows.",
+    "[AgentHerd] AgentHerd's Herder reads your reply and tells the owner about it in its own words. End each turn with a complete, plain account: what you did or found, where the results are (files, commits, pull request links), and what is left or needs the owner. Do not paste long code or logs. Pushing, opening or merging pull requests, comments, publishing, deploying and messages to people wait for the owner's OK; if one is refused or not answered, skip that step, go on with the rest, and say so at the end. The owner's task follows.",
   herderUnvoiced: "The Herder cannot speak right now; the agent's own words are below.",
   replyHint: (n) =>
     [

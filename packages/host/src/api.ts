@@ -9,6 +9,7 @@ import type {
   ModelRole,
   ModelService,
   ModelSettings,
+  Schedule,
   Task,
   TranscriptEntry,
 } from "@agentherd/core";
@@ -219,6 +220,13 @@ export interface AppsView {
   apps: AppView[];
 }
 
+/** What the Herder does at set times, for the 定时任务 page (ADR 0055). */
+export interface SchedulesView {
+  schedules: Schedule[];
+  /** False while AgentHerd is not following tasks (no herd): nothing to show or change. */
+  ready: boolean;
+}
+
 export interface HostApi {
   status(): HostStatus;
   tasks(): TasksView;
@@ -229,6 +237,10 @@ export interface HostApi {
   editMemory(id: string, text: string): MemoryView;
   forgetMemory(id: string): MemoryView;
   restoreMemory(id: string): MemoryView;
+  /** Schedules are made in chat; the app shows them and can pause or remove one. */
+  schedules(): SchedulesView;
+  setSchedulePaused(id: string, paused: boolean): SchedulesView;
+  removeSchedule(id: string): SchedulesView;
   providers(): ProviderView[];
   models(): ModelsView;
   /** Adds or replaces a service. `key`: undefined keeps the saved key, "" removes it. */
@@ -277,6 +289,9 @@ export const HOST_METHODS: readonly HostMethod[] = [
   "editMemory",
   "forgetMemory",
   "restoreMemory",
+  "schedules",
+  "setSchedulePaused",
+  "removeSchedule",
   "providers",
   "models",
   "putService",

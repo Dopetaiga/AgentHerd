@@ -38,7 +38,10 @@ Each milestone is split into plans under [`plans/`](../../plans/README.md).
 | ID | Scenario | Milestone | Test |
 | --- | --- | --- | --- |
 | E2E-APPROVE | Mock agent requests approval; card is sent; owner taps Allow; the agent receives allow; card shows final state | M1 | `packages/core/test/e2e/approval.e2e.test.ts` |
-| E2E-REMIND | An open item gets a reminder after `remindMinutes`; nothing is decided by time | M1 | `packages/core/test/e2e/approval.e2e.test.ts` |
+| E2E-REMIND | An open item gets one reminder after `remindMinutes` and closes as not done (deny) after `timeoutMinutes`; 「先不管」 closes it at once (ADR 0056) | M1 | `packages/core/test/e2e/approval.e2e.test.ts` |
+| E2E-BATCH | Approvals of two tasks share one card; 「allow 2」 in the chat and 「全部批准」 answer them | M2 | `packages/core/test/e2e/approval.e2e.test.ts` |
+| E2E-LEAVES-MAC | git push and sending mail ask the owner; a step the owner allowed for the task runs without a card | M2 | `packages/core/test/e2e/approval.e2e.test.ts`, `packages/core/test/e2e/mcp.e2e.test.ts` |
+| E2E-ASK-LIFECYCLE | A Herder question closes when the owner writes instead (the Herder hears why) or after an hour; a pick cancels the timeout | M2 | `packages/core/test/e2e/ask-lifecycle.e2e.test.ts` |
 | E2E-CHANNEL-DOWN | Channel disconnected; a new item waits in the inbox and is sent after reconnect | M2 | |
 | E2E-CONFIGURED-MODEL | New and continued tasks select a configured model when none was specified; an empty list or unlisted choice cannot start an agent; automatic switches stay in the list | M2 | `packages/core/test/e2e/model.e2e.test.ts`, `packages/herder/test/tools.test.ts` |
 | E2E-OWNER-ONLY | A non-owner taps a button; nothing changes; event is logged | M1 | `packages/core/test/e2e/approval.e2e.test.ts` |
@@ -63,3 +66,4 @@ Each milestone is split into plans under [`plans/`](../../plans/README.md).
 | E2E-HERDER-NO-APPROVE | The Herder has no way to allow an item; a Herder tool call that matches the guard list goes to the owner | M2 | `packages/herder/test/e2e/herder.e2e.test.ts`, `packages/herder/test/herder.test.ts` |
 | E2E-HERDER-CONTEXT | The Herder folds earlier messages with `compress`; after a restart on the same `herd.db` the next request shows the summary instead of them, and the log still has them | M2 | `packages/herder/test/e2e/herder.e2e.test.ts` |
 | E2E-HERDER-VOICE | A task's report is the Herder's words with the agent's reply as the full reply; `[quiet]` sends nothing; a failing or slow Herder (3 minutes) still lets the report out; a `waiting` herd_report is told in the Herder's words | M2 | `packages/core/test/e2e/voice.e2e.test.ts` |
+| E2E-SCHEDULES | A schedule the owner asked for holds at once and its words reach the Herder at the time; a time missed while AgentHerd was off runs once; a paused one waits; a once one is removed after it ran; past times and more than 20 are refused | M2 | `packages/core/test/e2e/schedules.e2e.test.ts`, `packages/herder/test/tools.test.ts` |

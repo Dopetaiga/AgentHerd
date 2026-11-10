@@ -130,6 +130,11 @@ function fakeApps(ran: string[]): AppTools {
       toolkit: "gmail",
       hints: hints({ create: true }),
     },
+    GMAIL_CREATE_EMAIL_DRAFT: {
+      title: "Gmail: Create draft",
+      toolkit: "gmail",
+      hints: hints({ create: true }),
+    },
     GMAIL_DELETE_MESSAGE: {
       title: "Gmail: Delete message",
       toolkit: "gmail",
@@ -166,22 +171,38 @@ const isOpenItem = (m: SentMessage) =>
   m.view.kind === "item" && (m.view as ItemView).final === undefined;
 
 describe("E2E-MCP-APPS", () => {
-  it("a read and a write run without asking; the write goes into the report", async () => {
+  it("a read and a write that stays in the account run without asking; the write goes into the report", async () => {
     const ran: string[] = [];
     const { herd, tokens, channel } = await setup(profile(SLOW), fakeApps(ran));
     const { taskId, turn } = await herd.startTask("mock", dir, "Mail Bob");
     await until(() => tokens.length > 0);
     const answer = await herd.mcp(
       tokens[0] as string,
-      run("GMAIL_FETCH_EMAILS", "GMAIL_SEND_EMAIL"),
+      run("GMAIL_FETCH_EMAILS", "GMAIL_CREATE_EMAIL_DRAFT"),
     );
     expect(answer?.result).toEqual({ content: [{ type: "text", text: "ok" }] });
-    expect(ran).toEqual(["GMAIL_FETCH_EMAILS", "GMAIL_SEND_EMAIL"]);
+    expect(ran).toEqual(["GMAIL_FETCH_EMAILS", "GMAIL_CREATE_EMAIL_DRAFT"]);
     expect(channel.messages.some(isOpenItem)).toBe(false);
     await turn;
     expect(herd.tasks().find((t) => t.id === taskId)?.automaticDecisions).toContain(
-      "Ran on its own: Gmail: Fetch emails, Gmail: Send email",
+      "Ran on its own: Gmail: Fetch emails, Gmail: Create draft",
     );
+  });
+
+  it("sending mail leaves the Mac: it waits for the owner (ADR 0056)", async () => {
+    const ran: string[] = [];
+    const { herd, tokens, channel } = await setup(profile(SLOW), fakeApps(ran));
+    const { turn } = await herd.startTask("mock", dir, "Mail Bob");
+    await until(() => tokens.length > 0);
+    const pending = herd.mcp(tokens[0] as string, run("GMAIL_SEND_EMAIL"));
+    const card = await channel.waitFor(isOpenItem);
+    expect((card.view as ItemView).reason).toBe(
+      "leaves your Mac: sends a message for you; needs your confirmation",
+    );
+    await channel.tap((card.view as ItemView).itemId, "allow");
+    expect((await pending)?.result).toEqual({ content: [{ type: "text", text: "ok" }] });
+    expect(ran).toEqual(["GMAIL_SEND_EMAIL"]);
+    await turn;
   });
 
   it("a delete waits for the owner and a deny reaches the agent as a tool error", async () => {

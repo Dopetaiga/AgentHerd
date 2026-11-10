@@ -621,3 +621,47 @@ describe("Herder voice (ADR 0053)", () => {
     expect(style.value).toBe("friend");
   });
 });
+
+describe("Herder schedules (ADR 0055)", () => {
+  const schedule = {
+    id: "sched-1-0000",
+    about: "早上看新 issue",
+    prompt: "看看 PI-Desktop 有没有新 issue，没有就不用说",
+    when: { kind: "daily" as const, at: "09:00" },
+    paused: false,
+    createdAt: "2026-11-04T00:00:00.000Z",
+  };
+
+  it("a due schedule comes back as the owner's words and the reply is said", async () => {
+    const { herder, rec, faux } = setup({ schedules: [] });
+    const prompts: string[] = [];
+    faux.setResponses([
+      (context) => {
+        prompts.push(JSON.stringify(context.messages.at(-1)?.content));
+        return fauxAssistantMessage("今天有 2 个新 issue：#2201 和 #2203。");
+      },
+    ]);
+    herder.scheduled(schedule);
+    await herder.idle();
+    expect(prompts[0]).toContain('[Scheduled: \\"早上看新 issue\\"');
+    expect(prompts[0]).toContain("没有就不用说");
+    expect(rec.said).toEqual(["今天有 2 个新 issue：#2201 和 #2203。"]);
+  });
+
+  it("[quiet] says nothing, and a schedule cannot make another", async () => {
+    const schedules: never[] = [];
+    const { herder, rec, faux } = setup({ schedules });
+    faux.setResponses([
+      fauxAssistantMessage(
+        [fauxToolCall("schedule_add", { about: "x", prompt: "y", kind: "every", hours: 1 })],
+        { stopReason: "toolUse" },
+      ),
+      fauxAssistantMessage(QUIET),
+    ]);
+    herder.scheduled(schedule);
+    await herder.idle();
+    expect(rec.said).toEqual([]);
+    expect(schedules).toEqual([]);
+    expect(rec.audits.some((a) => a.type === "schedule.quiet")).toBe(true);
+  });
+});

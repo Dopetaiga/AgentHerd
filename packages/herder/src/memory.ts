@@ -76,7 +76,9 @@ export interface ToolOp {
  * model that misreads the rules still cannot keep a one-off request or a guess (ADR 0038).
  */
 export function opProblem(op: ToolOp, turn: TurnContext, old?: MemoryRow): string | undefined {
-  if (turn.kind === "event") return "memory is written only while answering the owner";
+  if (turn.kind === "event" || turn.kind === "scheduled") {
+    return "memory is written only while answering the owner";
+  }
   const kind = (old?.kind ?? op.kind) as MemoryKind | undefined;
   if (op.action === "add" && (kind === undefined || !HERDER_KINDS.includes(kind as HerderKind))) {
     return `kind must be one of ${HERDER_KINDS.join(", ")}`;

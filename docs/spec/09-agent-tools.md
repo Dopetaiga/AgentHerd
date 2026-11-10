@@ -2,6 +2,7 @@
 
 Applied ADRs: [0019](../adr/0019-relay-verbatim-board-and-reports.md),
 [0029](../adr/0029-only-mass-deletes-ask-the-owner.md),
+[0056](../adr/0056-leaving-the-mac-asks-and-questions-close.md),
 [0041](../adr/0041-agent-tools-through-a-local-mcp-gateway.md).
 
 AgentHerd gives every task one MCP server, `agentherd`. Through it the agent reports progress
@@ -122,13 +123,16 @@ and is decided by the strictest of them (owner > approved):
 | `toolCall.rawInput` | the arguments |
 | `toolCall.appHints` | the hints |
 
-The pipeline (04-herder §3) decides with these steps, after mass delete and `extraGuards`:
+The pipeline (04-herder §3) decides with these steps, after mass delete, `extraGuards` and the
+leaving-the-Mac check: a slug that sends, replies, forwards, posts, publishes, comments, invites,
+shares or merges, or creates a pull request or issue, asks the owner unless the task allowed that
+step (ADR 0056):
 
 | Tool | `assist` / `auto` | `observe` |
 | --- | --- | --- |
 | `readOnlyHint` | approved | approved |
 | `destructiveHint`, or no hints known | owner | owner |
-| any other (create, update, send) | approved, in the audit log and the report | owner |
+| any other (create, update) | approved, in the audit log and the report | owner |
 
 Owner rules apply as for commands: a rule with `toolKind: "app"` and a `command` glob on the slug
 (`GMAIL_SEND_*`) allows or denies. "Always do this" on an app card creates such a rule for that

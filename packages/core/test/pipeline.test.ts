@@ -1,7 +1,7 @@
 import type { AppHints, Item, Rule, ToolCallInfo } from "@agentherd/protocol";
 import { describe, expect, it } from "vitest";
 import { BODY_MAX_LINES, itemBody, itemView } from "../src/inbox.ts";
-import { APP_READ, APP_WRITE, AUTO_APPROVED, decide } from "../src/pipeline.ts";
+import { APP_READ, APP_WRITE, AUTO_APPROVED, decide, LEAVES_MAC } from "../src/pipeline.ts";
 
 const HOME = "/Users/me";
 
@@ -53,13 +53,52 @@ describe("decide", () => {
     expect(r.decision).toMatchObject({ action: "escalate", reason: "no rule matched" });
   });
 
-  it.each(["git push --force", "sudo ls", "cat ~/.ssh/id_rsa", "rm -rf node_modules"])(
-    "%s is approved: only mass deletes ask",
+  it.each(["git commit -am wip", "sudo ls", "cat ~/.ssh/id_rsa", "rm -rf node_modules"])(
+    "%s is approved: it stays on the Mac",
     (command) => {
       const r = decide(item({ command }), { mode: "assist", rules: [], home: HOME });
       expect(r.apply).toBe(true);
     },
   );
+
+  it.each(["assist", "auto", "observe"] as const)(
+    "git push asks in %s, even with an allow-all rule (ADR 0056)",
+    (mode) => {
+      const r = decide(item({ command: "cd app && git push origin main" }), {
+        mode,
+        rules: [allowAll],
+        home: HOME,
+      });
+      expect(r).toMatchObject({ apply: false, decision: { action: "escalate", risk: "high" } });
+      expect(r.decision.reason).toBe(`${LEAVES_MAC}push: pushes to a remote`);
+    },
+  );
+
+  it("a step the owner allowed for the task runs; another one still asks", () => {
+    const ctx = { mode: "assist" as const, rules: [], home: HOME, allowedSteps: ["push" as const] };
+    expect(decide(item({ command: "git push -u origin fix" }), ctx).apply).toBe(true);
+    const merge = decide(item({ command: "gh pr merge 12 --squash" }), ctx);
+    expect(merge).toMatchObject({
+      apply: false,
+      decision: { reason: `${LEAVES_MAC}merge: merges a pull request` },
+    });
+  });
+
+  it("an app tool that sends for the owner asks", () => {
+    const r = decide(
+      item({
+        kind: "app",
+        title: "Gmail: Send email",
+        command: "GMAIL_SEND_EMAIL",
+        appHints: { readOnly: false, create: true, update: false, destructive: false },
+      }),
+      { mode: "auto", rules: [], home: HOME },
+    );
+    expect(r).toMatchObject({
+      apply: false,
+      decision: { reason: `${LEAVES_MAC}send: speaks for the owner` },
+    });
+  });
 
   it("assist applies an allow rule", () => {
     const r = decide(item({ command: "pnpm test" }), {
@@ -139,7 +178,7 @@ describe("item card", () => {
     expect(view.kind).toBe("item");
     expect(view.body).not.toContain("sk-abcdefghijklmnopqrstuvwx");
     expect(view.body).toContain("/work/proj/a");
-    expect(view.options.map((o) => o.action)).toEqual(["allow", "deny"]);
+    expect(view.options.map((o) => o.action)).toEqual(["allow", "deny", "skip"]);
   });
 
   it("redacts given secret values", () => {
@@ -189,7 +228,7 @@ describe("app calls (docs/spec/09-agent-tools.md §3)", () => {
   });
 
   it("a write that deletes nothing runs in assist, asks in observe", () => {
-    const write = app({ ...none, create: true });
+    const write = app({ ...none, create: true }, "NOTION_CREATE_PAGE");
     expect(decide(write, { mode: "assist", rules: [], home: HOME })).toMatchObject({
       apply: true,
       decision: { action: "allow", reason: APP_WRITE },

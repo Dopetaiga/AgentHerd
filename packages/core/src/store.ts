@@ -6,6 +6,7 @@ import type { Decision, Item, MessageRef, Rule, View } from "@agentherd/protocol
 import { redact } from "@agentherd/rules";
 import type { HerderTurnRole } from "./herder-port.ts";
 import { ftsQuery, MEMORY_TABLES_SQL, MemoryStore } from "./memory-store.ts";
+import type { Schedule } from "./schedules.ts";
 import {
   type AuditRow,
   type DecisionRow,
@@ -27,8 +28,10 @@ import {
   MESSAGE_TASKS_TABLE_SQL,
   OUTBOX_TABLE_SQL,
   PR_WATCHES_TABLE_SQL,
+  SCHEDULES_TABLE_SQL,
   SCHEMA_SQL,
   STATE_TABLE_SQL,
+  TASK_ALLOWED_STEPS_SQL,
   TASK_WORKSPACE_SQL,
   TASKS_TABLE_SQL,
   TRANSCRIPT_TABLE_SQL,
@@ -147,6 +150,17 @@ export class Store {
       if (version < 12) {
         this.db.exec(INTAKE_WATCHES_TABLE_SQL);
         this.db.prepare("UPDATE schema_version SET version = ?").run(12);
+      }
+      if (version < 13) {
+        this.db.exec(SCHEDULES_TABLE_SQL);
+        this.db.prepare("UPDATE schema_version SET version = ?").run(13);
+      }
+      if (version < 14) {
+        const columns = this.db.prepare("PRAGMA table_info(tasks)").all();
+        if (!columns.some((c) => c.name === "allowed_steps_json")) {
+          this.db.exec(TASK_ALLOWED_STEPS_SQL);
+        }
+        this.db.prepare("UPDATE schema_version SET version = ?").run(14);
       }
     }
 
@@ -438,8 +452,8 @@ export class Store {
       .prepare(
         `INSERT OR REPLACE INTO tasks(id, title, project, cwd, profile_id, agent, model, stage, last_report,
           started_at, updated_at, ended_at, ended_why, failed, agent_session_id, automatic_decisions_json,
-          workspace_json)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          workspace_json, allowed_steps_json)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         t.task.id,
@@ -459,6 +473,7 @@ export class Store {
         t.agentSessionId ?? null,
         r(JSON.stringify(t.task.automaticDecisions)),
         t.workspace === undefined ? null : JSON.stringify(t.workspace),
+        t.task.allowedSteps === undefined ? null : JSON.stringify(t.task.allowedSteps),
       );
   }
 
@@ -557,6 +572,24 @@ export class Store {
 
   deleteIntakeWatch(id: string): void {
     this.db.prepare("DELETE FROM intake_watches WHERE id = ?").run(id);
+  }
+
+  saveSchedule(schedule: Schedule): void {
+    this.db
+      .prepare("INSERT OR REPLACE INTO schedules(id, data_json, created_at) VALUES (?, ?, ?)")
+      .run(schedule.id, JSON.stringify(schedule), schedule.createdAt);
+  }
+
+  /** What the Herder does at set times (ADR 0055), oldest first. */
+  schedules(): Schedule[] {
+    return this.db
+      .prepare("SELECT data_json FROM schedules ORDER BY created_at, id")
+      .all()
+      .map((r) => JSON.parse(String(r.data_json)) as Schedule);
+  }
+
+  deleteSchedule(id: string): void {
+    this.db.prepare("DELETE FROM schedules WHERE id = ?").run(id);
   }
 
   /** The channel took the message, or it was given up. */
@@ -750,6 +783,9 @@ function toStoredTask(r: Record<string, unknown>): StoredTask {
     automaticDecisions: JSON.parse(String(r.automatic_decisions_json)) as string[],
   };
   if (typeof r.model === "string") task.model = r.model;
+  if (typeof r.allowed_steps_json === "string") {
+    task.allowedSteps = JSON.parse(r.allowed_steps_json) as Task["allowedSteps"] & object;
+  }
   const t: StoredTask = {
     task,
     cwd: String(r.cwd),

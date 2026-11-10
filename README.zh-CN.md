@@ -1,91 +1,80 @@
+<div align="center">
+
+<img src="apps/desktop/resources/icon.svg" alt="AgentHerd" width="96">
+
 # AgentHerd
 
-> 管好你的一群 Coding Agent，只在真正需要你的时候打扰你。
+[English](README.md) · 简体中文
 
-[English](README.md) | 简体中文
+### 在飞书里指挥你的 Coding Agent。<br>跟主管说你要什么，它在你的 Mac 上启动 Agent、盯着进度，做完用自己的话告诉你。
 
-同时跑 Claude Code、Codex、OpenCode、Gemini CLI 这些 Coding Agent 时，它们会不断停下来：
-要你批准一条命令，问你一个问题，或者已经做完、卡住了。AgentHerd 在桌面端替你看着它们。
-有明确先例的常规请求由它处理；真正需要你拍板的事，才在聊天软件里找你，而且一次只找一件。
+[![macOS](https://img.shields.io/badge/macOS-only-111?logo=apple)](docs/adr/0013-macos-only-for-v1.md) [![Feishu / Lark](https://img.shields.io/badge/chat-Feishu%20%2F%20Lark-3370ff)](docs/spec/05-channels.md) [![ACP](https://img.shields.io/badge/protocol-ACP-6b5bd6)](https://agentclientprotocol.com) [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)<br>
+[![agent: Pi](https://img.shields.io/badge/agent-Pi-444)](https://github.com/earendil-works/pi) [![agent: Codex](https://img.shields.io/badge/agent-Codex-444)](https://github.com/openai/codex) [![agent: DeepSeek Harness](https://img.shields.io/badge/agent-DeepSeek%20Harness-444)](https://github.com/deepseek-ai/deepseek-harness)
 
-> **状态：** 设计阶段，还没有可运行的代码。请先看[基线规格](docs/spec/00-baseline.md)。
+[主要功能](#主要功能) · [怎么工作](#怎么工作) · [开始使用](#开始使用) · [文档](#文档)
 
-## 工作方式
+</div>
 
-- **用聊天软件当遥控器。** 在手机上通过卡片批准、拒绝或回答，也可以发一条消息派新任务。
-  第一个支持的是飞书（Lark），扫一次码就能接入。
-- **支持 ACP 的 Agent 都能接入。** AgentHerd 通过
-  [Agent Client Protocol](https://agentclientprotocol.com) 启动 Agent：Claude Code、Codex、
-  Gemini CLI、OpenCode、DeepSeek Harness 等。新加一个 Agent 只要写一行配置。
-- **一套规则，处处生效。** 你的规则还会编译成各个 Agent 自己的权限配置，
-  所以你在终端里自己开的会话也按这套规则走。
-- **给 Agent 们配一个秘书。** 主管（Herder）是一个用轻量模型的
-  [Pi](https://github.com/earendil-works/pi) Agent：接你的消息、派任务、把你转接到任意任务、
-  维护置顶的任务看板，每个 Agent 做完都告诉你它做了什么。你的原话原样交给 Agent。
-- **审批分层。** 防护清单 → 你的规则 → 用你最强模型的审核员（Reviewer）→ 你。
-  拿不准或者出错时就问你，绝不会猜“允许”。主管本身不能批准任何请求。
-- **信任逐步建立。** 默认是 `observe` 模式：只给建议，并统计建议和你实际的回答有多一致。
-  数据证明可靠后，再由你开启 `assist` 和 `auto`。
-- **只在本地运行。** 没有 AgentHerd 服务器，密钥保存在本机 `~/.agentherd/secrets.json`，只有你的账户能读。
+<br>
 
-## 试用（M1）
+> **状态：** 正在开发，还没有发布版本，请从源码运行。
 
-M1 运行一个脚本化的模拟 Agent，把它的审批请求发到你的飞书。需要 Node 22.18+ 和 pnpm。
+## 主要功能
+
+- **飞书就是遥控器。** 发一条消息就能派活；在手机上用卡片回答问题、批准、继续任务。扫一次码就接好。
+- **会说人话的主管。** 主管是一个用轻量模型的 Agent：接你的消息，启动并跟进任务，每个结果都用自己的话告诉你，
+  Agent 的原话点一下就能看。说话风格可以选：能干的朋友、有主见的搭档或干练的秘书。
+- **每个任务用对的 Agent 和模型。** Pi、Codex、DeepSeek Harness 通过
+  [Agent Client Protocol](https://agentclientprotocol.com) 运行，用你自己的模型服务。主管选模型，Agent 跟着模型走；
+  第一轮就出错时自动换下一个模型。
+- **任务能一直接着做。** 每个任务在项目的隐藏副本里干活，结束后保留，之后还能继续。App 里能看到每个任务的完整对话。
+- **只在必须的时候问你。** 本地的活直接放行；推送、开或合并 PR、发布、部署、替你给别人发消息、一次删除大量文件，才先问你（你在任务里说过要做的除外）。没人回的问题一小时后自动收起，不会一直催。看门狗会发现卡住的任务，
+  急事先到，小事不打扰。
+- **代码之外的事也帮你盯。** 跟进任务开出的 PR；GitHub 上的新 issue 和 review 以「开任务 / 忽略」的方式递给你；
+  你要求时帮你看邮件。
+- **一句话建定时任务。** 「工作日每天 9 点看看有没有新 issue」，主管就建好；Mac 睡着时错过的，醒来只补跑一次。
+- **记忆有用不啰嗦。** 整段对话都保留，旧的部分由主管自己折叠。只有任务出了问题才记一条经验，以前的结果去任务记录里查。
+- **只在本机运行。** 没有 AgentHerd 服务器，Key 存在 `~/.agentherd/secrets.json`，只有你的账户能读。合上盖子 Agent 也能接着跑。
+
+## 怎么工作
+
+<p align="center"><img src="docs/images/architecture.zh-CN.svg" alt="AgentHerd 怎么工作" width="900"></p>
+
+AgentHerd 是一个 Electron 应用，里面是一个无界面的核心。核心通过 ACP 启动每个 Agent，按规则检查每一次工具调用，
+任务、记忆和主管的对话都存在本地一个 SQLite 文件里（`~/.agentherd/herd.db`）。只有主管跟你说话；你的原话原样交给 Agent。
+
+## 开始使用
+
+需要 macOS、Node 22.18+、pnpm，以及一个飞书（或 Lark）账号。
 
 ```bash
 pnpm install
-node packages/cli/bin/agentherd.ts setup feishu   # 用飞书扫码
-node packages/cli/bin/agentherd.ts run --script packages/mock-agent/scripts/approve.yaml /tmp/demo "run the tests"
+pnpm --filter @agentherd/desktop start
 ```
 
-在卡片上点 **Allow**。`node packages/cli/bin/agentherd.ts status` 可以看到这次决定。
+第一次打开会一步步带你：扫码接入飞书，添加模型服务和 Key，给主管选模型和说话风格。在「Agent」页下载 Pi 或 Codex，
+点「验证」确认能启动。然后在飞书里给主管发条消息就行。
 
-装了 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 的话，可以跑真实 Agent。
-DSH 以只读沙箱模式运行，每次写文件都会先问你：
-
-```bash
-node packages/cli/bin/agentherd.ts run --profile dsh /tmp/demo "Create out.txt containing hello"
-```
-
-[Pi](https://github.com/earendil-works/pi) 也一样：在桌面 App 的「Agent」页点「下载」，App 会下载官方最新版并校验发布方给的哈希。
-不用选 Agent：GPT 模型用 Codex 跑，其余模型用 Pi，点名要 DSH 时才用 DSH。「Agent」页有「验证」按钮，启动一次看它能不能用。
-AgentHerd 通过一个小的 ACP 桥接运行 Pi，除了读目录内文件，每次调用工具都会先问你。Pi 用它自己的登录，
-或者用 `model use pi <服务>/<模型>` 选的模型：
+<details>
+<summary>不用 App，用命令行</summary>
 
 ```bash
-node packages/cli/bin/agentherd.ts run --profile pi /tmp/demo "Create out.txt containing hello"
-```
-
-想让主管回答普通消息，先加一个模型服务并给主管选模型（Key 从标准输入读取，存进 `~/.agentherd/secrets.json`）：
-
-```bash
-node packages/cli/bin/agentherd.ts model add deepseek --models deepseek-flash
+node packages/cli/bin/agentherd.ts setup feishu                          # 用飞书扫码
+node packages/cli/bin/agentherd.ts model add deepseek --models deepseek-flash   # Key 从标准输入读取
 node packages/cli/bin/agentherd.ts model use herder deepseek/deepseek-flash
 node packages/cli/bin/agentherd.ts start
 ```
 
-### 桌面应用（M2，开发中）
+直接跑一个任务：`run --profile pi /tmp/demo "Create out.txt containing hello"`；看最近的决定：`status`。
 
-应用里可以绑定飞书、添加模型服务和 Key、给主管选模型，并查看任务和待处理的请求。它会自己启动后台服务，
-或者连上用 `agentherd start` 启动的那个。
-
-```bash
-pnpm --filter @agentherd/desktop build
-pnpm --filter @agentherd/desktop start
-```
+</details>
 
 ## 文档
 
-- [规格](docs/spec/00-baseline.md)：AgentHerd 做什么
-- [ADR](docs/adr/README.md)：为什么这样设计
-- [计划](plans/README.md)：怎么一步步实现
-- [参考项目](docs/references.md)：我们参考了哪些项目
-- [AGENTS.md](AGENTS.md)：贡献者和 Coding Agent 要遵守的规则
+[基线](docs/spec/00-baseline.md) · [产品](docs/spec/01-product.md) · [架构](docs/spec/02-architecture.md) · [Agent](docs/spec/03-agents.md) · [主管](docs/spec/04-herder.md) · [渠道](docs/spec/05-channels.md) · [安全](docs/spec/06-security.md) · [ADR](docs/adr/README.md) · [计划](plans/README.md) · [参考项目](docs/references.md) · [AGENTS.md](AGENTS.md)
 
 ## 许可证
 
-[MIT](LICENSE)
+AgentHerd 使用 [MIT 许可证](LICENSE)。
 
-主管的上下文管理用的是 [billion-context](https://github.com/ranxianglei/billion-context) 的
-[acp-kernel](https://github.com/ranxianglei/acp-kernel)（MIT，另加一条署名条款），代码复制在
-[`packages/context-kernel`](packages/context-kernel/UPSTREAM.md)。
+<sub>主管的循环 fork 自 [Pi](https://github.com/earendil-works/pi) 的 agent loop（MIT，[`packages/herder-loop`](packages/herder-loop/UPSTREAM.md)）。上下文管理用的是 [billion-context](https://github.com/ranxianglei/billion-context) 的 [acp-kernel](https://github.com/ranxianglei/acp-kernel)（MIT，另加一条署名条款），代码复制在 [`packages/context-kernel`](packages/context-kernel/UPSTREAM.md)。详见[参考项目](docs/references.md)。</sub>

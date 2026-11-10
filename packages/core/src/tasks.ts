@@ -3,6 +3,7 @@
 
 import { basename } from "node:path";
 import type { ReportState, SessionState, Stage } from "@agentherd/protocol";
+import type { OutboundStep } from "@agentherd/rules";
 
 /** Longest task title shown on the board and in labels. */
 export const TITLE_MAX_CHARS = 60;
@@ -22,6 +23,8 @@ export interface Task {
   updatedAt: string;
   /** Lines like "Allowed by rule r1: npm test", for the completion report. */
   automaticDecisions: string[];
+  /** Steps leaving the Mac the owner allowed for this task, e.g. ["push", "pull-request"] (ADR 0056). */
+  allowedSteps?: OutboundStep[];
 }
 
 /**

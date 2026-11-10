@@ -87,3 +87,65 @@ describe("FOLD_CHARS", () => {
     expect(FOLD_CHARS).toBe(400);
   });
 });
+
+describe("item card with several approvals (ADR 0056)", () => {
+  const many: ItemView = {
+    kind: "item",
+    itemId: "card-a",
+    title: "2 requests waiting for you",
+    body: 'Tap each one, or reply "allow all" or "allow 1, 3".',
+    risk: "high",
+    options: [
+      { action: "allow-all", label: "Allow all" },
+      { action: "skip-all", label: "None now" },
+    ],
+    lines: [
+      {
+        itemId: "a",
+        n: 1,
+        taskLabel: "Fix the build",
+        title: "Run git push",
+        body: "git push",
+        risk: "high",
+        reason: "leaves your Mac",
+        options: [
+          { action: "allow", label: "Allow" },
+          { action: "deny", label: "Deny" },
+        ],
+      },
+      {
+        itemId: "b",
+        n: 2,
+        title: "Run npm publish",
+        body: "npm publish",
+        risk: "high",
+        options: [],
+        final: "Allowed by you",
+      },
+    ],
+  };
+
+  it("numbers each line, gives open lines their own buttons and the card buttons for all", () => {
+    const json = JSON.stringify(renderCard(many));
+    expect(json).toContain("**1. Run git push**");
+    expect(json).toContain("**2. Run npm publish**");
+    expect(json).toContain('"value":{"target":"a","action":"allow"}');
+    expect(json).not.toContain('"target":"b"');
+    expect(json).toContain('"value":{"target":"card-a","action":"allow-all"}');
+    expect(json).toContain("**Allowed by you**");
+    expect(json).toContain("2 requests waiting for you");
+  });
+
+  it("a closed card has no buttons", () => {
+    const json = JSON.stringify(
+      renderCard({
+        ...many,
+        options: [],
+        final: "All handled",
+        lines: (many.lines ?? []).map((l) => ({ ...l, options: [], final: "Allowed by you" })),
+      }),
+    );
+    expect(json).not.toContain('"tag":"button"');
+    expect(json).toContain("**All handled**");
+  });
+});

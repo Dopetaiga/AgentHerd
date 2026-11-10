@@ -6,6 +6,7 @@
 import { join } from "node:path";
 import type { AgentProfile, HerderStyle, Inbound, Mode, Rule } from "@agentherd/protocol";
 import { DEFAULT_HERDER_STYLE, DEFAULT_LOCALE } from "@agentherd/protocol";
+import type { OutboundStep } from "@agentherd/rules";
 import { approveAppCalls } from "./app-calls.ts";
 import { Board } from "./board.ts";
 import { type Clock, systemClock } from "./clock.ts";
@@ -36,6 +37,7 @@ import { Outbox } from "./outbox.ts";
 import { OwnerCommands } from "./owner-commands.ts";
 import { Registry } from "./registry.ts";
 import { Relay, type RelayState } from "./relay.ts";
+import { type ScheduleInput, type SchedulePatch, Schedules } from "./schedules.ts";
 import { SourceHealth, type SourceState } from "./source-health.ts";
 import { Store, type TranscriptEntry } from "./store.ts";
 import { applyReport, onAlarm, restage } from "./task-report.ts";
@@ -70,6 +72,8 @@ export class Herd {
   private herder: HerderPort | undefined;
   private readonly github: GitHubWatch | undefined;
   private readonly intake: Intake | undefined;
+  /** What the Herder does at set times (ADR 0055); the app lists, pauses and removes them. */
+  readonly schedules: Schedules;
   /** Mail the owner asked to hear about; only with connected apps (ADR 0048). */
   private readonly mail: MailWatches | undefined;
   /** Tasks cut off by the last stop or crash, asked about once the channel is up. */
@@ -92,6 +96,7 @@ export class Herd {
       store: this.store,
       clock: this.clock,
       ...(opts.remindMinutes === undefined ? {} : { remindMinutes: opts.remindMinutes }),
+      ...(opts.timeoutMinutes === undefined ? {} : { timeoutMinutes: opts.timeoutMinutes }),
       ...(opts.secrets === undefined ? {} : { secrets: opts.secrets }),
       texts: this.texts,
     });
@@ -175,6 +180,7 @@ export class Herd {
               : { pollMinutes: opts.intakePollMinutes }),
             start: (item, auto) => this.startIntake(item, auto),
           });
+    this.schedules = new Schedules(this.ctx);
     this.herder = opts.herder?.(this.herderHost());
     this.github =
       opts.github === undefined
@@ -249,10 +255,22 @@ export class Herd {
             },
             unwatchIntake: (id: string) => this.intake?.remove(id) ?? false,
           }),
+      schedules: () => this.schedules.list(),
+      addSchedule: (input: ScheduleInput) => this.schedules.add(input),
+      changeSchedule: (id: string, patch: SchedulePatch) => this.schedules.change(id, patch),
+      removeSchedule: (id: string) => this.schedules.remove(id),
       sources: () => this.ctx.sources.list(),
       checkModel: async (ref) => this.opts.agentModels?.check?.(ref) ?? { ok: true },
-      startTask: async (profileId, cwd, title, prompt, model, images) => {
-        const { taskId, turn } = await this.startTask(profileId, cwd, title, prompt, model, images);
+      startTask: async (profileId, cwd, title, prompt, model, images, allowed) => {
+        const { taskId, turn } = await this.startTask(
+          profileId,
+          cwd,
+          title,
+          prompt,
+          model,
+          images,
+          allowed,
+        );
         turn.catch(() => {});
         return taskId;
       },
@@ -339,6 +357,7 @@ export class Herd {
     this.github?.start();
     this.mail?.start();
     this.intake?.start();
+    this.schedules.start();
     await this.endOldRelay(relay?.taskId);
     await this.askToResume();
     if (this.opts.closeStaleTasks !== false) {
@@ -419,8 +438,9 @@ export class Herd {
     prompt: string = ownerText,
     model?: string,
     images?: OwnerImage[],
+    allowed?: readonly OutboundStep[],
   ): Promise<{ taskId: string; turn: Promise<RunResult> }> {
-    return this.runner.startTask(profileId, cwd, ownerText, prompt, model, images);
+    return this.runner.startTask(profileId, cwd, ownerText, prompt, model, images, allowed);
   }
 
   /** Sends a prompt to an open task. Queued while a turn runs; settles when its turn ends. */
@@ -489,6 +509,7 @@ export class Herd {
     this.github?.stop();
     this.mail?.stop();
     this.intake?.stop();
+    this.schedules.stop();
     if (this.started) await this.opts.channel.stop();
     this.store.audit("herd.stopped", {});
     if (this.opts.store === undefined) this.store.close();

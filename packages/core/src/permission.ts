@@ -32,6 +32,7 @@ export async function onPermission(
     rules: store.listRules(),
     home: opts.userHome,
     ...(opts.extraGuards === undefined ? {} : { extraGuards: opts.extraGuards }),
+    allowedSteps: ctx.following.get(sessionId)?.task.allowedSteps ?? [],
   });
   item.risk = result.decision.risk;
   store.insertItem(item);

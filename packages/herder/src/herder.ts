@@ -6,6 +6,7 @@ import type {
   HerderHost,
   HerderPort,
   OwnerImage,
+  Schedule,
   VoiceRequest,
 } from "@agentherd/core";
 import { REVIEW_JOB } from "@agentherd/core";
@@ -32,6 +33,7 @@ import {
   ownerAnswerPrompt,
   ownerMessagePrompt,
   QUIET,
+  scheduledPrompt,
   systemPrompt,
   voicePrompt,
 } from "./prompt.ts";
@@ -76,6 +78,7 @@ type Job = (
   | { kind: "owner"; text: string; images: OwnerImage[] }
   | { kind: "answer"; question: string; answer: string }
   | { kind: "intake"; text: string; auto: boolean }
+  | { kind: "scheduled"; schedule: Schedule }
   | { kind: "voice"; request: VoiceRequest; done: (words: string | undefined) => void }
 ) & { recorded?: boolean };
 
@@ -190,6 +193,11 @@ export class Herder implements HerderPort {
     this.enqueue({ kind: "intake", text, auto });
   }
 
+  /** A schedule the owner made is due (ADR 0055). */
+  scheduled(schedule: Schedule): void {
+    this.enqueue({ kind: "scheduled", schedule });
+  }
+
   /**
    * Tells the owner a task's result in the Herder's words (ADR 0053), after the turns queued
    * before it. "" when it chose to say nothing; undefined when it could not speak.
@@ -295,6 +303,20 @@ export class Herder implements HerderPort {
         pickedDirs: [],
       };
       prompt = voicePrompt(job.request);
+    } else if (job.kind === "scheduled") {
+      // The saved words are the owner's, from the message that made the schedule.
+      const { about, prompt: words, createdAt } = job.schedule;
+      this.turn = {
+        kind: "scheduled",
+        ownerText: words,
+        typedText: words,
+        images: [],
+        asked: false,
+        notified: false,
+        pickedDirs: pathsIn(words, this.host.userHome),
+      };
+      if (!job.recorded) this.host.recordTurn("event", `${about}: ${words}`);
+      prompt = scheduledPrompt(about, words, createdAt);
     } else if (job.kind === "intake") {
       // The item's title is someone else's words: it can name the project (repository name)
       // but is quoted to the model as untrusted (ADR 0052).
@@ -357,12 +379,17 @@ export class Herder implements HerderPort {
       job.done(undefined);
       return;
     }
-    if (job.kind === "owner" && raw !== "" && text === "") {
+    if ((job.kind === "owner" || job.kind === "scheduled") && raw !== "" && text === "") {
       this.save();
       await this.host.alert(
         this.host.texts.herderFailed("the model wrote broken tool calls"),
         false,
       );
+      return;
+    }
+    if (job.kind === "scheduled" && text.includes(QUIET)) {
+      this.host.audit("schedule.quiet", { id: job.schedule.id });
+      this.save();
       return;
     }
     if (job.kind === "voice" && text.includes(QUIET)) {

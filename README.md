@@ -1,99 +1,94 @@
+<div align="center">
+
+<img src="apps/desktop/resources/icon.svg" alt="AgentHerd" width="96">
+
 # AgentHerd
 
-> Herd your coding agents. Only get pinged when it matters.
+English · [简体中文](README.zh-CN.md)
 
-English | [简体中文](README.zh-CN.md)
+### Your coding agents, run from Feishu.<br>Tell the Herder what you want. It starts the agents on your Mac, follows them, and tells you what they did.
 
-You run several coding agents at once — Claude Code, Codex, OpenCode, Gemini CLI. They keep
-stopping to ask for permission, to ask a question, or because they are done or stuck.
-AgentHerd watches them from your desktop. It handles the routine prompts that have a clear
-precedent, and it pings you in your chat app, one item at a time, only when a decision
-really needs you.
+[![macOS](https://img.shields.io/badge/macOS-only-111?logo=apple)](docs/adr/0013-macos-only-for-v1.md) [![Feishu / Lark](https://img.shields.io/badge/chat-Feishu%20%2F%20Lark-3370ff)](docs/spec/05-channels.md) [![ACP](https://img.shields.io/badge/protocol-ACP-6b5bd6)](https://agentclientprotocol.com) [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)<br>
+[![agent: Pi](https://img.shields.io/badge/agent-Pi-444)](https://github.com/earendil-works/pi) [![agent: Codex](https://img.shields.io/badge/agent-Codex-444)](https://github.com/openai/codex) [![agent: DeepSeek Harness](https://img.shields.io/badge/agent-DeepSeek%20Harness-444)](https://github.com/deepseek-ai/deepseek-harness)
 
-> **Status:** design phase. There is no runnable code yet. Read the
-> [baseline spec](docs/spec/00-baseline.md).
+[Features](#features) · [How it works](#how-it-works) · [Get started](#get-started) · [Docs](#docs)
+
+</div>
+
+<br>
+
+> **Status:** in active development. There is no release yet; run it from source.
+
+## Features
+
+- **Feishu is the remote control.** Send a message to start work. Answer questions, approve and
+  continue from cards on your phone. One QR scan connects it.
+- **A Herder that talks like a person.** The Herder is a light-model agent that takes your
+  messages, starts and follows tasks, and tells you each result in its own words, with the
+  agent's own reply one tap away. Pick how it talks: a capable friend, an opinionated partner,
+  or a crisp secretary.
+- **The right agent and model for each task.** Pi, Codex and DeepSeek Harness run through the
+  [Agent Client Protocol](https://agentclientprotocol.com), on your own model services. The
+  Herder picks the model, the agent follows from it, and a broken first turn switches to the
+  next model.
+- **Tasks that keep going.** Each task works on a hidden copy of your project, is kept after it
+  ends, and can be continued later. The app shows every task's conversation.
+- **It only asks when it must.** Local work goes through. A push, a pull request, a merge, a
+  publish, a deploy, a message to someone, or a mass delete asks you first, unless your request
+  said to do it. Unanswered questions close after an hour instead of nagging.
+  A watchdog notices a stuck task, and urgent news reaches you before small news.
+- **Watches the work around your code.** It follows the pull requests its tasks open, offers new
+  GitHub issues and reviews as "start a task / ignore", and watches mail when you ask it to.
+- **Schedules in plain words.** "Every weekday at 9, check for new issues" — the Herder makes the
+  schedule, and missed runs happen once when your Mac wakes.
+- **Memory that stays useful.** The whole conversation is kept, and the Herder folds old parts
+  itself. It learns a lesson only when a task went wrong, and finds past results in task records.
+- **Local only.** No AgentHerd server. Keys stay in `~/.agentherd/secrets.json`, readable only by
+  you. Agents can keep running with the lid closed.
 
 ## How it works
 
-- **Chat app as the remote control.** Approve, deny or answer from a card on your phone.
-  Start new tasks with a message. Feishu (Lark) is the first channel; one QR scan sets it up.
-- **Any agent that speaks ACP.** AgentHerd starts agents through the
-  [Agent Client Protocol](https://agentclientprotocol.com): Claude Code, Codex, Gemini CLI,
-  OpenCode, DeepSeek Harness and more. Adding one is a line of config.
-- **One rule set, everywhere.** Your rules also compile into each agent's own permission
-  config, so sessions you start in a terminal follow them too.
-- **A secretary for your agents.** The Herder, a light-model
-  [Pi](https://github.com/earendil-works/pi) agent, takes your messages, starts tasks, puts you
-  through to any task, keeps a pinned task board and tells you what each agent did when it
-  finishes. Your words reach the agent unchanged.
-- **Approvals in tiers.** Guard list → your rules → a Reviewer on your strongest model → you.
-  When unsure or broken, it asks you. It never guesses "allow". The Herder cannot approve.
-- **Trust in steps.** It starts in `observe` mode: it only suggests and measures how often it
-  agrees with you. You turn on `assist` and `auto` when the numbers say so.
-- **Local only.** No AgentHerd server. Secrets stay on your machine in `~/.agentherd/secrets.json`, readable only by you.
+<p align="center"><img src="docs/images/architecture.svg" alt="How AgentHerd works" width="900"></p>
 
-## Try it (M1)
+AgentHerd is an Electron app with a headless core. The core starts each agent over ACP, checks
+every tool call against its rules, and keeps tasks, memory and the Herder's conversation in one
+local SQLite file (`~/.agentherd/herd.db`). The Herder is the only one that talks to you; your
+own words reach the agent unchanged.
 
-M1 runs a scripted mock agent and sends its approval request to you in Feishu. Needs Node 22.18+
-and pnpm.
+## Get started
+
+Needs macOS, Node 22.18+, pnpm and a Feishu (or Lark) account.
 
 ```bash
 pnpm install
-node packages/cli/bin/agentherd.ts setup feishu   # scan the QR code with Feishu
-node packages/cli/bin/agentherd.ts run --script packages/mock-agent/scripts/approve.yaml /tmp/demo "run the tests"
+pnpm --filter @agentherd/desktop start
 ```
 
-Tap **Allow** on the card. `node packages/cli/bin/agentherd.ts status` shows the decision.
+The first run walks you through it: scan a QR code to connect Feishu, add a model service and
+its key, pick the Herder's model and how it talks. On the **Agent** page, download Pi or Codex
+and press 验证 to check that it starts. Then send the Herder a message in Feishu.
 
-With [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) installed, run a real
-agent. DSH runs in read-only sandbox mode, so each write asks you first:
-
-```bash
-node packages/cli/bin/agentherd.ts run --profile dsh /tmp/demo "Create out.txt containing hello"
-```
-
-[Pi](https://github.com/earendil-works/pi) works the same way. In the desktop app, open
-**Agent** and press 下载: the app downloads the latest release and checks the publisher's hash.
-You do not choose an agent: GPT models run in Codex, the rest in Pi, and DSH when you name it.
-The Agent page shows them, with a 验证 button that starts an agent once to show whether it works. AgentHerd runs it behind a small ACP bridge that asks you
-before every tool call except reads inside the folder. Pi uses its own login, or the model you
-choose with `model use pi <service>/<model>`:
+<details>
+<summary>Command line, without the app</summary>
 
 ```bash
-node packages/cli/bin/agentherd.ts run --profile pi /tmp/demo "Create out.txt containing hello"
-```
-
-To let the Herder answer plain messages, add a model service and choose the Herder's model
-(the key is read from stdin and kept in `~/.agentherd/secrets.json`):
-
-```bash
-node packages/cli/bin/agentherd.ts model add deepseek --models deepseek-flash
+node packages/cli/bin/agentherd.ts setup feishu                          # scan the QR code with Feishu
+node packages/cli/bin/agentherd.ts model add deepseek --models deepseek-flash   # the key is read from stdin
 node packages/cli/bin/agentherd.ts model use herder deepseek/deepseek-flash
 node packages/cli/bin/agentherd.ts start
 ```
 
-### Desktop app (M2, in development)
+Run one task directly with `run --profile pi /tmp/demo "Create out.txt containing hello"`, and see
+recent decisions with `status`.
 
-The app binds Feishu, adds model services and keys, chooses the Herder's model, and shows tasks
-and open items. It starts the host itself, or connects to one started with `agentherd start`.
-
-```bash
-pnpm --filter @agentherd/desktop build
-pnpm --filter @agentherd/desktop start
-```
+</details>
 
 ## Docs
 
-- [Specs](docs/spec/00-baseline.md): what AgentHerd does
-- [ADRs](docs/adr/README.md): why it is built this way
-- [Plans](plans/README.md): how it is being built
-- [References](docs/references.md): projects we learned from
-- [AGENTS.md](AGENTS.md): rules for contributors and coding agents
+[Baseline](docs/spec/00-baseline.md) · [Product](docs/spec/01-product.md) · [Architecture](docs/spec/02-architecture.md) · [Agents](docs/spec/03-agents.md) · [Herder](docs/spec/04-herder.md) · [Channels](docs/spec/05-channels.md) · [Security](docs/spec/06-security.md) · [ADRs](docs/adr/README.md) · [Plans](plans/README.md) · [References](docs/references.md) · [AGENTS.md](AGENTS.md)
 
 ## License
 
-[MIT](LICENSE)
+AgentHerd is under the [MIT License](LICENSE).
 
-The Herder's context management uses [acp-kernel](https://github.com/ranxianglei/acp-kernel) from
-[billion-context](https://github.com/ranxianglei/billion-context) (MIT plus an attribution term),
-copied into [`packages/context-kernel`](packages/context-kernel/UPSTREAM.md).
+<sub>The Herder's loop is a fork of [Pi](https://github.com/earendil-works/pi)'s agent loop (MIT, [`packages/herder-loop`](packages/herder-loop/UPSTREAM.md)). Its context management uses [acp-kernel](https://github.com/ranxianglei/acp-kernel) from [billion-context](https://github.com/ranxianglei/billion-context) (MIT plus an attribution term), copied into [`packages/context-kernel`](packages/context-kernel/UPSTREAM.md). See [References](docs/references.md).</sub>

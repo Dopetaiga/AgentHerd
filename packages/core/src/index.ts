@@ -128,6 +128,17 @@ export {
   reportView,
   summaryPrompt,
 } from "./report.ts";
+export type { Schedule, ScheduleInput, SchedulePatch, ScheduleWhen } from "./schedules.ts";
+export {
+  checkWhen,
+  describeWhen,
+  EVERY_HOURS_MAX,
+  EVERY_HOURS_MIN,
+  nextRun,
+  SCHEDULE_TICK_MS,
+  SCHEDULES_MAX,
+  Schedules,
+} from "./schedules.ts";
 export type { SourceId, SourceState } from "./source-health.ts";
 export { SOURCE_DOWN_MINUTES, SourceHealth, sourceHint } from "./source-health.ts";
 export type {
