@@ -10,6 +10,7 @@ import type { AgentProfile, ItemView } from "@agentherd/protocol";
 import { afterEach, describe, expect, it } from "vitest";
 import { FakeClock } from "../../src/clock.ts";
 import { Herd } from "../../src/herd.ts";
+import type { HerderEvent } from "../../src/herder-port.ts";
 import { Store } from "../../src/store.ts";
 
 const BIN = fileURLToPath(new URL("../../../mock-agent/bin/mock-agent.ts", import.meta.url));
@@ -33,7 +34,10 @@ function profile(script: string): AgentProfile {
   };
 }
 
-async function setup(script: string, opts: { remindMinutes?: number; clock?: FakeClock } = {}) {
+async function setup(
+  script: string,
+  opts: { remindMinutes?: number; clock?: FakeClock; events?: HerderEvent[] } = {},
+) {
   const channel = new FakeChannel("owner");
   const store = Store.open(":memory:");
   const herd = new Herd({
@@ -47,6 +51,16 @@ async function setup(script: string, opts: { remindMinutes?: number; clock?: Fak
     store,
     ...(opts.clock === undefined ? {} : { clock: opts.clock }),
     ...(opts.remindMinutes === undefined ? {} : { remindMinutes: opts.remindMinutes }),
+    ...(opts.events === undefined
+      ? {}
+      : {
+          herder: () => ({
+            ownerMessage: () => {},
+            ownerAnswer: () => {},
+            event: (e: HerderEvent) => opts.events?.push(e),
+            stop: async () => {},
+          }),
+        }),
   });
   herds.push(herd);
   await herd.start();
@@ -66,6 +80,20 @@ turns:
     - message: "done"
     - end_turn: end_turn
 `;
+
+describe("E2E-APPROVAL-TOLD (ADR 0057)", () => {
+  it("the Herder hears how each card was answered", async () => {
+    const events: HerderEvent[] = [];
+    const { channel, herd } = await setup(ONE_PERMISSION("deny"), { events });
+    const run = herd.run("mock", dir, "go");
+    const card = await channel.waitFor(isOpenItem);
+    await channel.tap((card.view as ItemView).itemId, "skip");
+    await run;
+    expect(events.filter((e) => e.kind === "approval")).toMatchObject([
+      { kind: "approval", outcome: "skipped", title: "go", text: "Run rm -rf ./*" },
+    ]);
+  });
+});
 
 describe("E2E-APPROVE", () => {
   it("the owner's Allow reaches the agent and the card shows the result", async () => {

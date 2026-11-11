@@ -42,6 +42,7 @@ Each milestone is split into plans under [`plans/`](../../plans/README.md).
 | E2E-BATCH | Approvals of two tasks share one card; 「allow 2」 in the chat and 「全部批准」 answer them | M2 | `packages/core/test/e2e/approval.e2e.test.ts` |
 | E2E-LEAVES-MAC | git push and sending mail ask the owner; a step the owner allowed for the task runs without a card | M2 | `packages/core/test/e2e/approval.e2e.test.ts`, `packages/core/test/e2e/mcp.e2e.test.ts` |
 | E2E-ASK-LIFECYCLE | A Herder question closes when the owner writes instead (the Herder hears why) or after an hour; a pick cancels the timeout | M2 | `packages/core/test/e2e/ask-lifecycle.e2e.test.ts` |
+| E2E-APPROVAL-TOLD | The Herder hears how an approval card was answered (allowed, refused, 「先不管」, timed out) ([ADR 0057](../adr/0057-decisions-the-owner-made.md)) | M2 | `packages/core/test/e2e/approval.e2e.test.ts` |
 | E2E-CHANNEL-DOWN | Channel disconnected; a new item waits in the inbox and is sent after reconnect | M2 | |
 | E2E-CONFIGURED-MODEL | New and continued tasks select a configured model when none was specified; an empty list or unlisted choice cannot start an agent; automatic switches stay in the list | M2 | `packages/core/test/e2e/model.e2e.test.ts`, `packages/herder/test/tools.test.ts` |
 | E2E-OWNER-ONLY | A non-owner taps a button; nothing changes; event is logged | M1 | `packages/core/test/e2e/approval.e2e.test.ts` |

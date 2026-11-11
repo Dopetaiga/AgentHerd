@@ -257,9 +257,12 @@ function mem(
 export function sampleMemory(): MemoryView {
   return {
     ready: true,
-    used: { owner: 31, note: 18 },
-    caps: { owner: 1375, note: 2200 },
+    used: { owner: 31, decision: 22, note: 18 },
+    caps: { owner: 1375, decision: 2200, note: 2200 },
     entries: [
+      mem("m0", "decision", "AgentHerd 仓库的改动可以直接推 main，不用开 PR", {
+        evidence: "AgentHerd 以后直接推 main 就行，不用开 PR",
+      }),
       mem("m1", "owner", "回复用中文，先说结论，别太长", {
         evidence: "以后都用中文回复，先说结论",
         accessCount: 12,

@@ -25,14 +25,19 @@ export interface OwnerImage {
 export type HerderTurnRole = "owner" | "answer" | "herder" | "ask" | "event";
 
 export interface HerderEvent {
-  /** `ask-closed`: one of the Herder's own questions closed without a pick (ADR 0056). */
-  kind: "task-reported" | "watchdog" | "github" | "mail" | "intake" | "ask-closed";
+  /**
+   * `ask-closed`: one of the Herder's own questions closed without a pick (ADR 0056). `approval`:
+   * how the owner answered an approval card, so the Herder can offer to keep it (ADR 0057).
+   */
+  kind: "task-reported" | "watchdog" | "github" | "mail" | "intake" | "ask-closed" | "approval";
   /** The task it is about; mail is about no task. */
   taskId?: string;
   /** The task's title, or for mail what the owner asked to hear about. */
   title: string;
   /** Text that came from an agent. Untrusted. */
   text: string;
+  /** `approval` only: how the card was answered. */
+  outcome?: "allowed" | "refused" | "skipped" | "timed out";
 }
 
 /**

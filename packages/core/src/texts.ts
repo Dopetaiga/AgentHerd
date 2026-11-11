@@ -2,6 +2,7 @@
 // Commands stay in English in every locale. Agent words are never translated (verbatim rule).
 
 import type { Locale, ReportResult } from "@agentherd/protocol";
+import type { MemoryKind } from "./memory-store.ts";
 
 /** Steps that leave the Mac (ADR 0056), as the owner reads them. */ const STEPS_ZH = {
   push: "推送到远端",
@@ -180,7 +181,7 @@ export interface CoreTexts {
   /** Asks for the report body in at most `words` words (ADR 0049). */
   summaryPrompt(words: number): string;
   // Memory commands (/记忆 /忘掉 /恢复), ADR 0038.
-  memoryKinds: Record<"owner" | "person" | "project" | "note" | "case" | "experience", string>;
+  memoryKinds: Record<MemoryKind, string>;
   memoryEmpty: string;
   memoryHeader(shown: number, total: number): string;
   memoryFooter: string;
@@ -358,6 +359,7 @@ const zh: CoreTexts = {
     ].join("\n"),
   memoryKinds: {
     owner: "关于你",
+    decision: "定了的事",
     person: "人",
     project: "项目",
     note: "主管笔记",
@@ -538,6 +540,7 @@ const en: CoreTexts = {
     ].join("\n"),
   memoryKinds: {
     owner: "About you",
+    decision: "Decisions",
     person: "People",
     project: "Projects",
     note: "Herder notes",
