@@ -15,7 +15,7 @@ import type { AgentTool, AgentToolResult } from "@agentherd/herder-loop";
 import { OUTBOUND_STEPS, type OutboundStep } from "@agentherd/rules";
 import { arr, bool, int, num, obj, oneOf, opt, str } from "@earendil-works/pi-schema";
 import { agentForModel } from "./agent-models.ts";
-import { lessonsText, ownerPrefsText, pastLessons } from "./memory.ts";
+import { decisionsText, lessonsText, ownerPrefsText, pastLessons } from "./memory.ts";
 import { placeModels, TIERS, type TierPlacement, tiersText } from "./model-guide.ts";
 import { findProjects, foundText, nameKey } from "./project-find.ts";
 import { composeTaskPrompt, HERDER_LABEL } from "./prompt.ts";
@@ -679,6 +679,7 @@ export function herderTools(
         const added = [
           args.addedContext?.trim() ?? "",
           ownerPrefsText(host.memory),
+          decisionsText(host.memory),
           lessonsText(lessons),
         ]
           .filter((s) => s !== "")

@@ -4,7 +4,7 @@
 // task-report.ts (reports, alarms, stages) and permission.ts.
 
 import { join } from "node:path";
-import type { AgentProfile, HerderStyle, Inbound, Mode, Rule } from "@agentherd/protocol";
+import type { AgentProfile, HerderStyle, Inbound, Item, Mode, Rule } from "@agentherd/protocol";
 import { DEFAULT_HERDER_STYLE, DEFAULT_LOCALE } from "@agentherd/protocol";
 import type { OutboundStep } from "@agentherd/rules";
 import { approveAppCalls } from "./app-calls.ts";
@@ -29,7 +29,7 @@ import {
   type HerderPort,
   type OwnerImage,
 } from "./herder-port.ts";
-import { Inbox } from "./inbox.ts";
+import { Inbox, type OwnerAnswer } from "./inbox.ts";
 import { Intake, type IntakeItem, type IntakeRequest, itemLine } from "./intake.ts";
 import { MailWatches } from "./mail-watch.ts";
 import { type JsonRpcMessage, McpGateway } from "./mcp-gateway.ts";
@@ -99,6 +99,7 @@ export class Herd {
       ...(opts.timeoutMinutes === undefined ? {} : { timeoutMinutes: opts.timeoutMinutes }),
       ...(opts.secrets === undefined ? {} : { secrets: opts.secrets }),
       texts: this.texts,
+      onAnswered: (item, answer, how) => this.toldApproval(item, answer, how),
     });
     this.board = new Board({
       channel: opts.channel,
@@ -484,6 +485,25 @@ export class Herd {
   /** Puts the task's version of the files both it and the owner changed into the project. */
   takeTaskVersion(taskId: string): Promise<void> {
     return this.runner.takeTaskVersion(taskId);
+  }
+
+  /** Tells the Herder how an approval card was answered, so it can offer to keep it (ADR 0057). */
+  private toldApproval(item: Item, answer: OwnerAnswer, how: "owner" | "skip" | "timeout"): void {
+    const task = this.ctx.following.get(item.sessionId)?.task;
+    this.herder?.event({
+      kind: "approval",
+      ...(task === undefined ? {} : { taskId: task.id }),
+      title: task?.title ?? item.title,
+      text: item.title,
+      outcome:
+        how === "timeout"
+          ? "timed out"
+          : how === "skip"
+            ? "skipped"
+            : answer === "allow"
+              ? "allowed"
+              : "refused",
+    });
   }
 
   async stop(): Promise<void> {

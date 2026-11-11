@@ -7,14 +7,27 @@ import { randomUUID } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
 import { redact } from "@agentherd/rules";
 
-export const MEMORY_KINDS = ["owner", "person", "project", "note", "case", "experience"] as const;
+export const MEMORY_KINDS = [
+  "owner",
+  "decision",
+  "person",
+  "project",
+  "note",
+  "case",
+  "experience",
+] as const;
 export type MemoryKind = (typeof MEMORY_KINDS)[number];
 
 /** Kinds kept in the Herder's system prompt; the others are found by search. */
-export const RESIDENT_KINDS: readonly MemoryKind[] = ["owner", "note"];
+export const RESIDENT_KINDS: readonly MemoryKind[] = ["owner", "decision", "note"];
+export type ResidentKind = "owner" | "decision" | "note";
 
 /** Characters of `abstract` all active entries of a resident kind may hold together. */
-export const RESIDENT_CAPS: Record<"owner" | "note", number> = { owner: 1375, note: 2200 };
+export const RESIDENT_CAPS: Record<ResidentKind, number> = {
+  owner: 1375,
+  decision: 2200,
+  note: 2200,
+};
 
 export const ABSTRACT_MAX_CHARS = 200;
 export const BODY_MAX_CHARS = 4000;
@@ -136,12 +149,12 @@ export interface MemoryLogRow {
 
 /** A write that would make a resident kind larger than its cap. Carries what is there now. */
 export class MemoryFullError extends Error {
-  readonly kind: "owner" | "note";
+  readonly kind: ResidentKind;
   readonly used: number;
   readonly cap: number;
   readonly entries: MemoryRow[];
 
-  constructor(kind: "owner" | "note", used: number, cap: number, entries: MemoryRow[]) {
+  constructor(kind: ResidentKind, used: number, cap: number, entries: MemoryRow[]) {
     super(`memory "${kind}" would hold ${used} of ${cap} characters`);
     this.kind = kind;
     this.used = used;
@@ -331,7 +344,7 @@ export class MemoryStore {
   }
 
   /** Characters of `abstract` the active entries of a resident kind hold. */
-  used(kind: "owner" | "note"): number {
+  used(kind: ResidentKind): number {
     return this.list({ kinds: [kind] }).reduce((n, r) => n + r.abstract.length, 0);
   }
 
@@ -347,7 +360,7 @@ export class MemoryStore {
     this.db.exec("BEGIN");
     try {
       for (const op of ops) ids.push(this.apply(op, meta, batchId, at));
-      for (const kind of ["owner", "note"] as const) {
+      for (const kind of ["owner", "decision", "note"] as const) {
         const used = this.used(kind);
         if (used > RESIDENT_CAPS[kind] && ops.some((o) => this.touches(o, kind))) {
           throw new MemoryFullError(kind, used, RESIDENT_CAPS[kind], []);

@@ -30,7 +30,8 @@ What you do:
   comments on GitHub, publishing, deploying, mail or messages to people) waits for the owner's OK
   on a card, unless the owner's request itself asked for that step: then pass it in session_start
   allowed (「做完推上去开个 PR」 → push, pull-request). Merge only when they said merge. Never add a
-  step they did not ask for. Local work (edits, commits, branches, tests) never asks.
+  step they did not ask for. Local work (edits, commits, branches, tests) never asks. A decision in
+  [记忆 · 定了的事] that allows a step for this project counts as asked: pass it in allowed too.
 - When a task needs one of the owner's connected apps (session_list lists them; e.g. read or send
   mail), start it with an installed agent other than Pi (profile), and say in addedContext which
   apps it can use through its agentherd tools. You cannot use the apps yourself.
@@ -91,6 +92,15 @@ Memory:
   the owner says it is wrong, replace or remove it with memory.
 - Keep lasting things with memory: what the owner says will hold (以后/每次/默认/记住), people,
   what a project is. Never keep one-off requests, task results, task progress or folders.
+- When the owner settles something for good about the work (「AgentHerd 的改动直接推 main」, 「不做
+  Windows 版」, 「这个仓库别再提 PR」), keep it as a decision: one line naming the project and what
+  is decided or refused, the owner's words as evidence. Decisions are in [记忆 · 定了的事] and go
+  to every new task; follow them and never ask the owner again about something decided. When a
+  request goes against one, say which and ask whether it still holds.
+- Under [Already sent to the owner] you also see how the owner answered approval cards. When they
+  refused, skipped or allowed the same kind of step for the same project again, you may ask once,
+  with ask, whether to keep it as a decision (「以后 X 都直接 push？」); never more than once for
+  the same thing, and never from a card alone without asking.
 - Task results are not kept in memory. For earlier tasks use task_search (title, project, last
   report); use memory_search for what the owner told you and for lessons.
 
@@ -222,6 +232,10 @@ export function eventsPrompt(events: HerderEvent[]): string {
   const lines = events.map((e) => {
     // The Herder's own question, closed without a pick: AgentHerd's words, not an agent's.
     if (e.kind === "ask-closed") return `- your question "${e.title}" closed: ${e.text}`;
+    if (e.kind === "approval") {
+      const about = e.taskId ? `task ${e.taskId.slice(0, 8)} "${e.title}"` : `"${e.title}"`;
+      return `- approval card ${e.outcome ?? "answered"} by the owner: ${about}\n${quoteAgent(e.text)}`;
+    }
     const what =
       e.kind === "watchdog"
         ? "watchdog alarm"

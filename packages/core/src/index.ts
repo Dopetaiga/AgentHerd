@@ -85,6 +85,7 @@ export {
   RESIDENT_CAPS,
   RESIDENT_KINDS,
   REVIEW_JOB,
+  type ResidentKind,
   VECTOR_WEIGHT,
   type WriteMeta,
 } from "./memory-store.ts";

@@ -73,6 +73,8 @@ export interface InboxOptions {
   secrets?: Record<string, string>;
   /** Called after an item is decided or expired. */
   onClosed?: (item: Item) => void;
+  /** Called when an item is answered: by the owner, by 「先不管」 or by the timeout (ADR 0057). */
+  onAnswered?: (item: Item, answer: OwnerAnswer, how: "owner" | "skip" | "timeout") => void;
   texts?: CoreTexts;
 }
 
@@ -401,6 +403,11 @@ export class Inbox {
       createdAt: clock.now().toISOString(),
     });
     if (by.source === "timeout") store.audit("item.timed-out", { itemId: entry.item.id });
+    this.opts.onAnswered?.(
+      entry.item,
+      answer,
+      by.source === "timeout" ? "timeout" : by.skipped ? "skip" : "owner",
+    );
     await this.finish(entry, "decided", final);
     await this.next(entry.item.sessionId);
   }

@@ -118,8 +118,8 @@ export interface MemoryView {
   entries: MemoryRow[];
   deleted: MemoryRow[];
   /** Characters used and allowed of the kinds kept in the Herder's prompt. */
-  used: { owner: number; note: number };
-  caps: { owner: number; note: number };
+  used: { owner: number; decision: number; note: number };
+  caps: { owner: number; decision: number; note: number };
   /** False while AgentHerd is not following tasks (no herd): nothing to show or change. */
   ready: boolean;
 }

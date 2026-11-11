@@ -1,7 +1,7 @@
 import { mkdirSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import type { Schedule } from "@agentherd/core";
+import { type Schedule, Store } from "@agentherd/core";
 import { describe, expect, it } from "vitest";
 import { placeModels, type TierPlacement } from "../src/model-guide.ts";
 import { CONTEXT_LABEL, composeTaskPrompt, OWNER_LABEL, quoteAgent } from "../src/prompt.ts";
@@ -116,6 +116,32 @@ describe("tools", () => {
     expect(rec.started[0]?.title).toBe("修构建");
     expect(rec.started[0]?.prompt).toBe(
       `${OWNER_LABEL}\n修一下构建\n\n${CONTEXT_LABEL}\n上次失败在 lint`,
+    );
+  });
+
+  it("session_start gives the agent what the owner decided, with their words (ADR 0057)", async () => {
+    const dir = tmpdir();
+    const store = Store.open(":memory:");
+    store.memory.write(
+      [
+        {
+          op: "add",
+          kind: "decision",
+          abstract: "AgentHerd 不做 Windows 版",
+          evidence: "Windows 版不做了",
+        },
+      ],
+      { actor: "herder", source: "said" },
+    );
+    const { call, rec } = tools({ ownerText: `在 ${dir} 里修一下构建` }, { memory: store.memory });
+    await call("session_start", {
+      name: "修构建",
+      project: dir,
+      profile: "mock",
+      ownerText: "修一下构建",
+    });
+    expect(rec.started[0]?.prompt).toContain(
+      "负责人定了的事（照做，不要再问；和这次的话冲突时以这次为准）：\n- AgentHerd 不做 Windows 版 原话：「Windows 版不做了」",
     );
   });
 

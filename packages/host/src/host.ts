@@ -574,7 +574,7 @@ export class Host implements HostApi {
       return {
         entries: [],
         deleted: [],
-        used: { owner: 0, note: 0 },
+        used: { owner: 0, decision: 0, note: 0 },
         caps: { ...RESIDENT_CAPS },
         ready: false,
       };
@@ -582,7 +582,11 @@ export class Host implements HostApi {
     return {
       entries: memory.list(),
       deleted: memory.list({ status: "deleted" }).slice(0, MEMORY_DELETED_SHOWN),
-      used: { owner: memory.used("owner"), note: memory.used("note") },
+      used: {
+        owner: memory.used("owner"),
+        decision: memory.used("decision"),
+        note: memory.used("note"),
+      },
       caps: { ...RESIDENT_CAPS },
       ready: true,
     };

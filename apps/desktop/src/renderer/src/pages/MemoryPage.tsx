@@ -11,6 +11,11 @@ type Entry = MemoryView["entries"][number];
 
 const KINDS: readonly { kind: Entry["kind"]; label: string; hint: string }[] = [
   { kind: "owner", label: "关于你", hint: "你说过要一直这样的事，主管每次都会看" },
+  {
+    kind: "decision",
+    label: "定了的事",
+    hint: "你拍过板的事和定了不做的事，带着原话；主管和每个新任务都会照做，不再问你",
+  },
   { kind: "note", label: "主管笔记", hint: "主管自己记下的环境和做法，每次都会看" },
   { kind: "person", label: "人", hint: "你提到的人和他们负责什么" },
   { kind: "project", label: "项目", hint: "项目是什么、谁负责；路径只当线索" },
@@ -156,7 +161,8 @@ export function MemoryPage() {
       {KINDS.map(({ kind, label, hint }) => {
         const rows = view.entries.filter((e) => e.kind === kind);
         if (rows.length === 0) return null;
-        const cap = kind === "owner" || kind === "note" ? view.caps[kind] : undefined;
+        const cap =
+          kind === "owner" || kind === "decision" || kind === "note" ? view.caps[kind] : undefined;
         return (
           <Section
             key={kind}
@@ -165,7 +171,7 @@ export function MemoryPage() {
             actions={
               cap === undefined ? undefined : (
                 <span className="text-ink-muted text-xs">
-                  {view.used[kind as "owner" | "note"]}/{cap} 字
+                  {view.used[kind as keyof MemoryView["used"]]}/{cap} 字
                 </span>
               )
             }

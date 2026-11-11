@@ -10,6 +10,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { Herder, MEMORY_REFRESH_MS, REVIEW_EVERY_TURNS } from "../src/herder.ts";
 import {
   dateNote,
+  decisionsText,
   lessonsText,
   memorySnapshot,
   memoryTools,
@@ -17,7 +18,7 @@ import {
   ownerPrefsText,
   recallBlock,
 } from "../src/memory.ts";
-import { nowLine } from "../src/prompt.ts";
+import { eventsPrompt, nowLine } from "../src/prompt.ts";
 import type { TurnContext } from "../src/tools.ts";
 import { fakeHost } from "./helpers.ts";
 
@@ -377,5 +378,78 @@ describe("Herder review trigger", () => {
     // The first review is still waiting, so the second batch adds none.
     expect(store.memory.jobs().map((j) => j.kind)).toEqual(["review"]);
     await herder.stop();
+  });
+});
+
+describe("decisions (ADR 0057)", () => {
+  const said = turn("AgentHerd 以后直接推 main，不用开 PR。另外 Windows 版不做了");
+
+  it("keeps what the owner settled, in their words", () => {
+    for (const evidence of ["AgentHerd 以后直接推 main，不用开 PR", "Windows 版不做了"]) {
+      expect(
+        opProblem({ action: "add", kind: "decision", content: "x 定了", evidence }, said),
+      ).toBeUndefined();
+    }
+  });
+
+  it("refuses a decision without the owner's words or about one task", () => {
+    expect(opProblem({ action: "add", kind: "decision", content: "直接推 main" }, said)).toContain(
+      "need evidence",
+    );
+    const once = turn("这次先推到 dev 分支吧");
+    expect(
+      opProblem(
+        { action: "add", kind: "decision", content: "推 dev", evidence: "这次先推到 dev 分支吧" },
+        once,
+      ),
+    ).toContain("not settle");
+    const asked = turn("要不要以后都不做 Windows？");
+    expect(
+      opProblem(
+        {
+          action: "add",
+          kind: "decision",
+          content: "不做 Windows",
+          evidence: "要不要以后都不做 Windows？",
+        },
+        asked,
+      ),
+    ).toContain("question");
+  });
+
+  it("decisions sit in the system prompt and go to every new task with the quote and the day", async () => {
+    const { store, call } = setupTools("AgentHerd 以后直接推 main，不用开 PR");
+    const reply = await call("memory", {
+      operations: [
+        {
+          action: "add",
+          kind: "decision",
+          content: "AgentHerd 仓库的改动直接推 main，不开 PR",
+          evidence: "AgentHerd 以后直接推 main，不用开 PR",
+        },
+      ],
+    });
+    expect(reply).toContain("saved");
+    const snapshot = memorySnapshot(store.memory);
+    expect(snapshot).toContain("[记忆 · 定了的事");
+    expect(snapshot).toContain("原话：「AgentHerd 以后直接推 main，不用开 PR」");
+    expect(decisionsText(store.memory)).toMatch(
+      /^负责人定了的事.*\n- AgentHerd 仓库的改动直接推 main，不开 PR 原话：「AgentHerd 以后直接推 main，不用开 PR」 \(记于 \d{4}-\d{2}-\d{2}\)$/,
+    );
+    expect(decisionsText(undefined)).toBe("");
+  });
+
+  it("the Herder sees how approval cards were answered", () => {
+    const text = eventsPrompt([
+      {
+        kind: "approval",
+        taskId: "abcdef1234",
+        title: "修登录",
+        text: "Run git push",
+        outcome: "skipped",
+      },
+    ]);
+    expect(text).toContain('approval card skipped by the owner: task abcdef12 "修登录"');
+    expect(text).toContain("git push");
   });
 });

@@ -17,7 +17,7 @@ import { arr, obj, oneOf, opt, str } from "@earendil-works/pi-schema";
 import { isVerbatim, type TurnContext } from "./tools.ts";
 
 /** Kinds the Herder writes itself; cases and experience come from task-end jobs. */
-export const HERDER_KINDS = ["owner", "person", "project", "note"] as const;
+export const HERDER_KINDS = ["owner", "decision", "person", "project", "note"] as const;
 type HerderKind = (typeof HERDER_KINDS)[number];
 
 export const MAX_OPS = 5;
@@ -29,6 +29,7 @@ export const RECALL_KINDS: readonly MemoryKind[] = ["person", "project", "case",
 
 const KIND_NAMES: Record<MemoryKind, string> = {
   owner: "关于你",
+  decision: "定了的事",
   person: "人",
   project: "项目",
   note: "主管笔记",
@@ -39,6 +40,9 @@ const KIND_NAMES: Record<MemoryKind, string> = {
 /** Words that make a preference lasting rather than about one message. */
 const LASTING_RE =
   /以后|今后|往后|一直|总是|每次|默认|永远|记住|别再|不要再|都用|都要|都别|我喜欢|我习惯|我不喜欢|我讨厌|always|from now on|remember|never|by default|i prefer|i like|i hate/i;
+/** Words that make a statement about the work settled (ADR 0057), besides the lasting ones. */
+const SETTLED_RE =
+  /不做|不搞|不要做|别做|不支持|不用了|定了|就这么定|决定|一律|统一|直接推|直接合|直接 ?push|直接 ?merge|别提|不提|不再|don't|do not|we won't|settled|decided/i;
 const QUESTION_RE = /[?？]\s*$|[吗呢么]\s*$|^(是不是|能不能|要不要|可不可以|会不会)/;
 const HYPOTHETICAL_RE = /如果|假如|要是|假设|万一|\bif\b|\bsuppose\b/i;
 const TEMP_PATH_RE = /(^|[\s"'`(（])\/(tmp|private\/tmp|var\/folders|private\/var\/folders)(\/|\b)/;
@@ -94,7 +98,7 @@ export function opProblem(op: ToolOp, turn: TurnContext, old?: MemoryRow): strin
   if (evidence !== "" && !isVerbatim(evidence, turn.typedText)) {
     return "evidence must be the owner's words copied exactly from this message";
   }
-  if (kind === "owner" || kind === "person") {
+  if (kind === "owner" || kind === "person" || kind === "decision") {
     if (evidence === "") {
       return `${kind} entries need evidence: the owner's own words from this message`;
     }
@@ -104,6 +108,9 @@ export function opProblem(op: ToolOp, turn: TurnContext, old?: MemoryRow): strin
   }
   if (kind === "owner" && !LASTING_RE.test(evidence)) {
     return "the owner did not say this lasts (以后/每次/默认/always…); a request for one task is not a preference";
+  }
+  if (kind === "decision" && !LASTING_RE.test(evidence) && !SETTLED_RE.test(evidence)) {
+    return "the owner did not settle this for good (以后/不做/定了/一律…); a choice for one task is not a decision";
   }
   if (TEMP_PATH_RE.test(text)) return "temporary folders are never kept";
   for (const m of text.matchAll(PATH_RE)) {
@@ -123,7 +130,7 @@ const opSchema = obj({
   kind: opt(
     str({
       description:
-        "add only: owner (the owner's lasting preferences and facts about them), person (people they mention), project (what a project is, who owns it), note (your own notes about tools and ways of working)",
+        "add only: owner (the owner's lasting preferences and facts about them), decision (something the owner settled for good about the work: what is decided or refused, naming the project), person (people they mention), project (what a project is, who owns it), note (your own notes about tools and ways of working)",
     }),
   ),
   id: opt(str({ description: "replace/remove: the id shown in [记忆] or memory_search" })),
@@ -137,7 +144,7 @@ const opSchema = obj({
   evidence: opt(
     str({
       description:
-        "The owner's words this rests on, copied exactly from this message. Required for owner and person.",
+        "The owner's words this rests on, copied exactly from this message. Required for owner, decision and person.",
     }),
   ),
   until: opt(str({ description: "YYYY-MM-DD after which it no longer applies" })),
@@ -161,7 +168,13 @@ export function dateNote(r: Pick<MemoryRow, "createdAt" | "until">): string {
 }
 
 function entryLine(r: MemoryRow): string {
-  return `- [${short(r.id)}] ${r.abstract} (${dateNote(r)})`;
+  return `- [${short(r.id)}] ${r.abstract}${quoteNote(r)} (${dateNote(r)})`;
+}
+
+/** A decision's own words: 「原话：…」 (ADR 0057). */
+function quoteNote(r: Pick<MemoryRow, "kind" | "evidence">): string {
+  const words = r.evidence?.trim() ?? "";
+  return r.kind === "decision" && words !== "" ? ` 原话：「${words}」` : "";
 }
 
 export function memoryTools(
@@ -174,7 +187,7 @@ export function memoryTools(
       name: "memory",
       label: "Remember",
       description: `Keeps, changes or removes long-term memory, in one batch.
-WHEN: the owner states something lasting about themselves or how they want things done (「以后…」「每次…」「默认…」「记住…」), tells you about a person or a project, or corrects something you remembered (replace it). Also a note of yours about tools or ways of working that will still be true next month.
+WHEN: the owner states something lasting about themselves or how they want things done (「以后…」「每次…」「默认…」「记住…」), settles something for good about the work (a decision: 「不做…」「…直接推」「定了…」), tells you about a person or a project, or corrects something you remembered (replace it). Also a note of yours about tools or ways of working that will still be true next month.
 SKIP: one-off requests for this task, task progress or results (AgentHerd keeps those), folders and paths (found again with project_find), guesses, anything you would be unsure of. If unsure, leave it out. Never tell the owner you saved something unless they asked you to remember.
 Owner and note memory is small; when full, the call fails with what is there: retry as ONE batch that removes or shortens entries.`,
       parameters: memorySchema,
@@ -250,7 +263,7 @@ const MEMORY_DATA_NOTE =
  */
 export function memorySnapshot(memory: MemoryStore): string {
   const parts: string[] = [];
-  for (const kind of ["owner", "note"] as const) {
+  for (const kind of ["owner", "decision", "note"] as const) {
     const rows = memory.list({ kinds: [kind] }).reverse(); // oldest first: a stable prefix
     if (rows.length === 0) continue;
     const used = rows.reduce((n, r) => n + r.abstract.length, 0);
@@ -368,4 +381,15 @@ export function lessonsText(rows: readonly MemoryRow[]): string {
       `- [${KIND_NAMES[r.kind]}] ${r.abstract} (${dateNote(r)})${r.body === "" ? "" : `\n  ${r.body.slice(0, 500).replaceAll("\n", "\n  ")}`}`,
   );
   return `过去类似任务的记录（仅供参考，可能已过时；以项目现在的情况为准）：\n${lines.join("\n")}`;
+}
+
+/**
+ * What the owner settled for good (kind decision), for a new task's prompt with their own words and
+ * the day, so an agent does not do what was refused or ask about what was decided (ADR 0057).
+ */
+export function decisionsText(memory: MemoryStore | undefined): string {
+  if (memory === undefined) return "";
+  const rows = memory.list({ kinds: ["decision"] }).reverse();
+  if (rows.length === 0) return "";
+  return `负责人定了的事（照做，不要再问；和这次的话冲突时以这次为准）：\n${rows.map((r) => `- ${r.abstract}${quoteNote(r)} (${dateNote(r)})`).join("\n")}`;
 }

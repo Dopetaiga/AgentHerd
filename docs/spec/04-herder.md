@@ -113,7 +113,10 @@ The Herder runs only when the owner writes to it or answers its question (ADR 00
 schedule the owner made is due (ADR 0055), or to tell a task's result (ADR 0053). Task
 reports and watchdog alarms reach the owner by themselves; the Herder gets them, quoted as agent
 data under "[Already sent to the owner]", in front of the owner's next message (the last 10), so
-it knows what happened without repeating it.
+it knows what happened without repeating it. How each approval card was answered (allowed, refused, 「先不管」, timed
+out) comes the same way; when the same kind of step comes back, the Herder may ask once whether to
+keep it as a decision 「定了的事」 ([ADR 0057](../adr/0057-decisions-the-owner-made.md)), which every
+later task gets and which counts as the owner allowing that step.
 
 ### Context and restarts
 
