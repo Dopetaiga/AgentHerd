@@ -434,7 +434,10 @@ the same 信箱 ([ADR 0099](../adr/0099-a-mailbox-for-the-herder.md),
   就问我」: `mailbox_add` (kind, name, note, config, `act`, `trial`), `mailbox_try`,
   `mailbox_list`, `mailbox_change`, `mailbox_remove`; adding, changing and removing only in an
   owner turn; the Herder restates a timer in one line so the owner can correct it. The app's
-  「信箱」 page does the same, shows each letter's fate and reason, a timer's next run, and below
+  「信箱」 page does the same (each source has a ✎ button that opens the same form filled in;
+  only what changed is sent, and only a new place to look — repository, feed, words, query —
+  makes a source start over with a first look; a new name, note, interval or time does not),
+  shows each letter's fate and reason, a timer's next run, and below
   the pull requests tasks opened (「任务开的 PR」, ADR 0051), which are not sources.
 - **Keeping.** Tables `mailbox_sources`, `mailbox_letters` (schema 18; `act`, `trials`, offers in
   schema 19), last 2,000 letters. Schema 19 moved the old `schedules`, `intake_watches`,
