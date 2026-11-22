@@ -53,6 +53,7 @@ export {
 } from "./logins.ts";
 export {
   checkPublic,
+  githubIssueOf,
   htmlToText,
   isPrivateAddress,
   LOOKUP_TOOL_NAMES,
@@ -151,6 +152,13 @@ export {
   VOICE_REPLY_MAX,
   voicePrompt,
 } from "./prompt.ts";
+export {
+  asksForQuiet,
+  QUIET_CHECK_MAX_TOKENS,
+  QUIET_CHECK_TIMEOUT_MS,
+  type QuietCheckRequest,
+  shouldStayQuiet,
+} from "./quiet-check.ts";
 export { STYLE_SOURCE, stylePrompt, withoutEndPeriods } from "./style.ts";
 export {
   filterSuggestion,

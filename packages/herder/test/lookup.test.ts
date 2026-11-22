@@ -4,6 +4,7 @@ import {
   checkPublic,
   duckResults,
   type Fetch,
+  githubIssueOf,
   githubQueries,
   githubRepoOf,
   htmlToText,
@@ -259,6 +260,51 @@ describe("web_read (ADR 0071)", () => {
     const text = await new Lookup({ fetch, resolve: PUBLIC }).read("https://usemagpie.ai/", 600);
     expect(text.startsWith("magpie\nhttps://usemagpie.ai/\n\nxxx")).toBe(true);
     expect(text).toMatch(/… \(\d+ more characters; pass maxChars to read more\)$/);
+  });
+
+  it("brings an issue's pull requests, open and closed, with its page (ADR 0102)", async () => {
+    const pr = (n: number, state: string, merged: string | null, body: string) => ({
+      number: n,
+      title: `Fix ${n}`,
+      body,
+      state,
+      html_url: `https://github.com/vastsa/PI-Desktop/pull/${n}`,
+      user: { login: "dev" },
+      repository_url: "https://api.github.com/repos/vastsa/PI-Desktop",
+      pull_request: { merged_at: merged },
+    });
+    const { fetch } = web({
+      "https://github.com/vastsa/PI-Desktop/issues/2391": {
+        body: "<html><head><title>Login breaks · Issue #2391</title></head><body>It breaks.</body></html>",
+      },
+      "https://api.github.com/repos/vastsa/PI-Desktop/issues/2391/timeline": {
+        type: "application/json",
+        body: JSON.stringify([
+          { event: "commented" },
+          { event: "cross-referenced", source: { issue: pr(2392, "closed", null, "fixes #2391") } },
+        ]),
+      },
+      "https://api.github.com/search/issues": {
+        type: "application/json",
+        body: JSON.stringify({
+          items: [pr(2400, "open", null, "Closes #2391"), pr(2401, "open", null, "about #23910")],
+        }),
+      },
+    });
+    const text = await new Lookup({ fetch, resolve: PUBLIC }).read(
+      "https://github.com/vastsa/PI-Desktop/issues/2391",
+      5000,
+    );
+    expect(text).toContain("It breaks.");
+    expect(text).toContain("Pull requests linked to #2391 (GitHub API, open and closed):");
+    expect(text).toContain("- #2400 open · Fix 2400 · @dev");
+    expect(text).toContain("- #2392 closed, not merged · Fix 2392");
+    expect(text).not.toContain("#2401");
+    expect(githubIssueOf(new URL("https://github.com/a/b/issues/7"))).toEqual({
+      repo: "a/b",
+      number: 7,
+    });
+    expect(githubIssueOf(new URL("https://github.com/a/b/pull/7"))).toBeUndefined();
   });
 
   it("gives a GitHub repository's facts from the API instead of its page", async () => {

@@ -49,6 +49,7 @@ import {
   systemPrompt,
   voicePrompt,
 } from "./prompt.ts";
+import { asksForQuiet, shouldStayQuiet } from "./quiet-check.ts";
 import { stylePrompt, withoutEndPeriods } from "./style.ts";
 import { sampleSuggestion } from "./suggest.ts";
 import {
@@ -617,6 +618,12 @@ export class Herder implements HerderPort {
       this.save();
       return;
     }
+    // The owner said when to keep quiet; code checks the reply against that once more (ADR 0102).
+    if (job.kind === "scheduled" && (await this.heldBack(job.schedule.prompt, text))) {
+      this.host.audit("schedule.quiet", { id: job.schedule.id, by: "check" });
+      this.save();
+      return;
+    }
     if (job.kind === "letters") this.fileTheRest(job.delivery);
     if (job.kind === "letters" && (quietReply(text) || text === "")) {
       this.host.audit("mailbox.quiet", { kind: job.delivery.kind });
@@ -664,6 +671,23 @@ export class Herder implements HerderPort {
     this.suggestSeq++;
     this.suggestAbort?.abort();
     this.suggestAbort = undefined;
+  }
+
+  /**
+   * Whether a timer's reply goes against the owner's own words for it (「没有就不用说」): one small
+   * request with no tools (ADR 0102). Only when those words say when to keep quiet.
+   */
+  private async heldBack(words: string, reply: string): Promise<boolean> {
+    if (reply === "" || !asksForQuiet(words)) return false;
+    const model = this.current.model;
+    const apiKey = this.current.apiKey ?? (await this.ownKey?.(model.provider));
+    return shouldStayQuiet({
+      streamFn: this.streamFn,
+      model,
+      ...(apiKey === undefined ? {} : { apiKey }),
+      words,
+      reply,
+    });
   }
 
   /**
