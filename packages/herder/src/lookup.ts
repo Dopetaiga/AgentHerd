@@ -377,6 +377,52 @@ export function githubRepoOf(url: URL): string | undefined {
   return `${owner}/${repo.replace(/\.git$/, "")}`;
 }
 
+/** owner/repo and number of a github.com issue page; undefined otherwise. */
+export function githubIssueOf(url: URL): { repo: string; number: number } | undefined {
+  if (url.hostname !== "github.com" && url.hostname !== "www.github.com") return undefined;
+  const [owner, repo, kind, n] = url.pathname.split("/").filter((p) => p !== "");
+  if (owner === undefined || repo === undefined || kind !== "issues" || n === undefined) {
+    return undefined;
+  }
+  if (!/^\d+$/.test(n)) return undefined;
+  return { repo: `${owner}/${repo}`, number: Number(n) };
+}
+
+interface GithubIssue {
+  number: number;
+  title: string;
+  body?: string | null;
+  state: string;
+  html_url: string;
+  user?: { login?: string } | null;
+  repository_url?: string;
+  pull_request?: { merged_at?: string | null } | null;
+}
+
+interface TimelineEvent {
+  event?: string;
+  source?: { issue?: GithubIssue };
+}
+
+interface IssuePull {
+  number: number;
+  title: string;
+  state: string;
+  user: string;
+  url: string;
+}
+
+function pullOf(i: GithubIssue): IssuePull {
+  const merged = i.pull_request?.merged_at !== undefined && i.pull_request?.merged_at !== null;
+  return {
+    number: i.number,
+    title: i.title,
+    state: merged ? "merged" : i.state === "closed" ? "closed, not merged" : i.state,
+    user: `@${i.user?.login ?? "?"}`,
+    url: i.html_url,
+  };
+}
+
 interface HnStory {
   title: string;
   url?: string | null;
@@ -682,12 +728,67 @@ export class Lookup {
     const type = got.type.toLowerCase();
     if (type.includes("html") || (type === "" && /<html|<body/i.test(got.text.slice(0, 2000)))) {
       const { title, text } = htmlToText(got.text);
-      return clip(`${title === "" ? "" : `${title}\n`}${got.url}\n\n${text}`, chars);
+      // An issue's pull requests, open and closed, come with it (ADR 0102): the page alone hides
+      // closed ones, and a model told to check them did not.
+      const issue = githubIssueOf(url);
+      const prs =
+        issue === undefined ? "" : await this.issuePulls(issue.repo, issue.number).catch(() => "");
+      const head = `${title === "" ? "" : `${title}\n`}${got.url}\n\n`;
+      return prs === ""
+        ? clip(`${head}${text}`, chars)
+        : `${clip(`${head}${text}`, chars)}\n\n${prs}`;
     }
     if (type.startsWith("text/") || type.includes("json") || type.includes("xml") || type === "") {
       return clip(`${got.url}\n\n${got.text.trim()}`, chars);
     }
     return `${got.url} is not text (${got.type}); a task can download and open it`;
+  }
+
+  /**
+   * The pull requests linked to an issue, open, closed and merged (ADR 0102): those that mention it
+   * in the issue's timeline, and those found by searching the repository's pull requests for its
+   * number. Empty when there are none; throws when GitHub does not answer.
+   */
+  private async issuePulls(repo: string, number: number): Promise<string> {
+    const opts = await this.opts();
+    const json = { Accept: "application/vnd.github+json" };
+    const found = new Map<number, IssuePull>();
+    const timeline = await get(
+      `https://api.github.com/repos/${repo}/issues/${number}/timeline?per_page=100`,
+      opts,
+      json,
+    );
+    if (timeline.status !== 200) throw new Error(`GitHub answered ${timeline.status}`);
+    for (const e of JSON.parse(timeline.text) as TimelineEvent[]) {
+      const src = e.source?.issue;
+      if (e.event !== "cross-referenced" || src?.pull_request === undefined) continue;
+      if (src.repository_url !== undefined && !src.repository_url.endsWith(`/repos/${repo}`))
+        continue;
+      found.set(src.number, pullOf(src));
+    }
+    const q = encodeURIComponent(`repo:${repo} is:pr ${number}`);
+    const search = await get(
+      `https://api.github.com/search/issues?q=${q}&per_page=20`,
+      opts,
+      json,
+    ).catch(() => undefined);
+    if (search?.status === 200) {
+      const items = (JSON.parse(search.text) as { items?: GithubIssue[] }).items ?? [];
+      const mention = new RegExp(`#${number}(?!\\d)`);
+      for (const it of items) {
+        if (found.has(it.number) || it.number === number) continue;
+        if (mention.test(`${it.title}\n${it.body ?? ""}`)) found.set(it.number, pullOf(it));
+      }
+    }
+    if (found.size === 0) {
+      return `Pull requests linked to #${number} (GitHub API, open and closed): none.`;
+    }
+    const lines = [...found.values()]
+      .sort((a, b) => b.number - a.number)
+      .map((p) => `- #${p.number} ${p.state} · ${p.title} · ${p.user} · ${p.url}`);
+    return [`Pull requests linked to #${number} (GitHub API, open and closed):`, ...lines].join(
+      "\n",
+    );
   }
 
   /** A repository's facts from the GitHub API; throws when the API does not answer. */
