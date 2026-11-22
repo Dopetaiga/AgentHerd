@@ -929,6 +929,14 @@ function installFakeBridge(): void {
                 ...(patch.act === undefined
                   ? {}
                   : { act: patch.act === "auto" ? ("trial" as const) : patch.act }),
+                ...(patch.fields === undefined
+                  ? {}
+                  : {
+                      config: Object.fromEntries(
+                        Object.entries(patch.fields).filter(([, v]) => v !== undefined),
+                      ),
+                      ...(s.kind === "timer" ? {} : { started: false, fails: 0 }),
+                    }),
               }
             : s,
         ),
