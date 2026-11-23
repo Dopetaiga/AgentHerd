@@ -5,6 +5,14 @@ import type { DingTalkCliPort, DingTalkIdentity } from "../src/dingtalk-cli.ts";
 const identity = { corpId: "corp", userId: "user", corpName: "Example", userName: "Owner" };
 const command = { args: ["calendar", "event", "create"] };
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+
 function fixture(initial?: DingTalkIdentity) {
   const cli = {
     status: vi.fn<DingTalkCliPort["status"]>().mockResolvedValue(initial),
@@ -29,7 +37,7 @@ describe("DingTalk account", () => {
 
   it("opens one official login and drains late completion before clearing it", async () => {
     const { cli, account } = fixture();
-    const login = Promise.withResolvers<void>();
+    const login = deferred<void>();
     cli.login.mockReturnValue(login.promise);
     expect(await account.startLogin()).toMatchObject({ state: "connecting" });
     expect(await account.startLogin()).toMatchObject({ state: "connecting" });
@@ -79,7 +87,7 @@ describe("DingTalk account", () => {
   it("aborts old work and drains it before resetting credentials", async () => {
     const { cli, account } = fixture(identity);
     const original = await account.bind();
-    const operation = Promise.withResolvers<unknown>();
+    const operation = deferred<unknown>();
     cli.run.mockReturnValue(operation.promise);
     const pending = original(command);
     const rejected = expect(pending).rejects.toThrow();
