@@ -6,7 +6,8 @@ Applied ADRs: [0019](../adr/0019-relay-verbatim-board-and-reports.md),
 [0041](../adr/0041-agent-tools-through-a-local-mcp-gateway.md),
 [0060](../adr/0060-pi-tools-through-the-mcp-gateway.md),
 [0076](../adr/0076-westock-market-quotes-and-research-cli.md),
-[0077](../adr/0077-xueqiu-danjuan-fund-holdings.md).
+[0077](../adr/0077-xueqiu-danjuan-fund-holdings.md),
+[0103](../adr/0103-wecom-office-tools-use-the-task-gateway.md).
 
 AgentHerd gives every task one MCP server, `agentherd`. Through it the agent reports progress
 (`herd_report`) and, when the owner has connected apps, uses them (Gmail, Slack, GitHub …)
@@ -265,6 +266,28 @@ New tasks get a note listing each skill with its `SKILL.md` path.
 
 **Herder.** Only for plugins with 「主管也能用」 on (off by default): the read-only tools through
 `plugin_call` and the skills through `plugin_skill`, listed under Connected accounts.
+
+## 3g. WeCom office connection (ADR 0103)
+
+Under 应用连接 → 账号 → 企业微信, paste a Streamable HTTP URL or JSON Config from the
+[official WeCom permission screen](https://open.work.weixin.qq.com/help2/pc/21676). Add a
+configuration for each capability you want to use. Importing the same capability replaces
+its credential; one failed capability does not prevent other capabilities from working.
+The page shows a connection state and tool count. Discovery allows up to 30 seconds per
+capability. Use 检查连接 to discover the tools again. If a remote session expires, calls from
+its old task snapshot fail without replay; a new task discovers and classifies tools again.
+Removing a capability removes its local credential; revoke its WeCom authorization separately
+if needed.
+
+Authorized office tools are discovered from the server and checked against their capability
+family. Tools that cannot be identified as an allowed office or bot operation are not exposed.
+Depending on the grants, they may cover documents and sheets, mail, to-dos, calendars,
+meetings and minutes, WeDrive, contacts, identity and supported bot messaging. For bot
+chats, only sending and listing eligible recent conversations are supported; no chat
+history, archiving, or incoming events. WeCom is not a channel and is not exposed as a direct
+Herder tool. The owner continues to direct work and confirm writes through Feishu. The
+existing rules apply to verified read-only tools. Every write or ambiguous operation asks
+for approval, even in auto mode or when an allow rule matches; existing denies still block.
 
 ## 4. Failure behavior
 

@@ -1172,6 +1172,11 @@ export interface HostApi {
   installPlugin(source: string, keys: Record<string, string>): Promise<PluginView[]>;
   setPlugin(id: string, patch: PluginPatch): Promise<PluginView[]>;
   removePlugin(id: string): Promise<PluginView[]>;
+  /** Corporate WeCom's office MCP tools, not a control channel. */
+  wecom(): Promise<WecomView>;
+  configureWecom(input: string): Promise<WecomView>;
+  checkWecom(): Promise<WecomView>;
+  removeWecom(id: string): Promise<WecomView>;
   /** 信箱 (ADR 0099): the sources and the newest letters with what the Herder made of them. */
   mailbox(): MailboxView;
   mailboxAdd(draft: MailboxDraft): Promise<MailboxView>;
@@ -1184,6 +1189,17 @@ export interface HostApi {
 }
 
 export type HostMethod = keyof HostApi;
+
+export interface WecomConnectionView {
+  id: string;
+  name: string;
+  state: "ready" | "failed" | "idle";
+  toolCount: number;
+}
+
+export interface WecomView {
+  connections: WecomConnectionView[];
+}
 
 export const HOST_METHODS: readonly HostMethod[] = [
   "status",
@@ -1263,6 +1279,10 @@ export const HOST_METHODS: readonly HostMethod[] = [
   "installPlugin",
   "setPlugin",
   "removePlugin",
+  "wecom",
+  "configureWecom",
+  "checkWecom",
+  "removeWecom",
   "mailbox",
   "mailboxAdd",
   "mailboxSet",

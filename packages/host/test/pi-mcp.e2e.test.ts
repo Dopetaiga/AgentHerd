@@ -12,6 +12,7 @@ import type { ItemView, TextView } from "@agentherd/protocol";
 import { afterEach, describe, expect, it } from "vitest";
 import { mcpServerFor, mcpSocketPath, serveMcp } from "../src/mcp-socket.ts";
 import { piProfile } from "../src/profiles.ts";
+import { Wecom } from "../src/wecom.ts";
 
 const FAKE_PI = fileURLToPath(new URL("../../pi-acp/test/fake-pi.ts", import.meta.url));
 
@@ -167,6 +168,48 @@ describe("E2E-PI-MCP", () => {
     expect(task()?.automaticDecisions).toContain(
       "Ran on its own: Gmail: Fetch emails, Gmail: Create draft",
     );
+  });
+
+  it("asks the current owner before sending a built-in WeCom office write", async () => {
+    const saved = new Map<string, string>();
+    const ran: string[] = [];
+    const wecom = new Wecom(
+      {
+        get: (key) => saved.get(key),
+        set: (key, value) => {
+          saved.set(key, value);
+        },
+        delete: (key) => {
+          saved.delete(key);
+        },
+      },
+      () => ({
+        tools: async () => [{ name: "create_todo", inputSchema: { type: "object" } }],
+        call: async (name) => {
+          ran.push(name);
+          return { content: [{ type: "text", text: "created" }] };
+        },
+        close: () => {},
+      }),
+    );
+    cleanups.push(() => wecom.close());
+    await wecom.configure("https://qyapi.weixin.qq.com/mcp/v2/bot/todo?token=fake");
+    const apps = wecom.apps();
+    const name = (await apps?.list())?.[0]?.name;
+    if (!name) throw new Error("Expected the built-in WeCom tool");
+    const { herd, channel, workDir } = await setup(
+      {
+        turns: [{ calls: [{ toolName: name, input: { title: "Example" } }], reply: "{results}" }],
+      },
+      apps,
+    );
+    const { turn } = await herd.startTask("pi", workDir, "Create a to-do");
+    const card = (await channel.waitFor(isOpenItem)).view as ItemView;
+    expect(card.title).toContain("create_todo");
+    expect(ran).toEqual([]);
+    await channel.tap(card.itemId, "allow");
+    await turn;
+    expect(ran).toEqual(["create_todo"]);
   });
 
   it("continues an ended Pi task with session/load and uses the refreshed MCP token", async () => {
