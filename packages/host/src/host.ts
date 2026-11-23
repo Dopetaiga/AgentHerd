@@ -4,7 +4,7 @@
 import { randomBytes } from "node:crypto";
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
-import { join, posix, win32 } from "node:path";
+import { isAbsolute, join, posix, win32 } from "node:path";
 import {
   chooseModel,
   DIGEST_HOUR,
@@ -142,6 +142,9 @@ import { withClaudeHome } from "./claude-home.ts";
 import { withCodexHome } from "./codex-home.ts";
 import { type CliConfig, readConfig, secretFile, writeConfig } from "./config.ts";
 import { Danjuan, type DanjuanBrowser } from "./danjuan.ts";
+import { DingTalkAccount } from "./dingtalk-account.ts";
+import { type DingTalkCliPort, dingtalkCli } from "./dingtalk-cli.ts";
+import { dingtalkTools } from "./dingtalk-tools.ts";
 import { LocalEmbedder } from "./embedder.ts";
 import { FEED_NAMES, Feeds } from "./feeds.ts";
 import { foldText, herderContextView, herderMessages } from "./herder-context-view.ts";
@@ -205,6 +208,8 @@ export interface HostOptions {
   pluginClient?: (server: RunningServer) => McpClient;
   /** WeCom auth and office commands (tests replace the CLI). */
   wecomCli?: WecomCliPort;
+  /** DingTalk auth and office commands (tests replace the pinned CLI). */
+  dingTalkCli?: DingTalkCliPort;
   /** Runs `gh` for following pull requests tasks open (tests replace it). */
   gh?: GhRun;
   /** Runs mailbox scripts; tests pass a fake (ADR 0099). */
@@ -280,6 +285,7 @@ export class Host implements HostApi {
   /** Installed plugins (ADR 0094). */
   private readonly pluginList: PluginStore;
   private readonly wecomApps: WecomAccount;
+  private readonly dingTalkAccount: DingTalkAccount | undefined;
   /** The Herder's guess at the owner's next message, and when it came (ADR 0084). */
   private petSuggestion: { text: string; at: string } | undefined;
 
@@ -344,6 +350,13 @@ export class Host implements HostApi {
       log: (line) => this.log(line),
     });
     this.wecomApps = new WecomAccount(opts.wecomCli ?? new WecomCli(join(opts.home, "wecom-cli")));
+    const dws = opts.env?.AGENTHERD_DWS ?? process.env.AGENTHERD_DWS;
+    const cli =
+      opts.dingTalkCli ??
+      (dws !== undefined && isAbsolute(dws) && existsSync(dws)
+        ? dingtalkCli({ executable: dws, stateDir: join(opts.home, "dingtalk-dws") })
+        : undefined);
+    this.dingTalkAccount = cli === undefined ? undefined : new DingTalkAccount(cli);
     this.westockCli = new Westock({
       home: opts.home,
       enabled: () => !(this.config().westockOff ?? false),
@@ -786,6 +799,7 @@ export class Host implements HostApi {
     this.pluginList.stopAll();
     this.wecomApps.close();
     this.setupRun++;
+    await this.dingTalkAccount?.stop();
     await this.stopHerd();
   }
 
@@ -891,6 +905,9 @@ export class Host implements HostApi {
                 this.danjuanCli.tools(),
                 this.pluginList.tools(),
                 this.wecomApps.apps(),
+                this.dingTalkAccount === undefined
+                  ? undefined
+                  : dingtalkTools(this.dingTalkAccount),
               ]),
             appNames: () => [...this.appList.connectedNames(), ...this.wecomApps.connectedNames()],
           }),
