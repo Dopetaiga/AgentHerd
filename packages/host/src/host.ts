@@ -65,6 +65,7 @@ import type { AgentProfile, Channel, Locale, Mode, SetupUI } from "@agentherd/pr
 import { DEFAULT_LOCALE } from "@agentherd/protocol";
 import QRCode from "qrcode";
 import { Agents } from "./agents.ts";
+import { writeAntigravitySettings } from "./antigravity-home.ts";
 import type {
   AgentCheck,
   AgentView,
@@ -976,6 +977,17 @@ export class Host implements HostApi {
     this.memoryWorker = worker;
   }
 
+  /** Antigravity runs with settings that ask before acting (ADR 0104); a failure is logged. */
+  private antigravitySettings(): void {
+    try {
+      writeAntigravitySettings(this.opts.userHome ?? homedir());
+    } catch (error) {
+      console.error(
+        `[agents] could not write Antigravity's settings: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+
   private buildProfiles(config: CliConfig = this.config()): AgentProfile[] {
     if (this.opts.profiles !== undefined) return this.opts.profiles();
     const pi = piModelEnv(this.settings(), this.opts.secrets, this.opts.env);
@@ -989,6 +1001,7 @@ export class Host implements HostApi {
     // Pi keeps its sessions here so an old task can be continued after a restart (ADR 0039).
     const sessionDir = join(this.opts.home, "pi-sessions");
     return profiles.map((p) => {
+      if (p.id === "antigravity") this.antigravitySettings();
       const base =
         p.id === "pi" ? { ...p, env: { ...p.env, AGENTHERD_PI_SESSION_DIR: sessionDir } } : p;
       return { ...base, env: this.withToolPath(base.env) };

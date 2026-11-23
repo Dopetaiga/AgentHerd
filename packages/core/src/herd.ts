@@ -254,7 +254,12 @@ export class Herd {
       locale: this.opts.locale ?? DEFAULT_LOCALE,
       texts: this.texts,
       userHome: this.opts.userHome,
-      profiles: () => this.opts.profiles.map((p) => ({ id: p.id, name: p.name })),
+      profiles: () =>
+        this.opts.profiles.map((p) => ({
+          id: p.id,
+          name: p.name,
+          ...(p.ownModels === true ? { ownModels: true } : {}),
+        })),
       tasks: () => this.tasks(),
       openTasks: () => this.openTasks(),
       transcript: (taskId) => this.store.transcript(taskId),
