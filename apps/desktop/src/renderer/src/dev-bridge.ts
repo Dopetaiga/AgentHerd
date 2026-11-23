@@ -671,14 +671,32 @@ function installFakeBridge(): void {
     canInstall: true,
     ...(sim === "no-agent" ? {} : { ownCli: "/Users/me/.local/bin/claude" }),
   });
+  const antigravity: AgentView =
+    sim === "no-agent"
+      ? missing("antigravity", "Antigravity")
+      : {
+          id: "antigravity",
+          name: "Antigravity",
+          state: "ready",
+          source: "system",
+          path: "/Users/me/.local/bin/agy",
+          canInstall: false,
+          canRemove: false,
+        };
   let agents: AgentView[] =
     sim === "no-agent"
       ? [
           missing("pi", "Pi", { adapted: "1.5.0" }),
           missing("codex", "Codex", { adapted: "2.5.0" }),
           claudeMissing,
+          antigravity,
         ]
-      : [bundled("pi", "Pi", "1.5.0"), bundled("codex", "Codex", "2.5.0"), claudeMissing];
+      : [
+          bundled("pi", "Pi", "1.5.0"),
+          bundled("codex", "Codex", "2.5.0"),
+          claudeMissing,
+          antigravity,
+        ];
   const setAgents = (next: AgentView[]): AgentView[] => {
     agents = next;
     const ids = agents.filter((a) => a.state === "ready").map((a) => a.id);

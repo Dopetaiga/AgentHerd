@@ -125,7 +125,8 @@ export interface HerderHost {
   readonly locale: Locale;
   readonly texts: CoreTexts;
   readonly userHome: string;
-  profiles(): { id: string; name: string }[];
+  /** ownModels: the agent brings its own sign-in and models (ADR 0104). */
+  profiles(): { id: string; name: string; ownModels?: boolean }[];
   tasks(): Task[];
   openTasks(): Task[];
   /** A task's conversation with its agent, oldest first: for reading its replies whole (ADR 0062). */
