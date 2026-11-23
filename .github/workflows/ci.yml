@@ -81,11 +81,17 @@ jobs:
       - name: Run tests
         run: pnpm test
       - name: Stage the pinned DingTalk Workspace CLI
+        if: runner.os == 'Windows'
         run: pnpm --filter @agentherd/desktop fetch-dws
       - name: Build desktop app
+        if: runner.os == 'Windows'
         run: pnpm --filter @agentherd/desktop build
-      - name: Check native signing of the staged DingTalk CLI
+      - name: Package macOS app and verify the bundled DingTalk CLI
         if: runner.os == 'macOS'
         run: |
-          codesign --force --sign - apps/desktop/dws/dws
-          codesign --verify --strict apps/desktop/dws/dws
+          pnpm --filter @agentherd/desktop package:mac
+          app="apps/desktop/release/mac-$(node -p 'process.arch')/AgentHerd.app"
+          dws="$app/Contents/Resources/dws/dws"
+          "$dws" --version | grep -E '^dws version v1\.0\.69( |$)'
+          codesign --verify --strict "$dws"
+          codesign --verify --deep --strict "$app"

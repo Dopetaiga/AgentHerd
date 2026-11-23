@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -56,10 +56,35 @@ it.each([
   await expect(runFixture(source)).rejects.toMatchObject({ code });
 });
 
+it("checks current policy after filesystem preparation and before launching DWS", async () => {
+  const stateDir = join(dir, "policy-check");
+  const cli = dingtalkCli({ executable: join(dir, "dws-missing"), stateDir });
+  const deny = new Error("explicit deny");
+  const check = vi.fn(() => {
+    expect(existsSync(stateDir)).toBe(true);
+    throw deny;
+  });
+  await expect(
+    cli.run({ corpId: "corp", userId: "user" }, { args: [] }, AbortSignal.timeout(1000), check),
+  ).rejects.toBe(deny);
+  expect(check).toHaveBeenCalledTimes(1);
+});
+
 it("reports missing executable without exposing its path", async () => {
   const cli = dingtalkCli({ executable: join(dir, "dws-missing"), stateDir: dir });
   await expect(cli.status(new AbortController().signal)).rejects.toMatchObject({
     code: "unavailable",
+  });
+});
+
+it("does not restore authorization after an interrupted reset across CLI instances", async () => {
+  const options = { executable: join(dir, "dws-missing"), stateDir: dir };
+  const cli = dingtalkCli(options);
+  await cli.markResetPending();
+  await expect(cli.reset(AbortSignal.abort())).rejects.toMatchObject({ code: "cancelled" });
+  const restarted = dingtalkCli(options);
+  await expect(restarted.status(new AbortController().signal)).rejects.toMatchObject({
+    code: "reset_pending",
   });
 });
 

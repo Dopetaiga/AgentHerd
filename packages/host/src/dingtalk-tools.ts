@@ -340,10 +340,10 @@ export function dingtalkTools(account: Pick<DingTalkAccount, "bind" | "view">): 
     let used = false;
     return {
       approvalArguments: approval ?? {},
-      execute: async () => {
+      execute: async (beforeDispatch?: () => void) => {
         if (used) throw new Error("此钉钉操作已提交，请勿重试。");
         used = true;
-        const output = decode(await run(command));
+        const output = decode(await run(command, beforeDispatch));
         return { content: [{ type: "text", text: JSON.stringify(output) }] };
       },
     };

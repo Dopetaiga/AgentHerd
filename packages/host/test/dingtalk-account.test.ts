@@ -17,6 +17,7 @@ function fixture(initial?: DingTalkIdentity) {
   const cli = {
     status: vi.fn<DingTalkCliPort["status"]>().mockResolvedValue(initial),
     login: vi.fn<DingTalkCliPort["login"]>().mockResolvedValue(undefined),
+    markResetPending: vi.fn(async () => {}),
     reset: vi.fn<DingTalkCliPort["reset"]>().mockResolvedValue(undefined),
     run: vi.fn<DingTalkCliPort["run"]>().mockResolvedValue({ ok: true }),
   };
@@ -32,7 +33,12 @@ describe("DingTalk account", () => {
     expect(view).not.toHaveProperty("userId");
     const run = await account.bind();
     await expect(run(command)).resolves.toEqual({ ok: true });
-    expect(cli.run).toHaveBeenCalledExactlyOnceWith(identity, command, expect.any(AbortSignal));
+    expect(cli.run).toHaveBeenCalledExactlyOnceWith(
+      identity,
+      command,
+      expect.any(AbortSignal),
+      undefined,
+    );
   });
 
   it("opens one official login and drains late completion before clearing it", async () => {
@@ -74,6 +80,34 @@ describe("DingTalk account", () => {
     expect(cli.run).not.toHaveBeenCalled();
   });
 
+  it("refreshes the displayed identity without replacing an invalid generation", async () => {
+    const { cli, account } = fixture(identity);
+    const clock = vi.spyOn(Date, "now").mockReturnValue(0);
+    try {
+      expect(await account.view()).toMatchObject({ state: "connected" });
+      const run = await account.bind();
+      expect(await account.view()).toMatchObject({ state: "connected" });
+      expect(cli.status).toHaveBeenCalledTimes(1);
+      clock.mockReturnValue(60_000);
+      cli.status.mockResolvedValue({ ...identity, corpId: "other" });
+      expect(await account.view()).toMatchObject({ state: "failed", capabilities: [] });
+      await expect(run(command)).rejects.toThrow();
+      expect(cli.run).not.toHaveBeenCalled();
+    } finally {
+      clock.mockRestore();
+    }
+  });
+
+  it("blocks work during a transient status error without discarding the account", async () => {
+    const { cli, account } = fixture(identity);
+    const run = await account.bind();
+    cli.status.mockRejectedValueOnce(new Error("PRIVATE_OUTPUT"));
+    await expect(run(command)).rejects.toThrow("无法验证");
+    expect(cli.run).not.toHaveBeenCalled();
+    expect(await account.view()).toMatchObject({ state: "connected" });
+    await expect(run(command)).resolves.toEqual({ ok: true });
+  });
+
   it("requires cleanup after an unsuccessful browser flow", async () => {
     const { cli, account } = fixture();
     cli.login.mockRejectedValueOnce(new Error("FAKE_PRIVATE_OUTPUT"));
@@ -100,6 +134,23 @@ describe("DingTalk account", () => {
     expect(await disconnect).toMatchObject({ state: "disconnected" });
     await expect(original(command)).rejects.toThrow();
     expect(cli.run).toHaveBeenCalledTimes(1);
+  });
+
+  it("records disconnect intent before draining and finishes reset during shutdown", async () => {
+    const { cli, account } = fixture(identity);
+    const run = await account.bind();
+    const operation = deferred<unknown>();
+    cli.run.mockReturnValue(operation.promise);
+    const pending = expect(run(command)).rejects.toThrow();
+    await vi.waitFor(() => expect(cli.run).toHaveBeenCalledTimes(1));
+    const disconnect = account.disconnect();
+    expect(cli.markResetPending).toHaveBeenCalledTimes(1);
+    const stop = account.stop();
+    expect(cli.reset).not.toHaveBeenCalled();
+    operation.resolve({ ok: true });
+    await Promise.all([pending, disconnect, stop]);
+    expect(cli.reset).toHaveBeenCalledTimes(1);
+    expect(cli.reset.mock.calls[0]?.[0].aborted).toBe(false);
   });
 
   it("stops without removing local authorization", async () => {

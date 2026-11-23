@@ -119,9 +119,11 @@ export function groupName(value: unknown, groupId: string): string {
 
 export function minutesSummary(value: unknown, id: string) {
   const data = result(value);
-  if (data.complete !== true || data.taskUuid !== id || typeof data.summary !== "string")
-    throw responseError();
-  return { summary: data.summary };
+  if (data.complete !== true || data.taskUuid !== id) throw responseError();
+  const artifact = result(data.summary);
+  const summary = result(artifact.result).fullSummary;
+  if (typeof summary !== "string") throw responseError();
+  return { summary };
 }
 
 export function calendarReceipt(value: unknown) {
@@ -154,7 +156,29 @@ export function documentReceipt(value: unknown) {
 
 export function messageReceipt(value: unknown) {
   const envelope = result(value);
-  if (envelope.ok !== true || result(envelope.result).success !== true) throw responseError();
+  if (
+    envelope.ok !== true ||
+    envelope.identity !== "user" ||
+    envelope.tool !== "send_personal_message"
+  )
+    throw responseError();
+  const raw = result(envelope.result);
+  const details = raw.result === undefined ? raw : result(raw.result);
+  const receipt = result(envelope.sendReceipt);
+  if (receipt.contractVersion !== "im.message-send-receipt.v1") throw responseError();
+  const reference = receipt.messageRef === undefined ? undefined : object(receipt.messageRef);
+  const hasId = (v: unknown) => typeof v === "string" && v.trim() !== "";
+  const status = details.sendStatus ?? raw.sendStatus;
+  if (
+    (status !== undefined && status !== "accepted") ||
+    !(
+      raw.success === true ||
+      details.success === true ||
+      hasId(receipt.openTaskId) ||
+      hasId(reference?.openMessageId)
+    )
+  )
+    throw responseError();
   // DWS acknowledges the send request, not delivery to members' devices.
   return { accepted: true };
 }

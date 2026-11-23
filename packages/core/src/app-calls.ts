@@ -82,6 +82,21 @@ function itemForCall(base: Item, call: AppCall): Item {
   };
 }
 
+/** Apply the owner's explicit deny before a built-in office preflight can contact the provider. */
+export function blockDeniedOfficePreflight(ctx: HerdContext, taskId: string, call: AppCall): void {
+  const provider = officeProvider(call);
+  if (provider === undefined) return;
+  const hit = matchRules(ctx.store.listRules(), itemFor(ctx, taskId, [call]), ctx.opts.userHome);
+  if (hit?.action !== "deny") return;
+  ctx.store.audit("app.call.preflight", {
+    taskId,
+    slug: call.slug,
+    action: "deny",
+    ruleId: hit.rule.id,
+  });
+  throw new Error(`${provider} call blocked by rule ${hit.rule.id}`);
+}
+
 /** The pipeline's answer for one call, as if it came alone. */
 function decideOne(ctx: HerdContext, base: Item, call: AppCall): PipelineResult {
   const item = itemForCall(base, call);
@@ -181,7 +196,9 @@ export async function approveAppCalls(
       },
       decision.reason,
       ctx.following.get(taskId)?.task.title,
-      officeCalls.length > 0,
+      officeCalls.some((call) => call.toolkit === "builtin:dingtalk")
+        ? "separate-card"
+        : officeCalls.length > 0,
     );
   });
   if (!allowed) return false;

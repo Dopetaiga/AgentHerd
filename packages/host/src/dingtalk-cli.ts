@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { mkdir } from "node:fs/promises";
+import { mkdir, rm, stat, writeFile } from "node:fs/promises";
 import { isAbsolute, join } from "node:path";
 
 export type DingTalkIdentity = Readonly<{
@@ -13,8 +13,14 @@ export type DingTalkCommand = Readonly<{ args: readonly string[]; stdin?: string
 export interface DingTalkCliPort {
   status(signal: AbortSignal): Promise<DingTalkIdentity | undefined>;
   login(signal: AbortSignal): Promise<void>;
+  markResetPending(): Promise<void>;
   reset(signal: AbortSignal): Promise<void>;
-  run(identity: DingTalkIdentity, command: DingTalkCommand, signal: AbortSignal): Promise<unknown>;
+  run(
+    identity: DingTalkIdentity,
+    command: DingTalkCommand,
+    signal: AbortSignal,
+    beforeDispatch?: () => void,
+  ): Promise<unknown>;
 }
 
 interface Options {
@@ -50,6 +56,7 @@ const messages = {
   cancelled: "钉钉操作已取消或超时；若是写操作，请先确认结果再重试。",
   output_limit: "钉钉返回的数据过大，请缩小查询范围。",
   invalid_response: "无法验证钉钉返回的结果。",
+  reset_pending: "本地钉钉授权尚未清除。",
 };
 
 class DingTalkCliError extends Error {
@@ -66,6 +73,7 @@ export async function runDws(
   command: DingTalkCommand,
   signal: AbortSignal,
   json: boolean,
+  beforeDispatch?: () => void,
 ): Promise<unknown> {
   if (!isAbsolute(executable) || !isAbsolute(stateDir)) throw new DingTalkCliError("unavailable");
   if (signal.aborted) throw new DingTalkCliError("cancelled");
@@ -81,6 +89,7 @@ export async function runDws(
   env.DWS_CONFIG_DIR = join(stateDir, "config");
   env.DWS_KEYCHAIN_DIR = join(stateDir, "credentials");
 
+  beforeDispatch?.();
   return new Promise((resolve, reject) => {
     const child = spawn(executable, [...command.args], {
       cwd: stateDir,
@@ -162,20 +171,47 @@ function identityFromStatus(value: unknown): DingTalkIdentity | undefined {
 }
 
 export function dingtalkCli(options: Options): DingTalkCliPort {
-  const execute = (command: DingTalkCommand, signal: AbortSignal, json: boolean, ms = 30_000) =>
-    runDws(options, command, AbortSignal.any([signal, AbortSignal.timeout(ms)]), json);
+  const execute = (
+    command: DingTalkCommand,
+    signal: AbortSignal,
+    json: boolean,
+    ms = 30_000,
+    beforeDispatch?: () => void,
+  ) =>
+    runDws(
+      options,
+      command,
+      AbortSignal.any([signal, AbortSignal.timeout(ms)]),
+      json,
+      beforeDispatch,
+    );
+  const resetMarker = join(options.stateDir, "reset-pending");
+  const markResetPending = async () => {
+    if (!isAbsolute(options.stateDir)) throw new DingTalkCliError("unavailable");
+    await mkdir(options.stateDir, { recursive: true, mode: 0o700 });
+    await writeFile(resetMarker, "", { mode: 0o600, flush: true });
+  };
   return {
-    status: async (signal) =>
-      identityFromStatus(
+    markResetPending,
+    status: async (signal) => {
+      try {
+        await stat(resetMarker);
+        throw new DingTalkCliError("reset_pending");
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      }
+      return identityFromStatus(
         await execute({ args: ["auth", "status", "--readonly", "--format=json"] }, signal, true),
-      ),
+      );
+    },
     login: async (signal) => {
       await execute({ args: ["auth", "login", "--format=json"] }, signal, false, 300_000);
     },
     reset: async (signal) => {
       await execute({ args: ["auth", "reset"] }, signal, false);
+      await rm(resetMarker, { force: true });
     },
-    run: (identity, command, signal) => {
+    run: (identity, command, signal, beforeDispatch) => {
       if (!profileId(identity.corpId) || !profileId(identity.userId)) {
         throw new DingTalkCliError("invalid_response");
       }
@@ -184,6 +220,8 @@ export function dingtalkCli(options: Options): DingTalkCliPort {
         { ...command, args: [...command.args, `--profile=${profile}`, "--format=json"] },
         signal,
         true,
+        30_000,
+        beforeDispatch,
       );
     },
   };

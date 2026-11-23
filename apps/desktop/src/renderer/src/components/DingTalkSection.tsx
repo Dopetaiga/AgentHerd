@@ -41,7 +41,7 @@ export function DingTalkRow({
     [],
   );
   useEffect(() => {
-    if ((state !== undefined && !connecting) || busy || problem !== "") return;
+    if ((state !== undefined && !connecting && !connected) || busy || problem !== "") return;
     const started = revision.current;
     let active = true;
     let timer: ReturnType<typeof setTimeout>;
@@ -51,6 +51,7 @@ export function DingTalkRow({
         if (!active || next === undefined) return;
         onView(next);
         if (next.state === "connecting") timer = setTimeout(read, 1000);
+        if (next.state === "connected") timer = setTimeout(read, 30_000);
       } catch {
         if (active && started === revision.current) {
           setProblem("无法读取钉钉连接状态，请重新检查。");
@@ -63,7 +64,7 @@ export function DingTalkRow({
       active = false;
       clearTimeout(timer);
     };
-  }, [state, connecting, busy, problem, onView]);
+  }, [state, connecting, connected, busy, problem, onView]);
 
   async function update(request: (remote: RemoteHost) => Promise<DingTalkView>) {
     const started = ++revision.current;

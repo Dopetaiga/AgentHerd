@@ -1,11 +1,16 @@
 import type { DingTalkView } from "./api.ts";
 import type { DingTalkCliPort, DingTalkCommand, DingTalkIdentity } from "./dingtalk-cli.ts";
 
-export type BoundDingTalkRun = (command: DingTalkCommand) => Promise<unknown>;
+export type BoundDingTalkRun = (
+  command: DingTalkCommand,
+  beforeDispatch?: () => void,
+) => Promise<unknown>;
 
 export const DINGTALK_DISCONNECTED: DingTalkView = { state: "disconnected", capabilities: [] };
 const CONNECTING: DingTalkView = { state: "connecting", capabilities: [] };
 const CHANGED = "钉钉账号连接已变更，请重新连接后再发起任务。";
+const STATUS_UNAVAILABLE = "暂时无法验证钉钉账号状态，本次未执行。";
+const STATUS_INTERVAL_MS = 30_000;
 
 /** One user/organization. A prepared command cannot move between generations. */
 export class DingTalkAccount {
@@ -15,6 +20,8 @@ export class DingTalkAccount {
   private initialized = false;
   private stopped = false;
   private restoreRun: Promise<void> | undefined;
+  private refreshRun: Promise<void> | undefined;
+  private checkedAt = 0;
   private loginRun: Promise<void> | undefined;
   private resetRun: Promise<void> | undefined;
   private readonly active = new Set<Promise<unknown>>();
@@ -25,6 +32,7 @@ export class DingTalkAccount {
   }
 
   private connected(identity: DingTalkIdentity) {
+    this.checkedAt = Date.now();
     this.identity = Object.freeze({ ...identity });
     const { corpName, userName } = identity;
     this.current = {
@@ -57,8 +65,30 @@ export class DingTalkAccount {
     await this.restoreRun;
   }
 
+  private async verify(identity: DingTalkIdentity, signal: AbortSignal): Promise<void> {
+    const actual = await this.cli.status(signal).catch(() => {
+      throw new Error(signal.aborted ? CHANGED : STATUS_UNAVAILABLE);
+    });
+    if (signal.aborted) throw new Error(CHANGED);
+    if (actual?.corpId !== identity.corpId || actual?.userId !== identity.userId) {
+      this.fail(CHANGED);
+      throw new Error(CHANGED);
+    }
+    this.connected(actual);
+  }
+
   async view(): Promise<DingTalkView> {
     await this.restore();
+    if (this.refreshRun !== undefined) await this.refreshRun;
+    else if (this.identity !== undefined && Date.now() - this.checkedAt >= STATUS_INTERVAL_MS) {
+      this.checkedAt = Date.now();
+      this.refreshRun = this.verify(this.identity, this.generation.signal)
+        .catch(() => {})
+        .finally(() => {
+          this.refreshRun = undefined;
+        });
+      await this.refreshRun;
+    }
     return this.current;
   }
 
@@ -97,7 +127,7 @@ export class DingTalkAccount {
   }
 
   private drain(): Promise<unknown> {
-    return Promise.allSettled([this.restoreRun, this.loginRun, ...this.active]);
+    return Promise.allSettled([this.restoreRun, this.refreshRun, this.loginRun, ...this.active]);
   }
 
   async disconnect(): Promise<DingTalkView> {
@@ -111,12 +141,12 @@ export class DingTalkAccount {
     this.identity = undefined;
     this.initialized = true;
     this.current = DINGTALK_DISCONNECTED;
-    const { signal } = this.generation;
     this.resetRun = (async () => {
-      await this.drain();
-      if (this.stopped) return;
       try {
-        await this.cli.reset(signal);
+        await this.cli.markResetPending();
+        await this.drain();
+        // Shutdown invalidates business operations, not an owner's pending local reset.
+        await this.cli.reset(new AbortController().signal);
       } catch {
         if (!this.stopped) this.fail("无法清除本地钉钉授权，请重试断开。");
       }
@@ -138,16 +168,12 @@ export class DingTalkAccount {
     const check = () => {
       if (signal.aborted) throw new Error(CHANGED);
     };
-    return async (command) => {
+    return async (command, beforeDispatch) => {
       check();
       const run = (async () => {
-        const actual = await this.cli.status(signal).catch(() => undefined);
+        await this.verify(identity, signal);
         check();
-        if (actual?.corpId !== identity.corpId || actual?.userId !== identity.userId) {
-          this.fail(CHANGED);
-          throw new Error(CHANGED);
-        }
-        const result = await this.cli.run(identity, command, signal);
+        const result = await this.cli.run(identity, command, signal, beforeDispatch);
         check();
         return result;
       })();

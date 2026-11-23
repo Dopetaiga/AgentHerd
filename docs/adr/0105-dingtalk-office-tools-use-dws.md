@@ -12,7 +12,7 @@ Ship the official CLI at a verified version. Use the same account placement and 
 
 Use an explicit catalog and fixed command arguments. Validate reads, page bounds and target groups before dispatch. Do not expose a generic CLI, direct messages, local file input, inbound events or a direct Herder tool. AI minutes are not a complete video meeting history.
 
-A group text, new calendar event or new document needs one fresh confirmation from the bound owner on Feishu. A matching deny wins before or after confirmation. Disconnect or account change invalidates the prepared command. Never automatically retry an uncertain write. Disconnect clears only the local AgentHerd login; the owner can revoke the organization grant separately.
+A group text, new calendar event or new document needs one fresh confirmation from the bound owner on a dedicated Feishu card. Text and batch approvals cannot authorize it. An explicit deny prevents provider preflight and is checked again after confirmation and account verification. Disconnect or account change invalidates the prepared command. Never automatically retry an uncertain write. Disconnect clears only the local AgentHerd login; if cleanup is interrupted, the next launch will not restore the old account. The owner can revoke the organization grant separately.
 
 ## Consequences
 

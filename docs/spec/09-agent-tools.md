@@ -301,7 +301,8 @@ permission for the requested data. The capability badges describe tools, not gra
 Task agents can list calendar events, find and read documents, find groups and read or
 search their messages, and find AI 听记 and read summaries or transcripts. Direct messages
 and the general video meeting history are out of scope. Every group text, new event or new
-document asks the current owner on Feishu, even in auto mode or under an allow rule. Deny
+document gets its own Feishu approval card, even in auto mode or under an allow rule.
+The bound owner must approve on that card; batch or text approvals do not count. Deny
 still wins. Changing or disconnecting the account invalidates waiting calls. A cancelled or
 uncertain write is not retried; check the destination before trying again.
 

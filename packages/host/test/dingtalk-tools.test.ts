@@ -2,7 +2,18 @@ import { expect, it, vi } from "vitest";
 import type { BoundDingTalkRun } from "../src/dingtalk-account.ts";
 import { dingtalkTools } from "../src/dingtalk-tools.ts";
 
-function fixture(result: unknown = { ok: true, result: { success: true } }) {
+function fixture(
+  result: unknown = {
+    ok: true,
+    identity: "user",
+    tool: "send_personal_message",
+    result: { result: { openMessageId: "new-msg", sendStatus: "accepted" } },
+    sendReceipt: {
+      contractVersion: "im.message-send-receipt.v1",
+      messageRef: { openMessageId: "new-msg" },
+    },
+  },
+) {
   const run = vi.fn<BoundDingTalkRun>().mockImplementation(async ({ args }) =>
     args[1] === "+conversation-info"
       ? {
@@ -99,6 +110,34 @@ it("rejects path-like arguments, unknown flags, resource markup and invalid date
     }),
   ).rejects.toThrow();
   expect(run).not.toHaveBeenCalled();
+});
+
+it("reads the full summary from the pinned single-ID minutes detail envelope", async () => {
+  const { tools, run } = fixture({
+    complete: true,
+    failureCount: 0,
+    taskUuid: "minute-example",
+    summary: { success: true, result: { fullSummary: "Example summary" } },
+  });
+  await expect(
+    tools.call("dingtalk_minutes_summary", { minutesId: "minute-example" }),
+  ).resolves.toEqual({
+    content: [{ type: "text", text: JSON.stringify({ summary: "Example summary" }) }],
+  });
+  expect(run.mock.lastCall?.[0].args).toEqual([
+    "minutes",
+    "+detail",
+    "--id=minute-example",
+    "--artifacts=summary",
+  ]);
+  run.mockResolvedValue({
+    complete: false,
+    taskUuid: "minute-example",
+    summary: { error: "FAKE_PRIVATE_PROVIDER_ERROR" },
+  });
+  await expect(
+    tools.call("dingtalk_minutes_summary", { minutesId: "minute-example" }),
+  ).rejects.toThrow("无法验证");
 });
 
 it("retains verified document receipt and passes inline text by stdin only", async () => {
