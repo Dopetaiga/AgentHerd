@@ -1197,6 +1197,14 @@ export interface WecomView {
   capabilities: { id: string; name: string; toolCount: number }[];
 }
 
+export interface DingTalkView {
+  state: "disconnected" | "connecting" | "connected" | "failed";
+  corpName?: string;
+  userName?: string;
+  error?: string;
+  capabilities: { id: string; name: string; toolCount: number }[];
+}
+
 export const HOST_METHODS: readonly HostMethod[] = [
   "status",
   "tasks",
