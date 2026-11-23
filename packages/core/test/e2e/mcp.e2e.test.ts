@@ -186,13 +186,19 @@ function fakePluginTools(ran: string[]): AppTools {
       },
     ],
   ]);
+  const execute = async (name: string) => {
+    ran.push(name);
+    return { content: [{ type: "text", text: "ok" }] };
+  };
   return {
     list: async () => [...known.keys()].map((name) => ({ name, inputSchema: {} })),
     describe: async (names) => new Map([...known].filter(([name]) => names.includes(name))),
-    call: async (name) => {
-      ran.push(name);
-      return { content: [{ type: "text", text: "ok" }] };
+    preflight: (name, args) => {
+      if (known.get(name)?.toolkit !== "builtin:wecom") return undefined;
+      if (JSON.stringify(args) !== "{}") throw new Error("Invalid WeCom CLI tool arguments.");
+      return { approvalArguments: { fields: [], listSizes: {} }, execute: () => execute(name) };
     },
+    call: execute,
   };
 }
 
@@ -350,6 +356,34 @@ async function pendingAppItem(channel: FakeChannel, pending: ReturnType<Herd["mc
 }
 
 describe("E2E-MCP-WECOM", () => {
+  it("rejects invalid input without creating an approval or writing an app call audit row", async () => {
+    const ran: string[] = [];
+    const { herd, tokens, channel } = await setup(profile(SLOW), fakePluginTools(ran));
+    const token = await startPluginTask(herd, tokens);
+    const request = callPlugin("WECOM__send_message");
+    const insertItem = vi.spyOn(herd.store, "insertItem");
+    try {
+      const response = await Promise.race([
+        herd.mcp(token, {
+          ...request,
+          params: { ...request.params, arguments: { access_token: "unused" } },
+        }),
+        channel.waitFor(isOpenItem).then(() => {
+          throw new Error("Invalid WeCom input opened an inbox item");
+        }),
+      ]);
+      expect(response?.result).toMatchObject({
+        isError: true,
+        content: [{ type: "text", text: "app call failed: Invalid WeCom CLI tool arguments." }],
+      });
+      expect(insertItem).not.toHaveBeenCalled();
+      expect(herd.store.auditRows("app.call")).toEqual([]);
+      expect(ran).toEqual([]);
+    } finally {
+      insertItem.mockRestore();
+    }
+  });
+
   it.each(MODES)("requires a fresh owner confirmation for each write in %s", async (mode) => {
     const ran: string[] = [];
     const { herd, tokens, channel } = await setup(profile(SLOW), fakePluginTools(ran), mode);

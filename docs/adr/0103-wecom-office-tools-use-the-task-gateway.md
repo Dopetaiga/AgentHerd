@@ -6,26 +6,29 @@
 
 ## Context
 
-The owner wants WeCom office capabilities without adding a second way to control AgentHerd.
-WeCom issues separate, credential-bearing Streamable HTTP URLs for robot permissions.
+The owner wants one WeCom account connection for several office services without adding a
+second way to control AgentHerd. WeCom's remote MCP setup requires a separate credential-bearing
+URL per capability. Its [official CLI](https://github.com/WecomTeam/wecom-cli) supports one QR login.
 
 ## Decision
 
-Add WeCom under app connections. Only the host uses the official endpoint URLs, which live
-in the existing secret store. Reuse the remote MCP client and task gateway, but give WeCom
-its own tool policy: anything not clearly read-only requires a decision on the existing
-owner channel in every mode. Do not expose chat history, archiving or incoming events.
+Use the pinned official CLI in the host with a dedicated local config directory. Show the short-lived
+login QR only in desktop settings. Let the CLI store its own credentials; keep them out of AgentHerd
+settings, the database and agent context. Register office methods as typed task tools from the CLI
+catalog. Do not offer an arbitrary CLI command, local file transfer, incoming chat events or chat history.
+
+Verified read operations follow the existing read policy. Every write or uncertain operation requires the
+existing Feishu owner decision, even if an allow rule or auto mode would otherwise permit it. A task
+cannot use a tool confirmed for a previous login after the owner disconnects or switches accounts.
 
 ## Alternatives
 
-- A WeCom channel: would add a second control and approval surface the owner does not need.
-- A generic plugin: can reach MCP, but has a different import flow and policy and does not
-  exclude chat history.
-- The WeCom CLI: adds a local program and exposes command execution rather than the remote
-  tool schemas and permission-specific scopes.
+- A WeCom channel: adds a second control surface the owner does not want.
+- Manually imported MCP URLs: avoids a local process but makes the owner copy configuration per capability.
+- A shell tool or CLI skill: makes it harder to constrain methods, file access and approvals.
 
 ## Consequences
 
-The owner authorizes individual capabilities in WeCom and can remove local credentials
-without changing the Feishu channel. Only tools the server grants and the connector permits
-are available. A real tenant is required to verify what its grants expose.
+The CLI catalog describes supported methods, not the permissions of the logged-in owner. WeCom
+still decides whether to accept each request. Disconnect clears the local login; revoking grants in WeCom
+is separate. The official npm binary includes [upstream call-chain reporting](https://github.com/WecomTeam/wecom-cli/blob/main/docs/data-collection.md).

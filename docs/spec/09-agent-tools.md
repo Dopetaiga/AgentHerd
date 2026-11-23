@@ -269,25 +269,25 @@ New tasks get a note listing each skill with its `SKILL.md` path.
 
 ## 3g. WeCom office connection (ADR 0103)
 
-Under 应用连接 → 账号 → 企业微信, paste a Streamable HTTP URL or JSON Config from the
-[official WeCom permission screen](https://open.work.weixin.qq.com/help2/pc/21676). Add a
-configuration for each capability you want to use. Importing the same capability replaces
-its credential; one failed capability does not prevent other capabilities from working.
-The page shows a connection state and tool count. Discovery allows up to 30 seconds per
-capability. Use 检查连接 to discover the tools again. If a remote session expires, calls from
-its old task snapshot fail without replay; a new task discovers and classifies tools again.
-Removing a capability removes its local credential; revoke its WeCom authorization separately
-if needed.
+In 应用连接 → 账号 → 企业微信, choose 扫码登录 and scan with WeCom. One login supplies
+credentials for the office services; no Bot Secret or per-service MCP URL is needed. The
+host runs the [official WeCom CLI](https://github.com/WecomTeam/wecom-cli) in a dedicated
+local profile. Cancel hides the QR and stops the pending login. Disconnect clears the local
+login and blocks calls from older tasks; revoke WeCom grants separately if needed.
 
-Authorized office tools are discovered from the server and checked against their capability
-family. Tools that cannot be identified as an allowed office or bot operation are not exposed.
-Depending on the grants, they may cover documents and sheets, mail, to-dos, calendars,
-meetings and minutes, WeDrive, contacts, identity and supported bot messaging. For bot
-chats, only sending and listing eligible recent conversations are supported; no chat
-history, archiving, or incoming events. WeCom is not a channel and is not exposed as a direct
-Herder tool. The owner continues to direct work and confirm writes through Feishu. The
-existing rules apply to verified read-only tools. Every write or ambiguous operation asks
-for approval, even in auto mode or when an allow rule matches; existing denies still block.
+The tool list covers supported calendars, meetings and minutes, to-dos, documents,
+mail, WeDrive metadata, contacts and eligible bot messaging. Listed
+tools come from the CLI catalog; they do not prove that the account has the associated
+WeCom grant. If WeCom rejects an operation, check that capability's authorization.
+Methods that need unrestricted local file access are not exposed. For bot chats, only
+approved sending and recent conversation metadata are in scope; no chat history,
+archiving or incoming events.
+
+WeCom is not a control channel and is not exposed as a direct Herder tool. The owner
+continues to direct work and confirm writes through Feishu. Existing rules apply to
+verified reads. Every write or uncertain call asks for approval, even in auto mode or
+when an allow rule matches; existing denies still block. The official npm binary includes
+[upstream call-chain reporting](https://github.com/WecomTeam/wecom-cli/blob/main/docs/data-collection.md).
 
 ## 4. Failure behavior
 

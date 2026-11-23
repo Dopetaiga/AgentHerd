@@ -157,6 +157,7 @@ export async function approveAppCalls(
     return allowed;
   }
 
+  const wecomCalls = calls.filter(isWeCom);
   ctx.registry.set(taskId, "waiting-approval");
   const allowed = await new Promise<boolean>((resolve) => {
     let done = false;
@@ -173,11 +174,11 @@ export async function approveAppCalls(
       },
       decision.reason,
       ctx.following.get(taskId)?.task.title,
+      wecomCalls.length > 0,
     );
   });
   if (!allowed) return false;
 
-  const wecomCalls = calls.filter(isWeCom);
   if (wecomCalls.length === 0) return true;
 
   // Rules can change while the owner is deciding. Only a current deny overrides their answer;

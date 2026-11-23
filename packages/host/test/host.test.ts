@@ -152,36 +152,51 @@ describe("Host", () => {
     });
   });
 
-  it("imports and removes WeCom credentials through the local host API without changing the channel", async () => {
+  it("connects multiple WeCom office services through one scan without changing the channel", async () => {
     const home = mkdtempSync(join(tmpdir(), "ah-"));
     writeConfig(home, { channel: { channelId: "fake", ownerId: "owner", data: {} } });
     const secrets = memorySecrets();
-    const requests: string[] = [];
+    let signedIn = false;
+    let scans = 0;
+    let finish = () => {};
+    const scanned = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
     const host = new Host({
       home,
       secrets,
       env: {},
       profiles: () => [],
       createChannel: () => new FakeChannel(),
-      fetch: async (url, init) => {
-        expect(new URL(String(url)).hostname).toBe("qyapi.weixin.qq.com");
-        expect(init?.redirect).toBe("error");
-        const request = JSON.parse(String(init?.body));
-        requests.push(request.method);
-        if (request.method === "notifications/initialized")
-          return new Response(null, { status: 202 });
-        return Response.json({
-          jsonrpc: "2.0",
-          id: request.id,
-          result:
-            request.method === "tools/list"
-              ? { tools: [{ name: "get_meeting_minutes", inputSchema: { type: "object" } }] }
-              : {
-                  protocolVersion: "2025-06-18",
-                  capabilities: { tools: {} },
-                  serverInfo: { name: "wecom-fixture", version: "1" },
-                },
-        });
+      wecomCli: {
+        status: async () => signedIn,
+        login: async (qr) => {
+          scans++;
+          qr("data:image/png;base64,ZmFrZQ==");
+          await scanned;
+          signedIn = true;
+        },
+        logout: async () => {
+          signedIn = false;
+        },
+        run: async (args) => {
+          if (args[1] === "list") {
+            return Object.entries({
+              calendar: "calendar.schedules.list",
+              meeting: "meeting.list",
+              todo: "todo.list",
+            }).map(([name, method]) => ({
+              name,
+              methods: [{ name: method, description: "List items" }],
+            }));
+          }
+          return {
+            method: args[2],
+            request: { type: "object", properties: {} },
+            schemas: {},
+            response: {},
+          };
+        },
       },
     });
     cleanups.push(() => host.stop());
@@ -189,19 +204,24 @@ describe("Host", () => {
     cleanups.push(() => server.close());
     const client = await connectHost(socketPath(home));
     cleanups.push(async () => client.close());
-    expect(await client.host.wecom()).toEqual({ connections: [] });
-    const view = await client.host.configureWecom(
-      "https://qyapi.weixin.qq.com/mcp/v2/bot/meeting?token=fake-view-secret",
-    );
-    expect(view.connections).toEqual([
-      { id: "meeting", name: "会议", state: "ready", toolCount: 1 },
-    ]);
-    expect(requests).toEqual(["initialize", "notifications/initialized", "tools/list"]);
-    expect(JSON.stringify(view)).not.toContain("fake-view-secret");
-    expect(readFileSync(join(home, "config.json"), "utf8")).not.toContain("fake-view-secret");
+    expect(await client.host.wecom()).toEqual({ state: "disconnected", capabilities: [] });
+    await client.host.startWecomLogin();
+    expect(await client.host.wecom()).toMatchObject({
+      state: "connecting",
+      qr: "data:image/png;base64,ZmFrZQ==",
+    });
+    finish();
+    await expect.poll(async () => (await client.host.wecom()).state).toBe("connected");
+    const view = await client.host.wecom();
+    expect(view.capabilities.map(({ id }) => id).sort()).toEqual(["calendar", "meeting", "todo"]);
+    expect(scans).toBe(1);
+    expect(view.qr).toBeUndefined();
+    expect(readFileSync(join(home, "config.json"), "utf8")).not.toContain("data:image");
     expect(readConfig(home).channel?.channelId).toBe("fake");
-    expect(await client.host.removeWecom("meeting")).toEqual({ connections: [] });
-    expect(secrets.get("wecom:mcp")).toBeUndefined();
+    expect(await client.host.disconnectWecom()).toEqual({
+      state: "disconnected",
+      capabilities: [],
+    });
   });
 
   it("reconnects the channel on request", async () => {

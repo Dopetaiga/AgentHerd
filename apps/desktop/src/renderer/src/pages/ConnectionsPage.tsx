@@ -27,12 +27,11 @@ function Summary({ wecom }: { wecom: WecomView | undefined }) {
     (lark.state === "ready" ? 1 : 0) +
     (apps.apps.some((a) => a.slug === "notion" && a.connected) ? 1 : 0) +
     (vault !== undefined && vault !== "" ? 1 : 0) +
-    (wecom?.connections.filter(({ state, toolCount }) => state === "ready" && toolCount > 0)
-      .length ?? 0);
+    (wecom?.state === "connected" ? 1 : 0);
   const failed =
     socials.filter((s) => s.state === "failed").length +
     (lark.state === "failed" ? 1 : 0) +
-    (wecom?.connections.filter((connection) => connection.state === "failed").length ?? 0);
+    (wecom?.state === "failed" ? 1 : 0);
   return (
     <p className="text-ink-2 text-md">
       {connected === 0 ? "还没连接账号" : `已连接 ${connected} 个`}

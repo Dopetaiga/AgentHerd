@@ -83,36 +83,6 @@ function simulation(): Sim {
   return SIMS.find((s) => s === value) ?? "fresh";
 }
 
-// Preview keeps only tool domains, not URLs, query values or pasted server names.
-function previewWecomDomains(input: string): string[] {
-  const config = input.trim();
-  const json: unknown = config.startsWith("{") ? JSON.parse(config) : undefined;
-  const servers = json && typeof json === "object" && "mcpServers" in json && json.mcpServers;
-  const urls: unknown[] =
-    servers && typeof servers === "object" && !Array.isArray(servers)
-      ? Object.values(servers).map((server: unknown) =>
-          server && typeof server === "object" && "url" in server ? server.url : undefined,
-        )
-      : [config];
-  if (urls.length === 0) throw new Error("Missing MCP server");
-  return urls.map((value) => {
-    if (typeof value !== "string") throw new Error("Missing MCP URL");
-    const url = new URL(value);
-    const domain = /^\/mcp\/v\d+\/bot\/([a-z][a-z0-9_-]{0,39})\/?$/i.exec(url.pathname)?.[1];
-    if (
-      url.origin !== "https://qyapi.weixin.qq.com" ||
-      url.username ||
-      url.password ||
-      url.hash ||
-      !url.search ||
-      domain === undefined
-    ) {
-      throw new Error("请粘贴企业微信官方的 MCP JSON 或 URL");
-    }
-    return domain.toLowerCase();
-  });
-}
-
 function installFakeBridge(): void {
   const sim = simulation();
   const herderChosen = sim !== "fresh" && sim !== "bound" && sim !== "network";
@@ -475,22 +445,14 @@ function installFakeBridge(): void {
   );
   let watches: WatchView[] = sampleWatches(sim === "empty" || sim === "no-agent");
   let lark: LarkView = sampleLark(sim === "empty" || sim === "no-agent");
-  const wecom = new Map<string, WecomView["connections"][number]>();
-  const wecomNames = new Map([
-    ["doc", "文档"],
-    ["calendar", "日程"],
-    ["message", "消息"],
-    ["mail", "邮件"],
-    ["todo", "待办"],
-    ["meeting", "会议"],
-  ]);
-  const wecomView = (): WecomView => ({ connections: [...wecom.values()] });
-  const wecomEntry = (id: string): WecomView["connections"][number] => ({
-    id,
-    name: wecomNames.get(id) ?? `企业微信 (${id})`,
-    state: failing === "wecom" ? "failed" : "ready",
-    toolCount: failing === "wecom" ? 0 : 3,
-  });
+  const wecomDisconnected: WecomView = { state: "disconnected", capabilities: [] };
+  let wecom = wecomDisconnected;
+  let wecomTimer: ReturnType<typeof setTimeout> | undefined;
+  const clearWecom = () => {
+    clearTimeout(wecomTimer);
+    wecom = wecomDisconnected;
+    return delay(wecom);
+  };
   let feeds: FeedView[] = sampleFeeds();
   let westock: WestockView = {
     enabled: true,
@@ -803,25 +765,26 @@ function installFakeBridge(): void {
       lark = { state: "signed-out", version: "1.4.0" };
       return delay(lark);
     },
-    wecom: () => delay(wecomView()),
-    configureWecom: async (input) => {
-      let domains: string[];
-      try {
-        domains = previewWecomDomains(input);
-      } catch {
-        throw new Error("请粘贴企业微信官方的 MCP JSON 或 URL");
-      }
-      for (const id of domains) wecom.set(id, wecomEntry(id));
-      return delay(wecomView());
+    wecom: () => delay(wecom),
+    startWecomLogin: () => {
+      if (wecom.state === "connecting" || wecom.state === "connected") return delay(wecom);
+      wecom = { state: "connecting", qr: PLACEHOLDER_QR, capabilities: [] };
+      wecomTimer = setTimeout(() => {
+        wecom =
+          failing === "wecom"
+            ? { state: "failed", capabilities: [] }
+            : {
+                state: "connected",
+                capabilities: [
+                  { id: "doc", name: "文档", toolCount: 3 },
+                  { id: "calendar", name: "日程", toolCount: 3 },
+                ],
+              };
+      }, 4000);
+      return delay(wecom);
     },
-    checkWecom: () => {
-      for (const id of wecom.keys()) wecom.set(id, wecomEntry(id));
-      return delay(wecomView());
-    },
-    removeWecom: (id) => {
-      wecom.delete(id);
-      return delay(wecomView());
-    },
+    cancelWecomLogin: () => (wecom.state === "connecting" ? clearWecom() : delay(wecom)),
+    disconnectWecom: clearWecom,
     pet: () => delay(pet),
     petSay: (text, paths = []) => {
       if (!pet.connected)
