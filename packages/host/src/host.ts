@@ -72,6 +72,7 @@ import type {
   AppsView,
   DanjuanTest,
   DanjuanView,
+  DingTalkView,
   FeedSource,
   FeedView,
   HerderActivityView,
@@ -144,7 +145,7 @@ import { type CliConfig, readConfig, secretFile, writeConfig } from "./config.ts
 import { Danjuan, type DanjuanBrowser } from "./danjuan.ts";
 import { DingTalkAccount } from "./dingtalk-account.ts";
 import { type DingTalkCliPort, dingtalkCli } from "./dingtalk-cli.ts";
-import { dingtalkTools } from "./dingtalk-tools.ts";
+import { dingtalkCapabilities, dingtalkTools } from "./dingtalk-tools.ts";
 import { LocalEmbedder } from "./embedder.ts";
 import { FEED_NAMES, Feeds } from "./feeds.ts";
 import { foldText, herderContextView, herderMessages } from "./herder-context-view.ts";
@@ -570,6 +571,28 @@ export class Host implements HostApi {
 
   disconnectWecom(): Promise<WecomView> {
     return this.wecomApps.disconnect();
+  }
+
+  private async dingTalkView(view?: Promise<DingTalkView>): Promise<DingTalkView> {
+    const state = await view;
+    if (state === undefined) return { state: "unavailable", capabilities: [] };
+    return state.state === "connected" ? { ...state, capabilities: dingtalkCapabilities() } : state;
+  }
+
+  dingtalk(): Promise<DingTalkView> {
+    return this.dingTalkView(this.dingTalkAccount?.view());
+  }
+
+  startDingTalkLogin(): Promise<DingTalkView> {
+    return this.dingTalkView(this.dingTalkAccount?.startLogin());
+  }
+
+  cancelDingTalkLogin(): Promise<DingTalkView> {
+    return this.dingTalkView(this.dingTalkAccount?.cancelLogin());
+  }
+
+  disconnectDingTalk(): Promise<DingTalkView> {
+    return this.dingTalkView(this.dingTalkAccount?.disconnect());
   }
 
   mailbox(): MailboxView {

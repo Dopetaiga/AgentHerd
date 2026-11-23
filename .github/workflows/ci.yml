@@ -80,5 +80,12 @@ jobs:
         run: node apps/desktop/node_modules/electron/install.js
       - name: Run tests
         run: pnpm test
+      - name: Stage the pinned DingTalk Workspace CLI
+        run: pnpm --filter @agentherd/desktop fetch-dws
       - name: Build desktop app
         run: pnpm --filter @agentherd/desktop build
+      - name: Check native signing of the staged DingTalk CLI
+        if: runner.os == 'macOS'
+        run: |
+          codesign --force --sign - apps/desktop/dws/dws
+          codesign --verify --strict apps/desktop/dws/dws

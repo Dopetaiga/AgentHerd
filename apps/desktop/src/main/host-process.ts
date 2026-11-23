@@ -32,6 +32,14 @@ export function agentsDir(): string | undefined {
   return existsSync(dir) ? dir : undefined;
 }
 
+function dwsPath(): string | undefined {
+  const directory = app.isPackaged
+    ? join(process.resourcesPath, "dws")
+    : resolve(app.getAppPath(), "dws");
+  const executable = join(directory, process.platform === "win32" ? "dws.exe" : "dws");
+  return existsSync(executable) ? executable : undefined;
+}
+
 export async function ensureHost(home: string, sock: string): Promise<void> {
   if (await isHostRunning(sock)) return;
   if (child === undefined) {
@@ -39,13 +47,17 @@ export async function ensureHost(home: string, sock: string): Promise<void> {
     mkdirSync(logDir, { recursive: true, mode: 0o700 });
     const logFile = join(logDir, "host.log");
     const agents = agentsDir();
+    const dws = dwsPath();
+    const env = { ...process.env };
+    delete env.AGENTHERD_DWS;
     const p = utilityProcess.fork(hostEntry(), [], {
       serviceName: "AgentHerd host",
       stdio: "pipe",
       env: {
-        ...process.env,
+        ...env,
         AGENTHERD_HOME: home,
         ...(agents === undefined ? {} : { AGENTHERD_AGENTS: agents }),
+        ...(dws === undefined ? {} : { AGENTHERD_DWS: dws }),
       },
     });
     const log = (chunk: Buffer) => {

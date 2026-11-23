@@ -122,6 +122,7 @@ if (process.platform !== "darwin") throw new Error("package-mac builds on macOS 
 run("pnpm", ["run", "build"]);
 const agents = join(desktop, "agents");
 await fetchAgents(agents);
+run(process.execPath, [join(desktop, "scripts", "fetch-dws.ts")]);
 
 rmSync(out, { recursive: true, force: true });
 mkdirSync(out, { recursive: true });
@@ -141,6 +142,8 @@ writeFileSync(
 );
 packHost(join(resources, "host"));
 run("ditto", [agents, join(resources, "agents")]);
+run("ditto", [join(desktop, "dws"), join(resources, "dws")]);
+run("codesign", ["--force", "--sign", "-", join(resources, "dws", "dws")]);
 
 makeIcns(join(desktop, "resources", "icon.png"), join(resources, "icon.icns"));
 plist("CFBundleName", NAME);

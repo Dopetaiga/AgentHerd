@@ -1177,6 +1177,10 @@ export interface HostApi {
   startWecomLogin(): Promise<WecomView>;
   cancelWecomLogin(): Promise<WecomView>;
   disconnectWecom(): Promise<WecomView>;
+  dingtalk(): Promise<DingTalkView>;
+  startDingTalkLogin(): Promise<DingTalkView>;
+  cancelDingTalkLogin(): Promise<DingTalkView>;
+  disconnectDingTalk(): Promise<DingTalkView>;
   /** 信箱 (ADR 0099): the sources and the newest letters with what the Herder made of them. */
   mailbox(): MailboxView;
   mailboxAdd(draft: MailboxDraft): Promise<MailboxView>;
@@ -1198,7 +1202,7 @@ export interface WecomView {
 }
 
 export interface DingTalkView {
-  state: "disconnected" | "connecting" | "connected" | "failed";
+  state: "unavailable" | "disconnected" | "connecting" | "connected" | "failed";
   corpName?: string;
   userName?: string;
   error?: string;
@@ -1287,6 +1291,10 @@ export const HOST_METHODS: readonly HostMethod[] = [
   "startWecomLogin",
   "cancelWecomLogin",
   "disconnectWecom",
+  "dingtalk",
+  "startDingTalkLogin",
+  "cancelDingTalkLogin",
+  "disconnectDingTalk",
   "mailbox",
   "mailboxAdd",
   "mailboxSet",

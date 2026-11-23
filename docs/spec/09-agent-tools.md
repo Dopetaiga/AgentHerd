@@ -290,6 +290,27 @@ verified reads. Every write or uncertain call asks for approval, even in auto mo
 when an allow rule matches; existing denies still block. The official npm binary includes
 [upstream call-chain reporting](https://github.com/WecomTeam/wecom-cli/blob/main/docs/data-collection.md).
 
+## 3h. DingTalk office connection ([ADR 0105](../adr/0105-dingtalk-office-tools-use-dws.md))
+
+In 应用连接 → 账号 → 钉钉, choose 浏览器授权. Scan the official authorization page
+with mobile DingTalk and select the organization. Only the selected user and organization
+are connected. You can cancel from the desktop; disconnect clears AgentHerd's local login,
+not the organization grant. The organization must allow access and the user must have
+permission for the requested data. The capability badges describe tools, not grants.
+
+Task agents can list calendar events, find and read documents, find groups and read or
+search their messages, and find AI 听记 and read summaries or transcripts. Direct messages
+and the general video meeting history are out of scope. Every group text, new event or new
+document asks the current owner on Feishu, even in auto mode or under an allow rule. Deny
+still wins. Changing or disconnecting the account invalidates waiting calls. A cancelled or
+uncertain write is not retried; check the destination before trying again.
+
+The host runs the pinned [DingTalk Workspace CLI](https://github.com/DingTalk-Real-AI/dingtalk-workspace-cli)
+with separate config and credential storage. There is no raw CLI, local file transfer,
+DingTalk control channel or direct Herder tool. For local desktop development, stage the
+binary with `pnpm --filter @agentherd/desktop fetch-dws`; restart the desktop-owned host to
+pick it up. The macOS bundle includes it. An unstaged build displays 不可用.
+
 ## 4. Failure behavior
 
 | Case | Behavior |
