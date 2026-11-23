@@ -120,6 +120,7 @@ import type {
   Tier,
   TranscriptView,
   WatchView,
+  WecomView,
   WestockTest,
   WestockView,
 } from "./api.ts";
@@ -158,6 +159,8 @@ import { RuntimeStore } from "./runtimes.ts";
 import { combineApps, Socials } from "./socials.ts";
 import { type VerifyOptions, verifyProfile } from "./verify.ts";
 import { deleteWatch, pauseWatch, watchViews } from "./watches.ts";
+import { WecomAccount, type WecomCliPort } from "./wecom-account.ts";
+import { WecomCli } from "./wecom-cli.ts";
 import { Westock, type WestockRun } from "./westock.ts";
 
 export const HOST_VERSION = "0.0.0";
@@ -199,6 +202,8 @@ export interface HostOptions {
   /** Plugins (ADR 0094): how a downloaded .tar.gz is unpacked and how a server is reached; tests fake them. */
   pluginExtract?: (file: string, dir: string) => Promise<void>;
   pluginClient?: (server: RunningServer) => McpClient;
+  /** WeCom auth and office commands (tests replace the CLI). */
+  wecomCli?: WecomCliPort;
   /** Runs `gh` for following pull requests tasks open (tests replace it). */
   gh?: GhRun;
   /** Runs mailbox scripts; tests pass a fake (ADR 0099). */
@@ -273,6 +278,7 @@ export class Host implements HostApi {
   private readonly petFeed: PetFeed;
   /** Installed plugins (ADR 0094). */
   private readonly pluginList: PluginStore;
+  private readonly wecomApps: WecomAccount;
   /** The Herder's guess at the owner's next message, and when it came (ADR 0084). */
   private petSuggestion: { text: string; at: string } | undefined;
 
@@ -336,6 +342,7 @@ export class Host implements HostApi {
       ...(opts.pluginClient === undefined ? {} : { client: opts.pluginClient }),
       log: (line) => this.log(line),
     });
+    this.wecomApps = new WecomAccount(opts.wecomCli ?? new WecomCli(join(opts.home, "wecom-cli")));
     this.westockCli = new Westock({
       home: opts.home,
       enabled: () => !(this.config().westockOff ?? false),
@@ -535,6 +542,22 @@ export class Host implements HostApi {
     return this.pluginList.remove(id);
   }
 
+  async wecom(): Promise<WecomView> {
+    return this.wecomApps.view();
+  }
+
+  startWecomLogin(): Promise<WecomView> {
+    return this.wecomApps.startLogin();
+  }
+
+  cancelWecomLogin(): Promise<WecomView> {
+    return this.wecomApps.cancelLogin();
+  }
+
+  disconnectWecom(): Promise<WecomView> {
+    return this.wecomApps.disconnect();
+  }
+
   mailbox(): MailboxView {
     return mailboxView(this.herd?.mailbox);
   }
@@ -712,6 +735,7 @@ export class Host implements HostApi {
   /** Starts following tasks if a channel is bound. */
   async start(): Promise<void> {
     void this.appList.load();
+    if (this.opts.mcpSocket !== undefined) void this.wecomApps.restore();
     this.socialList.start();
     void this.westockCli.check();
     if (this.danjuanCli.enabled()) void this.danjuanCli.check();
@@ -759,6 +783,7 @@ export class Host implements HostApi {
     this.westockCli.stop();
     this.danjuanCli.stop();
     this.pluginList.stopAll();
+    this.wecomApps.close();
     this.setupRun++;
     await this.stopHerd();
   }
@@ -864,8 +889,9 @@ export class Host implements HostApi {
                 this.westockCli.tools(),
                 this.danjuanCli.tools(),
                 this.pluginList.tools(),
+                this.wecomApps.apps(),
               ]),
-            appNames: () => this.appList.connectedNames(),
+            appNames: () => [...this.appList.connectedNames(), ...this.wecomApps.connectedNames()],
           }),
       agentModels: {
         list: () =>

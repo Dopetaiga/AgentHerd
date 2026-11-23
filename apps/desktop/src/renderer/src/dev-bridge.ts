@@ -45,6 +45,7 @@ import type {
   SocialView,
   Tier,
   WatchView,
+  WecomView,
   WestockTest,
   WestockView,
 } from "@agentherd/host/api";
@@ -444,6 +445,14 @@ function installFakeBridge(): void {
   );
   let watches: WatchView[] = sampleWatches(sim === "empty" || sim === "no-agent");
   let lark: LarkView = sampleLark(sim === "empty" || sim === "no-agent");
+  const wecomDisconnected: WecomView = { state: "disconnected", capabilities: [] };
+  let wecom = wecomDisconnected;
+  let wecomTimer: ReturnType<typeof setTimeout> | undefined;
+  const clearWecom = () => {
+    clearTimeout(wecomTimer);
+    wecom = wecomDisconnected;
+    return delay(wecom);
+  };
   let feeds: FeedView[] = sampleFeeds();
   let westock: WestockView = {
     enabled: true,
@@ -756,6 +765,26 @@ function installFakeBridge(): void {
       lark = { state: "signed-out", version: "1.4.0" };
       return delay(lark);
     },
+    wecom: () => delay(wecom),
+    startWecomLogin: () => {
+      if (wecom.state === "connecting" || wecom.state === "connected") return delay(wecom);
+      wecom = { state: "connecting", qr: PLACEHOLDER_QR, capabilities: [] };
+      wecomTimer = setTimeout(() => {
+        wecom =
+          failing === "wecom"
+            ? { state: "failed", capabilities: [] }
+            : {
+                state: "connected",
+                capabilities: [
+                  { id: "doc", name: "文档", toolCount: 3 },
+                  { id: "calendar", name: "日程", toolCount: 3 },
+                ],
+              };
+      }, 4000);
+      return delay(wecom);
+    },
+    cancelWecomLogin: () => (wecom.state === "connecting" ? clearWecom() : delay(wecom)),
+    disconnectWecom: clearWecom,
     pet: () => delay(pet),
     petSay: (text, paths = []) => {
       if (!pet.connected)
