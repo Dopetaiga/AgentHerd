@@ -283,7 +283,8 @@ Methods that need unrestricted local file access are not exposed. For bot chats,
 approved sending and recent conversation metadata are in scope; no chat history,
 archiving or incoming events.
 
-WeCom is not a control channel and is not exposed as a direct Herder tool. The owner
+Herder lists WeCom among the connected apps once its tool catalog is ready and delegates
+operations to tasks. WeCom is not a control channel or a direct Herder tool. The owner
 continues to direct work and confirm writes through Feishu. Existing rules apply to
 verified reads. Every write or uncertain call asks for approval, even in auto mode or
 when an allow rule matches; existing denies still block. The official npm binary includes

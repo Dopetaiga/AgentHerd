@@ -735,6 +735,7 @@ export class Host implements HostApi {
   /** Starts following tasks if a channel is bound. */
   async start(): Promise<void> {
     void this.appList.load();
+    if (this.opts.mcpSocket !== undefined) void this.wecomApps.restore();
     this.socialList.start();
     void this.westockCli.check();
     if (this.danjuanCli.enabled()) void this.danjuanCli.check();
@@ -890,7 +891,7 @@ export class Host implements HostApi {
                 this.pluginList.tools(),
                 this.wecomApps.apps(),
               ]),
-            appNames: () => this.appList.connectedNames(),
+            appNames: () => [...this.appList.connectedNames(), ...this.wecomApps.connectedNames()],
           }),
       agentModels: {
         list: () =>

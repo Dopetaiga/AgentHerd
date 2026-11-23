@@ -66,7 +66,7 @@ export class WecomAccount {
     }
   }
 
-  private async restore(): Promise<void> {
+  async restore(): Promise<void> {
     if (this.closed || this.initialized || this.disconnecting !== undefined) return;
     if (this.restoring !== undefined) return this.restoring;
     const { signal } = this.generation;
@@ -84,6 +84,10 @@ export class WecomAccount {
     } finally {
       this.restoring = undefined;
     }
+  }
+
+  connectedNames(): string[] {
+    return this.catalog?.capabilities.some(({ toolCount }) => toolCount > 0) ? ["企业微信"] : [];
   }
 
   async view(): Promise<WecomView> {

@@ -168,6 +168,7 @@ describe("Host", () => {
       env: {},
       profiles: () => [],
       createChannel: () => new FakeChannel(),
+      mcpSocket: socketPath(home),
       wecomCli: {
         status: async () => signedIn,
         login: async (qr) => {
@@ -204,6 +205,19 @@ describe("Host", () => {
     cleanups.push(() => server.close());
     const client = await connectHost(socketPath(home));
     cleanups.push(async () => client.close());
+    await host.start();
+    let port: HerderHost | undefined;
+    const herd = (host as unknown as { herd: Herd }).herd;
+    await herd.setHerder((h) => {
+      port = h;
+      return {
+        ownerMessage: () => {},
+        ownerAnswer: () => {},
+        event: () => {},
+        stop: async () => {},
+      };
+    });
+    expect(port?.apps?.()).not.toContain("企业微信");
     expect(await client.host.wecom()).toEqual({ state: "disconnected", capabilities: [] });
     await client.host.startWecomLogin();
     expect(await client.host.wecom()).toMatchObject({
@@ -215,6 +229,7 @@ describe("Host", () => {
     const view = await client.host.wecom();
     expect(view.capabilities.map(({ id }) => id).sort()).toEqual(["calendar", "meeting", "todo"]);
     expect(scans).toBe(1);
+    expect(port?.apps?.()).toContain("企业微信");
     expect(view.qr).toBeUndefined();
     expect(readFileSync(join(home, "config.json"), "utf8")).not.toContain("data:image");
     expect(readConfig(home).channel?.channelId).toBe("fake");
@@ -222,6 +237,7 @@ describe("Host", () => {
       state: "disconnected",
       capabilities: [],
     });
+    expect(port?.apps?.()).not.toContain("企业微信");
   });
 
   it("reconnects the channel on request", async () => {
