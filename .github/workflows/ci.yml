@@ -137,6 +137,8 @@ jobs:
           pnpm --filter @agentherd/desktop package:mac
           app="apps/desktop/release/mac-$(node -p 'process.arch')/AgentHerd.app"
           dws="$app/Contents/Resources/dws/dws"
+          # Establish that the bundle is sealed before running any bundled code.
+          codesign --verify --deep --strict --verbose=2 "$app"
           "$dws" --version | grep -E '^dws version v1\.0\.69( |$)'
-          codesign --verify --strict "$dws"
-          codesign --verify --deep --strict "$app"
+          codesign --verify --strict --verbose=2 "$dws"
+          codesign --verify --deep --strict --verbose=2 "$app"
