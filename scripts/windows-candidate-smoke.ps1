@@ -81,6 +81,8 @@ try {
     Write-Host 'Visible installed main window and matching host.status() observed'
     & node (Join-Path $PSScriptRoot 'windows-candidate-probe.mjs') $herd (Join-Path $install 'resources')
     if ($LASTEXITCODE -ne 0 -or $app.HasExited) { throw 'Installed candidate probe failed' }
+    & node (Join-Path $PSScriptRoot 'windows-dws-handoff.mjs') (Join-Path $install 'resources\dws\dws.exe')
+    if ($LASTEXITCODE -ne 0) { throw 'Installed DingTalk CLI did not produce a verified authorization handoff' }
 } finally {
     try {
         if ($null -ne $app -and !$app.HasExited) {
@@ -108,4 +110,4 @@ try {
     }
 }
 Write-Host 'Observed per-user silent install, installed resources, main window, local host status, disconnected DingTalk status, silent uninstall and temporary-directory cleanup.'
-Write-Host 'Not tested: signing or SmartScreen reputation, agent sessions, DingTalk login, organization access, reads or writes. No authorization flow was started.'
+Write-Host 'Not tested: signing or SmartScreen reputation, agent sessions, DingTalk login, organization access, reads or writes. Only the CLI handoff was checked; no browser was opened and no account was authorized.'

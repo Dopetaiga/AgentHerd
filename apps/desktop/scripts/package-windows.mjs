@@ -19,6 +19,7 @@ if (
   process.platform !== "win32" ||
   process.arch !== "x64" ||
   process.env.GITHUB_ACTIONS !== "true" ||
+  process.env.RUNNER_ENVIRONMENT !== "github-hosted" ||
   process.env.GITHUB_EVENT_NAME !== "pull_request"
 ) {
   throw new Error("Build this unsigned candidate only on a Windows x64 pull request runner");
