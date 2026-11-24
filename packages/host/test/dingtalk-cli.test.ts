@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -41,7 +41,7 @@ it("passes literal argv and stdin in an isolated environment", async () => {
   await expect(runFixture(source, ["--text=$test & copy"], "@file.txt\n纯文本")).resolves.toEqual({
     args: ["--text=$test & copy"],
     input: "@file.txt\n纯文本",
-    cwd: dir,
+    cwd: realpathSync.native(dir),
     config: join(dir, "config"),
     storage: join(dir, "credentials"),
     leaked: false,
@@ -54,6 +54,38 @@ it.each([
   ["invalid_response", 'console.log("FAKE_PRIVATE_OUTPUT")'],
 ])("rejects %s without surfacing subprocess output", async (code, source) => {
   await expect(runFixture(source)).rejects.toMatchObject({ code });
+});
+
+it("classifies a login lock access denial without echoing the provider output", async () => {
+  const source = `console.error(JSON.stringify({error: {actions: ['dws auth --help'], category: 'auth', code: 2, message: 'dingtalk login failed: 本地登录态无法安全更新: acquiring file lock: creating config dir for lock: FAKE_PRIVATE_PATH: Access is denied.'}}, null, 2)); process.exitCode = 2;`;
+  await expect(
+    runDws(
+      { executable: process.execPath, stateDir: dir },
+      { args: ["-e", source] },
+      AbortSignal.timeout(3000),
+      false,
+      undefined,
+      "login",
+    ),
+  ).rejects.toMatchObject({
+    code: "login_storage_denied",
+    message:
+      "钉钉无法写入本地授权目录，浏览器未打开。请检查系统是否允许钉钉组件写入 AgentHerd 数据目录，再点连接。",
+  });
+});
+
+it("keeps a later authorization persistence failure unknown even if the lock open was denied", async () => {
+  const source = `console.error(JSON.stringify({error: {category: 'auth', code: 2, message: 'dingtalk login failed: 保存授权失败: acquiring file lock: opening lock file: FAKE_PRIVATE_PATH: Access is denied.'}})); process.exitCode = 2;`;
+  await expect(
+    runDws(
+      { executable: process.execPath, stateDir: dir },
+      { args: ["-e", source] },
+      AbortSignal.timeout(3000),
+      false,
+      undefined,
+      "login",
+    ),
+  ).rejects.toMatchObject({ code: "failed" });
 });
 
 it("checks current policy after filesystem preparation and before launching DWS", async () => {

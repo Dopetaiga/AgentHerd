@@ -1,5 +1,10 @@
 import type { DingTalkView } from "./api.ts";
-import type { DingTalkCliPort, DingTalkCommand, DingTalkIdentity } from "./dingtalk-cli.ts";
+import {
+  DingTalkCliError,
+  type DingTalkCliPort,
+  type DingTalkCommand,
+  type DingTalkIdentity,
+} from "./dingtalk-cli.ts";
 
 export type BoundDingTalkRun = (
   command: DingTalkCommand,
@@ -113,8 +118,17 @@ export class DingTalkAccount {
         if (signal.aborted) return;
         if (identity === undefined) this.fail("未收到钉钉授权，请清除连接后重试。");
         else this.connected(identity);
-      } catch {
-        if (!signal.aborted) this.fail("钉钉授权未完成，请清除连接后重试。");
+      } catch (error) {
+        if (signal.aborted) return;
+        if (error instanceof DingTalkCliError && error.code === "login_storage_denied") {
+          // DWS failed before opening the browser or writing authorization. No reset is needed.
+          generation.abort();
+          this.generation = new AbortController();
+          this.loginRun = undefined;
+          this.current = { ...DINGTALK_DISCONNECTED, error: error.message };
+          return;
+        }
+        this.fail("钉钉授权未完成，请清除连接后重试。");
       }
     })();
     return this.current;

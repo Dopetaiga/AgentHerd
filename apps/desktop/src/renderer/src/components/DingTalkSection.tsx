@@ -1,5 +1,5 @@
 import type { DingTalkView, RemoteHost } from "@agentherd/host/api";
-import { MessagesSquare } from "lucide-react";
+import { Link2, MessagesSquare } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { host } from "../store";
 import { ConnectionRow } from "./ConnectionRow";
@@ -32,7 +32,9 @@ export function DingTalkRow({
   const connecting = view?.state === "connecting";
   const connected = view?.state === "connected";
   const failed = view?.state === "failed";
-  const tone = connected ? "green" : failed ? "amber" : "gray";
+  const error = view?.error;
+  const hasFailure = failed || error !== undefined;
+  const tone = connected ? "green" : hasFailure ? "amber" : "gray";
 
   useEffect(
     () => () => {
@@ -83,13 +85,9 @@ export function DingTalkRow({
 
   const action =
     state === "disconnected" ? (
-      <Button
-        size="sm"
-        variant="primary"
-        disabled={busy}
-        onClick={() => void update((h) => h.startDingTalkLogin())}
-      >
-        浏览器授权
+      <Button size="sm" disabled={busy} onClick={() => void update((h) => h.startDingTalkLogin())}>
+        <Link2 size={12} />
+        连接
       </Button>
     ) : connecting ? (
       <Button size="sm" disabled={busy} onClick={() => void update((h) => h.cancelDingTalkLogin())}>
@@ -112,12 +110,16 @@ export function DingTalkRow({
       name="钉钉"
       badge={
         <Badge tone={tone === "gray" ? undefined : tone}>
-          {state === undefined ? (problem ? "未能读取" : "读取中…") : labels[state]}
+          {state === undefined
+            ? problem
+              ? "未能读取"
+              : "读取中…"
+            : labels[hasFailure ? "failed" : state]}
         </Badge>
       }
       subtitle={connected && identity ? identity : "日程、文档、群聊和 AI 听记"}
       action={action}
-      open={open ?? (connecting || failed || problem !== "")}
+      open={open ?? (connecting || hasFailure || problem !== "")}
       onOpenChange={setOpen}
     >
       <p className="text-ink-muted text-sm">
@@ -131,9 +133,9 @@ export function DingTalkRow({
           请在浏览器打开的钉钉授权页用手机钉钉扫码，然后选择组织。
         </p>
       )}
-      {(problem !== "" || (failed && view.error !== undefined)) && (
+      {(problem !== "" || error !== undefined) && (
         <p role="alert" className="text-danger-text text-sm">
-          {problem || view?.error}
+          {problem || error}
         </p>
       )}
       {problem !== "" && (

@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import { DingTalkAccount } from "../src/dingtalk-account.ts";
-import type { DingTalkCliPort, DingTalkIdentity } from "../src/dingtalk-cli.ts";
+import {
+  DingTalkCliError,
+  type DingTalkCliPort,
+  type DingTalkIdentity,
+} from "../src/dingtalk-cli.ts";
 
 const identity = { corpId: "corp", userId: "user", corpName: "Example", userName: "Owner" };
 const command = { args: ["calendar", "event", "create"] };
@@ -56,6 +60,31 @@ describe("DingTalk account", () => {
     expect(cli.reset).toHaveBeenCalledTimes(1);
     expect(await account.view()).not.toHaveProperty("corpName");
     await expect(account.bind()).rejects.toThrow();
+  });
+
+  it("shows the safe preflight error and withholds task access when login cannot write its lock", async () => {
+    const { cli, account } = fixture();
+    cli.login.mockRejectedValueOnce(new DingTalkCliError("login_storage_denied"));
+    await account.startLogin();
+    await vi.waitFor(async () => {
+      expect(await account.view()).toMatchObject({
+        state: "disconnected",
+        error: expect.stringContaining("无法写入本地授权目录"),
+      });
+    });
+    await expect(account.bind()).rejects.toThrow();
+    expect(cli.status).toHaveBeenCalledTimes(1);
+    const retry = deferred<void>();
+    cli.login.mockReturnValueOnce(retry.promise);
+    expect(await account.startLogin()).toMatchObject({ state: "connecting" });
+    expect(cli.login).toHaveBeenCalledTimes(2);
+    expect(cli.markResetPending).not.toHaveBeenCalled();
+    expect(cli.reset).not.toHaveBeenCalled();
+    cli.status.mockResolvedValue(identity);
+    retry.resolve();
+    await vi.waitFor(async () =>
+      expect(await account.view()).toMatchObject({ state: "connected" }),
+    );
   });
 
   it("does not accept a new login during local reset or after reset failure", async () => {

@@ -57,14 +57,32 @@ const messages = {
   output_limit: "钉钉返回的数据过大，请缩小查询范围。",
   invalid_response: "无法验证钉钉返回的结果。",
   reset_pending: "本地钉钉授权尚未清除。",
+  login_storage_denied:
+    "钉钉无法写入本地授权目录，浏览器未打开。请检查系统是否允许钉钉组件写入 AgentHerd 数据目录，再点连接。",
 };
 
-class DingTalkCliError extends Error {
+export class DingTalkCliError extends Error {
   readonly code: keyof typeof messages;
 
   constructor(code: keyof typeof messages) {
     super(messages[code]);
     this.code = code;
+  }
+}
+
+function isLoginStorageDenied(stderr: Buffer[]): boolean {
+  try {
+    const error = JSON.parse(Buffer.concat(stderr).toString("utf8")).error;
+    return (
+      error?.category === "auth" &&
+      error.code === 2 &&
+      typeof error.message === "string" &&
+      /^dingtalk login failed: 本地登录态无法安全更新: acquiring file lock: (?:creating config dir for lock|opening lock file): .*?(?:Access is denied\.|拒绝访问。?|Permission denied\.?)$/i.test(
+        error.message,
+      )
+    );
+  } catch {
+    return false;
   }
 }
 
@@ -74,6 +92,7 @@ export async function runDws(
   signal: AbortSignal,
   json: boolean,
   beforeDispatch?: () => void,
+  diagnostic?: "login",
 ): Promise<unknown> {
   if (!isAbsolute(executable) || !isAbsolute(stateDir)) throw new DingTalkCliError("unavailable");
   if (signal.aborted) throw new DingTalkCliError("cancelled");
@@ -96,9 +115,17 @@ export async function runDws(
       env,
       shell: false,
       windowsHide: true,
-      stdio: ["pipe", json ? "pipe" : "ignore", "ignore"],
+      stdio: ["pipe", json ? "pipe" : "ignore", diagnostic === "login" ? "pipe" : "ignore"],
     });
     const chunks: Buffer[] = [];
+    const stderr: Buffer[] = [];
+    let remaining = 8192;
+    child.stderr?.on("data", (chunk: Buffer) => {
+      const part = chunk.subarray(0, remaining);
+      if (part.length === 0) return;
+      stderr.push(part);
+      remaining -= part.length;
+    });
     let size = 0;
     let error: DingTalkCliError | undefined;
     const fail = (code: keyof typeof messages) => {
@@ -120,7 +147,8 @@ export async function runDws(
     child.once("close", (code) => {
       signal.removeEventListener("abort", abort);
       if (error !== undefined || code !== 0) {
-        reject(error ?? new DingTalkCliError("failed"));
+        const storageDenied = diagnostic === "login" && code === 2 && isLoginStorageDenied(stderr);
+        reject(error ?? new DingTalkCliError(storageDenied ? "login_storage_denied" : "failed"));
       } else if (!json) {
         resolve(undefined);
       } else {
@@ -205,7 +233,14 @@ export function dingtalkCli(options: Options): DingTalkCliPort {
       );
     },
     login: async (signal) => {
-      await execute({ args: ["auth", "login", "--format=json"] }, signal, false, 300_000);
+      await runDws(
+        options,
+        { args: ["auth", "login", "--format=json"] },
+        AbortSignal.any([signal, AbortSignal.timeout(300_000)]),
+        false,
+        undefined,
+        "login",
+      );
     },
     reset: async (signal) => {
       await execute({ args: ["auth", "reset"] }, signal, false);
