@@ -61,6 +61,7 @@ AgentHerd 是一个桌面 App，让 Pi、Codex、Claude Code 和 Antigravity 这
 | Codex | 随 App 一起装，GPT 模型的任务交给它 | 你在 App 里加的模型服务 |
 | Claude Code | 用你电脑上的 `claude`；没有的话在「Agent」页下载 | 你自己的 Anthropic 接口服务 |
 | Antigravity | 用你自己装的 `agy`，你点名时才用 | 你 Google 账号里的模型 |
+| DeepSeek Harness | 用你自己装的 DSH 桌面版，你点名时才用 | 你在 DSH 里配好的模型 |
 
 它们都通过 [Agent Client Protocol](https://agentclientprotocol.com) 运行。任务第一轮就出错时，主管会自动换下一个模型。
 
