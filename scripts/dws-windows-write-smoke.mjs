@@ -54,5 +54,6 @@ try {
   }
 } finally {
   // mkdtemp created this private directory for this invocation only.
-  await rm(root, { recursive: true, force: true });
+  // The upstream sender may hold its working directory for up to six seconds after CLI exit.
+  await rm(root, { recursive: true, force: true, maxRetries: 8, retryDelay: 250 });
 }
