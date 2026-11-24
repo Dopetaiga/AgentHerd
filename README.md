@@ -61,6 +61,7 @@ Click the pet in the corner of your screen to tell the Herder what you want. The
 | Codex | Comes with the app; takes tasks on GPT models | The model services you add in the app |
 | Claude Code | Your own `claude`, or a download on the **Agent** page | Your own Anthropic-style model service |
 | Antigravity | Your own `agy`, only when you ask for it | The models of your Google account |
+| DeepSeek Harness | Your own DSH desktop app, only when you ask for it | The models you set up in DSH |
 
 They all run through the [Agent Client Protocol](https://agentclientprotocol.com). If a task's first turn breaks, the Herder switches to the next model.
 
