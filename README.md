@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="docs/images/hero.webp" alt="AgentHerd: send work from Feishu, agents do it on your Mac" width="100%">
+<img src="docs/images/hero.webp" alt="AgentHerd: tell the pet, agents do the work on your computer" width="100%">
 
 English · [简体中文](README.zh-CN.md)
 
@@ -13,22 +13,29 @@ English · [简体中文](README.zh-CN.md)
 
 > **Status:** in active development. There is no release yet; run it from source.
 
-AgentHerd is an app on your computer. You tell the Herder in Feishu what you want; it starts a task on this computer, hands it to Pi, Codex, Claude Code or Antigravity, and follows it. Before a push, anything sent to other people, or a mass delete, it asks you; when the work is done it tells you in a sentence or two. You can hand out work without being at your desk.
+AgentHerd is an app on your computer. A desktop pet lives in a corner of your screen, and she is your Herder: tell her what you want and she starts a task on this computer, hands it to Pi, Codex, Claude Code or Antigravity, and follows it. Before a push, anything sent to other people, or a mass delete, she asks you; when the work is done she tells you in a sentence or two.
 
 ## An example
 
-1. In Feishu you write: "Fix the 401 on the login API, then open a PR."
-2. The Herder starts a task, "Fix login 401", and has Codex work on a copy of shop-api.
-3. When Codex wants to push the branch, a "Needs your OK" card reaches your phone. You tap Allow.
-4. When it is done, the Herder writes: "Token expiry was read as milliseconds, not seconds. Fixed, with a test. PR #128 is open." Codex's own reply is one tap away.
+1. You click the pet and say: "Fix the 401 on the login API, then open a PR."
+2. She starts a task, "Fix login 401", has Codex work on a copy of shop-api, and goes back to her corner.
+3. When Codex wants to push the branch, a "Needs your OK" card appears in her conversation. You click Allow.
+4. When it is done she hops and says: "Token expiry was read as milliseconds, not seconds. Fixed, with a test. PR #128 is open." Codex's own reply is one click away.
 
 ## What it does
 
+### The Herder on your desktop
+
+- **Click her to talk.** 大肥鱼, Claude 娘 or one of 16 anime figures sits in a corner of your screen. A click opens the conversation with the Herder, with task cards and approvals right there. Drop a file on her to hand it over.
+- **See what she is doing.** She reads a book while she thinks and hops when a reply arrives; a small dot above her for each running task shows which one waits for you.
+- **Out of sight, still in the loop.** System notifications, a sheep in the menu bar for status, and quiet hours at night.
+- **Shortcuts.** ⇧⌘Space talks to her from any app; ⇧⌘Y twice allows the oldest approval.
+
 ### Hand out work and follow it
 
-- **Feishu is the remote control.** Send a message to start work; answer questions, approve and continue from cards. One QR scan connects it.
 - **The Herder keeps watch.** It picks the agent and model, follows progress, notices a stuck task, and tells you each result in its own words.
 - **Tasks keep going.** Each task works on a copy of your project and is kept after it ends, so you can pick it up days later.
+- **Away from your desk too.** The Herder is also in Feishu: the pet's conversation and cards are in Feishu too, so you can hand out work and approve from your phone.
 - **You can see what happened.** The app shows every task's conversation, why the Herder took each step, and the tokens and cost of every request.
 
 ### It asks only when it must
@@ -43,12 +50,6 @@ AgentHerd is an app on your computer. You tell the Herder in Feishu what you wan
 - **Your Feishu docs and calendar.** Sign in once with the official lark-cli and tasks read your docs, sheets and calendar and write results as new docs. Changing existing things asks you.
 - **Plugins.** Install Claude Code plugins and Gemini CLI extensions. You see what they run before you install.
 - **Memory.** The Herder remembers what to call you, what you work on, and what you corrected. You can see and edit it on the Memory page.
-
-### The Herder on your desktop
-
-- **A desktop pet.** 大肥鱼, Claude 娘 or one of 16 anime figures sits in a corner of your screen. Click her to talk to the Herder; task cards and approvals are right there. Drop a file on her to hand it over.
-- **Out of sight, still in the loop.** System notifications, a sheep in the menu bar for status, and quiet hours at night.
-- **Shortcuts.** ⇧⌘Space talks to her from any app; ⇧⌘Y twice allows the oldest approval.
 
 ## Agents
 
@@ -71,7 +72,7 @@ pnpm --filter @agentherd/desktop fetch-agents   # from source: download Pi and C
 pnpm --filter @agentherd/desktop start
 ```
 
-The first run walks you through it: what the Herder should call you, its figure, a QR scan for Feishu, a model service and key (or a ChatGPT, Claude, Copilot or other plan), and the Herder's model. Then send the Herder a message in Feishu.
+The first run walks you through it: what the Herder should call you, its figure, a QR scan for Feishu, a model service and key (or a ChatGPT, Claude, Copilot or other plan), and the Herder's model. Then click the pet and tell her what you want.
 
 <details>
 <summary>Windows, packaging, development and the command line</summary>
