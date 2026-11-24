@@ -1,6 +1,6 @@
 // Run after staging DWS on a clean Windows runner. No accounts, OAuth, or network calls.
 import { spawnSync } from "node:child_process";
-import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -52,6 +52,34 @@ try {
       process.exitCode = 1;
     }
   }
+  // Match upstream's future-profile preflight fixture. It rejects before remote authorization.
+  const authDir = join(root, "auth-preflight");
+  const config = join(authDir, "config");
+  await mkdir(config, { recursive: true });
+  await writeFile(join(config, "profiles.json"), JSON.stringify({ version: 99999 }));
+  const preflight = spawnSync(executable, ["auth", "login", "--no-browser", "--format=json"], {
+    cwd: authDir,
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      DWS_CONFIG_DIR: config,
+      DWS_KEYCHAIN_DIR: join(authDir, "credentials"),
+      DO_NOT_TRACK: "1",
+    },
+    timeout: 15000,
+    windowsHide: true,
+  });
+  if (
+    preflight.error ||
+    preflight.status !== 2 ||
+    !preflight.stderr.includes("newer than supported") ||
+    !(await stat(join(config, ".data.lock"))).isFile()
+  ) {
+    throw new Error("Login did not acquire the private config lock and reject the future profile");
+  }
+  console.log(
+    "auth: verified official preflight obtained its private lock before rejecting the synthetic profile",
+  );
 } finally {
   // mkdtemp created this private directory for this invocation only.
   // The upstream sender may hold its working directory for up to six seconds after CLI exit.
