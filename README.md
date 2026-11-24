@@ -13,14 +13,16 @@ English · [简体中文](README.zh-CN.md)
 
 > **Status:** in active development. There is no release yet; run it from source.
 
-AgentHerd is an app on your computer. A desktop pet lives in a corner of your screen, and she is your Herder: tell her what you want and she starts a task on this computer, hands it to Pi, Codex, Claude Code or Antigravity, and follows it. Before a push, anything sent to other people, or a mass delete, she asks you; when the work is done she tells you in a sentence or two.
+AgentHerd is a desktop app that lets agents such as Pi, Codex, Claude Code and Antigravity do work on your computer.
+
+Click the pet in the corner of your screen to tell the Herder what you want. The Herder starts tasks, follows them and tells you the result in a sentence or two. Before a push, a message to someone else or a mass delete, it asks you.
 
 ## An example
 
 1. You click the pet and say: "Fix the 401 on the login API, then open a PR."
-2. She starts a task, "Fix login 401", has Codex work on a copy of shop-api, and goes back to her corner.
-3. When Codex wants to push the branch, a "Needs your OK" card appears in her conversation. You click Allow.
-4. When it is done she hops and says: "Token expiry was read as milliseconds, not seconds. Fixed, with a test. PR #128 is open." Codex's own reply is one click away.
+2. The Herder starts a task, "Fix login 401", and has Codex work on a copy of shop-api.
+3. When Codex wants to push the branch, a "Needs your OK" card appears in the conversation. You click Allow.
+4. When it is done the pet hops and the Herder says: "Token expiry was read as milliseconds, not seconds. Fixed, with a test. PR #128 is open." Codex's own reply is one click away.
 
 ## What it does
 
@@ -72,7 +74,7 @@ pnpm --filter @agentherd/desktop fetch-agents   # from source: download Pi and C
 pnpm --filter @agentherd/desktop start
 ```
 
-The first run walks you through it: what the Herder should call you, its figure, a QR scan for Feishu, a model service and key (or a ChatGPT, Claude, Copilot or other plan), and the Herder's model. Then click the pet and tell her what you want.
+The first run walks you through it: what the Herder should call you, its figure, a QR scan for Feishu, a model service and key (or a ChatGPT, Claude, Copilot or other plan), and the Herder's model. Then click the pet and tell the Herder what you want.
 
 <details>
 <summary>Windows, packaging, development and the command line</summary>
