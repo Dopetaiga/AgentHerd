@@ -16,12 +16,16 @@ import {
   RuntimeStore,
 } from "@agentherd/host";
 
+export function bundledAgents() {
+  return AGENTS.filter((def) => def.release !== undefined && def.onRequest !== true);
+}
+
 export async function fetchAgents(dir: string): Promise<void> {
   const target = currentTarget();
   const store = new RuntimeStore(dir);
   const tools = new RuntimeStore(join(tmpdir(), "agentherd-build-tools"));
   // Agents downloaded on the owner's computer (ADR 0069) stay out of the app.
-  for (const def of AGENTS.filter((d) => d.onRequest !== true)) {
+  for (const def of bundledAgents()) {
     const done = store.installed(def.id);
     const complete = (def.requires?.(target) ?? []).every((file) =>
       existsSync(join(store.dir(def.id, done?.version ?? ""), file)),
