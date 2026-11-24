@@ -34,7 +34,7 @@ it("passes literal argv and stdin in an isolated environment", async () => {
   vi.stubEnv("DWS_TEST_NAMESPACE", "outside");
   vi.stubEnv("UNRELATED_TOKEN", "outside");
   const source = `const fs = require('node:fs'); console.log(JSON.stringify({
-    args: process.argv.slice(1), input: fs.readFileSync(0, 'utf8'), cwd: process.cwd(),
+    args: process.argv.slice(1), input: fs.readFileSync(0, 'utf8'), cwd: fs.realpathSync.native(process.cwd()),
     config: process.env.DWS_CONFIG_DIR, storage: process.env.DWS_KEYCHAIN_DIR,
     leaked: Boolean(process.env.DWS_TEST_NAMESPACE || process.env.UNRELATED_TOKEN)
   }));`;

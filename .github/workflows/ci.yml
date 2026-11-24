@@ -105,6 +105,32 @@ jobs:
       - name: Build desktop app
         if: runner.os == 'Windows'
         run: pnpm --filter @agentherd/desktop build
+      - name: Build unsigned Windows x64 internal installer
+        if: runner.os == 'Windows' && github.event_name == 'pull_request'
+        run: node apps/desktop/scripts/package-windows.mjs
+      - name: Install and start the Windows candidate in a disposable profile
+        if: runner.os == 'Windows' && github.event_name == 'pull_request'
+        shell: pwsh
+        run: ./scripts/windows-candidate-smoke.ps1 -Installer 'dist/windows/AgentHerd-Setup-x64.exe'
+      - name: Record the tested installer digest
+        if: runner.os == 'Windows' && github.event_name == 'pull_request'
+        shell: pwsh
+        run: |
+          $file = 'dist/windows/AgentHerd-Setup-x64.exe'
+          $digest = (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$digest  AgentHerd-Setup-x64.exe" | Set-Content -LiteralPath "$file.sha256" -Encoding ascii
+          "Unsigned Windows x64 internal candidate SHA-256: $digest" >> $env:GITHUB_STEP_SUMMARY
+      - name: Upload tested internal installer (not a signed release)
+        if: runner.os == 'Windows' && github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: AgentHerd-Windows-x64-unsigned-pr-${{ github.event.number }}-${{ github.run_attempt }}
+          path: |
+            dist/windows/AgentHerd-Setup-x64.exe
+            dist/windows/AgentHerd-Setup-x64.exe.sha256
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
       - name: Package macOS app and verify the bundled DingTalk CLI
         if: runner.os == 'macOS'
         run: |

@@ -16,6 +16,8 @@ import {
   RuntimeStore,
 } from "@agentherd/host";
 
+import { desktopFetchers } from "./pi-desktop-release.ts";
+
 export function bundledAgents() {
   return AGENTS.filter((def) => def.release !== undefined && def.onRequest !== true);
 }
@@ -34,7 +36,7 @@ export async function fetchAgents(dir: string): Promise<void> {
       console.log(`[agents] ${def.id} ${done.version} already in ${dir}`);
       continue;
     }
-    const release = await def.release?.(target, httpFetchers);
+    const release = await def.release?.(target, desktopFetchers);
     if (release === undefined) throw new Error(`${def.name} has no build for ${target}`);
     let npmCli: string | undefined;
     if (release.kind === "npm") {
