@@ -17,6 +17,8 @@ export interface Token {
   value: string;
   /** Character offsets of unquoted `,` separators inside `value`. */
   unquotedCommas: readonly number[];
+  /** Character offsets of unquoted `(` or `)` inside `value`. */
+  unquotedParens: readonly number[];
   /** Inclusive start offset in the input string. */
   start: number;
   /** Exclusive end offset in the input string. */
@@ -57,7 +59,13 @@ const POSIX_ESCAPE_CHARS = new Set([
 const CMD_BOUNDARY_CHARS = new Set([" ", "\t", "&", "|", ";", "<", ">"]);
 
 function isWindowsPathWord(word: string): boolean {
-  return word.includes("\\") || /^[A-Za-z]:$/.test(word) || word === "." || word === "..";
+  return (
+    word.includes("\\") ||
+    /^[A-Za-z]:$/.test(word) ||
+    word === "." ||
+    word === ".." ||
+    /^(?:cd|chdir)$/i.test(word)
+  );
 }
 
 /** Split a command line into segments while preserving unquoted comma positions and token offsets. */
@@ -65,6 +73,7 @@ export function splitCommandRich(input: string): RichSegment[] {
   const segments: RichSegment[] = [];
   let tokens: Token[] = [];
   let unquotedCommas: number[] = [];
+  let unquotedParens: number[] = [];
   let word = "";
   let inWord = false;
   let wordStart = 0;
@@ -79,14 +88,16 @@ export function splitCommandRich(input: string): RichSegment[] {
     }
     wordEnd = endAt;
     if (!quoted && text === ",") unquotedCommas.push(word.length);
+    if (!quoted && (text === "(" || text === ")")) unquotedParens.push(word.length);
     word += text;
   };
 
   const endWord = (): void => {
     if (inWord) {
-      tokens.push({ value: word, unquotedCommas, start: wordStart, end: wordEnd });
+      tokens.push({ value: word, unquotedCommas, unquotedParens, start: wordStart, end: wordEnd });
     }
     unquotedCommas = [];
+    unquotedParens = [];
     word = "";
     inWord = false;
   };
@@ -231,6 +242,7 @@ export function splitCommandRich(input: string): RichSegment[] {
       const fd = inWord && /^\d+$/.test(word) ? word : "";
       if (fd !== "") {
         unquotedCommas = [];
+        unquotedParens = [];
         word = "";
         inWord = false;
       } else {
@@ -246,7 +258,7 @@ export function splitCommandRich(input: string): RichSegment[] {
         op += "&";
         i += 1;
       }
-      tokens.push({ value: op, unquotedCommas: [], start: opStart, end: i });
+      tokens.push({ value: op, unquotedCommas: [], unquotedParens: [], start: opStart, end: i });
       continue;
     }
     if (c === "&" && next === ">") {
@@ -255,7 +267,7 @@ export function splitCommandRich(input: string): RichSegment[] {
       const append = input[i + 2] === ">";
       const op = append ? "&>>" : "&>";
       i += append ? 3 : 2;
-      tokens.push({ value: op, unquotedCommas: [], start: opStart, end: i });
+      tokens.push({ value: op, unquotedCommas: [], unquotedParens: [], start: opStart, end: i });
       continue;
     }
     if ((OPERATORS as readonly string[]).includes(c)) {

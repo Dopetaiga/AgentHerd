@@ -31,14 +31,14 @@ export const MASS_DELETE = { id: "mass-delete", reason: "Deletes a lot at once" 
 const MISS: GuardResult = { hit: false };
 const HIT: GuardResult = { hit: true, ...MASS_DELETE };
 const CMD_DELETE_SWITCH = /^(?:\/(?:s|q|f|p|a(?::[A-Za-z-]+)?))+$/i;
-const CMD_GLUED_PROGRAM = /^(rd|rmdir|del|erase)(\/.*)$/i;
+const CMD_GLUED_PROGRAM = /^(rd|rmdir|del|erase|cmd|%comspec%)(\/.*)$/i;
 const DELETE_PROGRAMS = new Set(["rm", "rmdir", "rd", "del", "erase", "remove-item", "ri"]);
 const CMD_STYLE_DELETERS = new Set(["rmdir", "rd", "del", "erase"]);
 const CD_PROGRAMS = new Set(["cd", "chdir", "set-location", "sl", "pushd", "push-location"]);
 const POP_CD_PROGRAMS = new Set(["popd", "pop-location"]);
 const MAX_SHELL_DEPTH = 4;
 const DELETE_KEYWORD =
-  /\b(?:rm|rmdir|rd|del|erase|remove-item|ri|trash)\b|-delete\b|-(?:encodedcommand|enc(?:oded?)?|ec|e)\b/i;
+  /\b(?:rm|rmdir|rd|del|erase|remove-item|ri|trash|iex|invoke-expression)\b|-delete\b|-(?:encodedcommand|enc(?:oded?)?|ec|e)\b/i;
 
 const PS_NO_VALUE_PREFIXES = [
   "nologo",
@@ -144,12 +144,27 @@ function matchesPsPrefix(
   return name.length >= 2 && prefixes.some((p) => p.startsWith(name));
 }
 
-function splitPsFlag(word: string): { name: string; inlineValue?: string } | null {
-  if (!word.startsWith("-") || word === "-") return null;
-  const body = word.slice(1);
-  const sep = body.search(/[:=]/);
-  if (sep === -1) return { name: body.toLowerCase() };
-  return { name: body.slice(0, sep).toLowerCase(), inlineValue: body.slice(sep + 1) };
+function splitPsFlag(
+  word: string,
+  allowSlash = false,
+): { name: string; inlineValue?: string } | null {
+  if (word.startsWith("-") && word !== "-") {
+    const body = word.slice(1);
+    const sep = body.search(/[:=]/);
+    if (sep === -1) return { name: body.toLowerCase() };
+    return { name: body.slice(0, sep).toLowerCase(), inlineValue: body.slice(sep + 1) };
+  }
+  if (allowSlash && word.startsWith("/") && word.length > 1) {
+    const body = word.slice(1);
+    const sep = body.search(/[:=]/);
+    const name = (sep === -1 ? body : body.slice(0, sep)).toLowerCase();
+    // Only treat `/flag` as a PowerShell switch when the flag name has no path separators
+    // (avoids treating POSIX paths like `/tmp/build.ps1` as switches).
+    if (/^[a-z?][a-z0-9]*$/i.test(name)) {
+      return sep === -1 ? { name } : { name, inlineValue: body.slice(sep + 1) };
+    }
+  }
+  return null;
 }
 
 function splitTargetToken(
@@ -176,6 +191,9 @@ function splitTargetToken(
     if (arrayState && rawSlice.endsWith(")")) {
       endOffset -= 1;
       arrayState = false;
+    }
+    if (token.unquotedParens.some((p) => p >= startOffset && p < endOffset)) {
+      return { targets: [], inArray: arrayState, unknown: true };
     }
   }
 
@@ -257,7 +275,8 @@ function rmTargets(
   return { targets, unknown: false };
 }
 
-function cdTarget(args: readonly string[]): string | null {
+function cdTarget(args: readonly string[], dialect: ShellDialect): string | null {
+  const fallback = dialect === "cmd" ? "." : "~";
   for (let i = 0; i < args.length; i++) {
     const w = args[i] as string;
     if (/^\/d$/i.test(w) || /^-(?:L|P|e|PassThru)$/i.test(w)) continue;
@@ -268,13 +287,13 @@ function cdTarget(args: readonly string[]): string | null {
         (flag.name.length >= 2 &&
           ("path".startsWith(flag.name) || "literalpath".startsWith(flag.name)))
       ) {
-        return flag.inlineValue ?? args[i + 1] ?? "~";
+        return flag.inlineValue ?? args[i + 1] ?? fallback;
       }
       return null;
     }
     return w;
   }
-  return "~";
+  return fallback;
 }
 
 type ShellUnwrap =
@@ -295,6 +314,38 @@ function decodeEncodedCommand(raw: string): string | null {
   return text;
 }
 
+type CmdSwitchParse =
+  | { kind: "flags"; hasSlashS: boolean }
+  | { kind: "exec"; hasSlashS: boolean; gluedText: string; offset: number };
+
+function parseCmdSwitchToken(w: string): CmdSwitchParse | null {
+  if (!w.startsWith("/")) return null;
+  let hasSlashS = false;
+  let pos = 0;
+  while (pos < w.length) {
+    if (w[pos] !== "/") return null;
+    const ch = w[pos + 1]?.toLowerCase();
+    if (ch === undefined || !/[a-z]/.test(ch)) return null;
+    if (ch === "c" || ch === "k") {
+      return { kind: "exec", hasSlashS, gluedText: w.slice(pos + 2), offset: pos + 2 };
+    }
+    if (ch === "s") {
+      hasSlashS = true;
+      pos += 2;
+      continue;
+    }
+    if (w[pos + 2] === ":") {
+      const nextSlash = w.indexOf("/", pos + 3);
+      const end = nextSlash === -1 ? w.length : nextSlash;
+      if (end === pos + 3) return null;
+      pos = end;
+      continue;
+    }
+    pos += 2;
+  }
+  return { kind: "flags", hasSlashS };
+}
+
 function unwrapCmd(
   args: readonly Token[],
   joinedBy: JoinOperator | null,
@@ -305,12 +356,13 @@ function unwrapCmd(
   let hasSlashS = false;
   for (let i = 0; i < args.length; i++) {
     const token = args[i] as Token;
-    const w = token.value;
-    if (/^\/s$/i.test(w)) {
-      hasSlashS = true;
-      continue;
+    const parsed = parseCmdSwitchToken(token.value);
+    if (parsed === null) {
+      return joinedBy === "|" ? { kind: "escalate" } : { kind: "none" };
     }
-    if (/^\/(?:c|k)$/i.test(w)) {
+    if (parsed.hasSlashS) hasSlashS = true;
+    if (parsed.kind === "flags") continue;
+    if (parsed.gluedText === "") {
       const rest = args.slice(i + 1);
       if (rest.length === 0) return { kind: "none" };
       const rawRest = rawCommand.slice(token.end).trim();
@@ -322,24 +374,26 @@ function unwrapCmd(
       ) {
         return { kind: "text", text: rawRest.slice(1, -1), dialect: "cmd" };
       }
-      if (canOwnRemainder && !rawRest.startsWith('"') && !rawRest.startsWith("'")) {
+      if (
+        canOwnRemainder &&
+        ((!rawRest.startsWith('"') && !rawRest.startsWith("'")) ||
+          (!isWholeCommand && rest.length > 1 && !/\s/.test(rest[0]?.value ?? "")))
+      ) {
         return { kind: "text", text: rawRest, dialect: "cmd" };
       }
       return { kind: "text", text: rest.map((t) => t.value).join(" "), dialect: "cmd" };
     }
-    const glued = /^\/(?:c|k)(.+)$/i.exec(w);
-    if (glued !== null) {
-      const rest = [glued[1] as string, ...args.slice(i + 1).map((t) => t.value)];
-      if (canOwnRemainder) {
-        const rawRest = rawCommand.slice(token.start + 2).trim();
-        if (!rawRest.startsWith('"') && !rawRest.startsWith("'")) {
-          return { kind: "text", text: rawRest, dialect: "cmd" };
-        }
+    const rest = [parsed.gluedText, ...args.slice(i + 1).map((t) => t.value)];
+    if (canOwnRemainder) {
+      const rawRest = rawCommand.slice(token.start + parsed.offset).trim();
+      if (
+        (!rawRest.startsWith('"') && !rawRest.startsWith("'")) ||
+        (!isWholeCommand && rest.length > 1 && !/\s/.test(rest[0] ?? ""))
+      ) {
+        return { kind: "text", text: rawRest, dialect: "cmd" };
       }
-      return { kind: "text", text: rest.join(" "), dialect: "cmd" };
     }
-    if (/^\/[a-z](?::[^\s]+)?$/i.test(w)) continue;
-    return joinedBy === "|" ? { kind: "escalate" } : { kind: "none" };
+    return { kind: "text", text: rest.join(" "), dialect: "cmd" };
   }
   return joinedBy === "|" ? { kind: "escalate" } : { kind: "none" };
 }
@@ -348,6 +402,7 @@ function unwrapPowerShell(
   args: readonly Token[],
   joinedBy: JoinOperator | null,
   rawCommand: string,
+  isWholeCommand: boolean,
   canOwnRemainder: boolean,
 ): ShellUnwrap {
   let dir: string | undefined;
@@ -360,7 +415,7 @@ function unwrapPowerShell(
     const token = args[i] as Token;
     const w = token.value;
     if (w === "-") return { kind: "escalate" };
-    const flag = splitPsFlag(w);
+    const flag = splitPsFlag(w, true);
     if (flag !== null) {
       if (matchesPsPrefix(flag.name, PS_NO_VALUE_PREFIXES, PS_NO_VALUE_ALIASES)) continue;
       if (matchesPsPrefix(flag.name, PS_VALUE_PREFIXES, PS_VALUE_ALIASES)) {
@@ -399,7 +454,10 @@ function unwrapPowerShell(
         if (rest[0] === "-") return { kind: "escalate" };
         if (flag.inlineValue === undefined && canOwnRemainder) {
           const rawRest = rawCommand.slice(token.end).trim();
-          if (!rawRest.startsWith('"') && !rawRest.startsWith("'")) {
+          if (
+            (!rawRest.startsWith('"') && !rawRest.startsWith("'")) ||
+            (!isWholeCommand && rest.length > 1 && !/\s/.test(rest[0] ?? ""))
+          ) {
             return withDir({ kind: "text", text: rawRest, dialect: "powershell" });
           }
         }
@@ -412,7 +470,10 @@ function unwrapPowerShell(
     const rest = args.slice(i).map((t) => t.value);
     if (canOwnRemainder) {
       const rawRest = rawCommand.slice(token.start).trim();
-      if (!rawRest.startsWith('"') && !rawRest.startsWith("'")) {
+      if (
+        (!rawRest.startsWith('"') && !rawRest.startsWith("'")) ||
+        (!isWholeCommand && rest.length > 1 && !/\s/.test(rest[0] ?? ""))
+      ) {
         return withDir({ kind: "text", text: rawRest, dialect: "powershell" });
       }
     }
@@ -441,7 +502,7 @@ function unwrapWindowsShell(
     return unwrapCmd(args, joinedBy, rawCommand, isWholeCommand, canOwnRemainder);
   }
   if (program === "powershell" || program === "pwsh") {
-    return unwrapPowerShell(args, joinedBy, rawCommand, canOwnRemainder);
+    return unwrapPowerShell(args, joinedBy, rawCommand, isWholeCommand, canOwnRemainder);
   }
   return { kind: "none" };
 }
@@ -455,22 +516,32 @@ function resolveProgram(
   rawFirst: Token,
   args: readonly Token[],
   winDialect: boolean,
-): { program: string; args: readonly Token[] } {
-  const word = rawFirst.value;
+): { first: Token; program: string; args: readonly Token[] } {
+  let curFirst = rawFirst;
+  let curArgs = args;
   if (winDialect) {
-    const gluedProg = CMD_GLUED_PROGRAM.exec(word);
+    while (basename(curFirst.value) === "call" && curArgs.length > 0) {
+      curFirst = curArgs[0] as Token;
+      curArgs = curArgs.slice(1);
+    }
+    const gluedProg = CMD_GLUED_PROGRAM.exec(curFirst.value);
     if (gluedProg !== null) {
       const switchText = gluedProg[2] as string;
       const switchToken: Token = {
         value: switchText,
         unquotedCommas: [],
-        start: rawFirst.start + (gluedProg[1] as string).length,
-        end: rawFirst.end,
+        unquotedParens: [],
+        start: curFirst.start + (gluedProg[1] as string).length,
+        end: curFirst.end,
       };
-      return { program: (gluedProg[1] as string).toLowerCase(), args: [switchToken, ...args] };
+      return {
+        first: curFirst,
+        program: (gluedProg[1] as string).toLowerCase(),
+        args: [switchToken, ...curArgs],
+      };
     }
   }
-  return { program: basename(word), args };
+  return { first: curFirst, program: basename(curFirst.value), args: curArgs };
 }
 
 function checkSegment(
@@ -494,6 +565,9 @@ function checkSegment(
     (here !== null && isWinPath(here));
 
   const firstToken = tokens[0] as Token;
+  if (isWin && firstToken.unquotedParens.includes(0) && DELETE_KEYWORD.test(rawCommand)) {
+    return true;
+  }
   const { program, args } = resolveProgram(firstToken, tokens.slice(1), isWin);
   const argValues = args.map((t) => t.value);
 
@@ -525,9 +599,23 @@ function checkSegment(
     return checkCommandText(inner.text, ctx, subHere, depth + 1, inner.dialect);
   }
 
+  if (program === "iex" || program === "invoke-expression") {
+    if (segment.joinedBy === "|") return true;
+    if (
+      argValues.length > 0 &&
+      checkCommandText(argValues.join(" "), ctx, here, depth + 1, "powershell")
+    ) {
+      return true;
+    }
+    if (argValues.some((w) => /\$|%[^%\s]+%/.test(w)) && DELETE_KEYWORD.test(rawCommand)) {
+      return true;
+    }
+  }
+
   if (DELETE_PROGRAMS.has(program) || program === "trash") {
     const isPowerShell = dialect === "powershell" || program === "remove-item" || program === "ri";
-    if (isPowerShell && segment.joinedBy === "|") return true;
+    const isPsLike = isPowerShell || (isWin && dialect !== "cmd");
+    if (isPsLike && segment.joinedBy === "|") return true;
     const allowCmdSwitches = CMD_STYLE_DELETERS.has(program) && isWin;
     const splitCommas = isWin || isPowerShell;
     const { targets, unknown } = rmTargets(
@@ -535,7 +623,7 @@ function checkSegment(
       rawCommand,
       allowCmdSwitches,
       splitCommas,
-      isPowerShell,
+      isPsLike,
     );
     if (unknown) return true;
     if (segment.joinedBy === "|" && targets.length === 0) return true;
@@ -565,16 +653,21 @@ function checkSegment(
   return false;
 }
 
-function hasUnquotedBrace(text: string): boolean {
+function hasUnquotedDelimiter(text: string, ch: string): boolean {
   let inSingle = false;
   let inDouble = false;
   for (let i = 0; i < text.length; i++) {
     const c = text[i] as string;
     if (c === "'" && !inDouble) inSingle = !inSingle;
     else if (c === '"' && !inSingle) inDouble = !inDouble;
-    else if (!inSingle && !inDouble && c === "{") return true;
+    else if (!inSingle && !inDouble && c === ch) return true;
   }
   return false;
+}
+
+function parseGluedCd(word: string): string | null {
+  const m = /^(?:cd|chdir)(\.\..*|[\\/].*)$/i.exec(word);
+  return m === null ? null : (m[1] as string);
 }
 
 function dedupeHeres(list: readonly (string | null)[]): (string | null)[] {
@@ -595,11 +688,12 @@ function checkCommandText(
   if (command.trim() === "") return false;
   if (depth > MAX_SHELL_DEPTH) return true;
 
-  // PowerShell blocks (`{ ... }`, `if (...) { ... }`) can change scope or control flow internally.
+  // PowerShell blocks (`{ ... }`, `if (...) { ... }`) and CMD groups (`( ... )`) can alter scope internally.
   if (
-    (dialect === "powershell" || isWinPath(ctx.cwd)) &&
-    hasUnquotedBrace(command) &&
-    DELETE_KEYWORD.test(command)
+    ((dialect === "powershell" || isWinPath(ctx.cwd)) &&
+      hasUnquotedDelimiter(command, "{") &&
+      DELETE_KEYWORD.test(command)) ||
+    (dialect === "cmd" && hasUnquotedDelimiter(command, "(") && DELETE_KEYWORD.test(command))
   ) {
     return true;
   }
@@ -616,6 +710,8 @@ function checkCommandText(
   // Track active working directories and fallbacks when a `cd`/`Set-Location` might fail before `;`.
   let activeHeres: (string | null)[] = [initialHere];
   let failHeres: (string | null)[] = [];
+  const isWinText =
+    dialect === "cmd" || dialect === "powershell" || isWinPath(ctx.cwd) || isWinPath(ctx.home);
 
   for (let idx = 0; idx < segments.length; idx++) {
     const segment = segments[idx] as RichSegment;
@@ -628,10 +724,39 @@ function checkCommandText(
     }
 
     const tokens = programTokens(segment.tokens);
-    const program = basename(tokens[0]?.value ?? "");
+    if (tokens.length === 0) continue;
+    const {
+      first: resolvedFirst,
+      program,
+      args: resolvedArgs,
+    } = resolveProgram(tokens[0] as Token, tokens.slice(1), isWinText);
+
+    if (isWinText) {
+      const gluedCd = parseGluedCd(resolvedFirst.value);
+      if (gluedCd !== null) {
+        failHeres = dedupeHeres([...failHeres, ...activeHeres]);
+        activeHeres = dedupeHeres(
+          activeHeres.map((h) => (h === null ? null : resolveWord(gluedCd, { ...ctx, cwd: h }))),
+        );
+        continue;
+      }
+      if (resolvedArgs.length === 0 && /^[A-Za-z]:$/.test(resolvedFirst.value)) {
+        const drive = resolvedFirst.value[0]?.toLowerCase();
+        failHeres = dedupeHeres([...failHeres, ...activeHeres]);
+        activeHeres = dedupeHeres(
+          activeHeres.map((h) =>
+            h !== null && isWinPath(h) && h[0]?.toLowerCase() === drive ? h : null,
+          ),
+        );
+        continue;
+      }
+    }
 
     if (CD_PROGRAMS.has(program)) {
-      const target = cdTarget(tokens.slice(1).map((t) => t.value));
+      const target = cdTarget(
+        resolvedArgs.map((t) => t.value),
+        dialect,
+      );
       failHeres = dedupeHeres([...failHeres, ...activeHeres]);
       activeHeres = dedupeHeres(
         activeHeres.map((h) =>

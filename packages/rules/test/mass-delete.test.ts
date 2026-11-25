@@ -184,6 +184,26 @@ describe("massDeleteCheck", () => {
       "rd/s/q .",
       "del /f/s/q *.*",
       "rd /s /q C:\\tmp\\important",
+      'cmd.exe /d/s/c "rd /s /q ."',
+      'cmd /s/c "rd /s /q ."',
+      'cmd/c "rd /s /q ."',
+      'powershell.exe /c "Remove-Item -Recurse -Force ."',
+      `powershell.exe /ec ${psEncode("Remove-Item -Recurse -Force .")}`,
+      'powershell.exe /NoProfile /Command "Remove-Item -Recurse -Force ."',
+      "Get-ChildItem -Recurse | rm -ErrorAction SilentlyContinue",
+      "Get-ChildItem .. | del -Filter *.log",
+      "Remove-Item -Recurse -Force build,('.')",
+      "Remove-Item -Recurse -Force @(('.'))",
+      'cmd /c "(rd /s /q .)"',
+      'cmd /c "(cd .. && rd /s /q app)"',
+      'cmd /c "cd.. && rd /s /q app"',
+      'cmd /c "cd\\ && rd /s /q app"',
+      'cmd /c "D: && rd /s /q app"',
+      'cmd /c "call rd /s /q ."',
+      "powershell -Command \"iex 'Remove-Item -Recurse -Force .'\"",
+      'iex "Remove-Item -Recurse -Force ."',
+      'cmd /c "cd" .. & rd /s /q app',
+      'powershell -NoProfile -Command "Set-Location" ..; Remove-Item -Recurse -Force app',
     ])("asks for wrapped or PowerShell/cmd mass delete: %s", (command) => {
       expect(massDeleteCheck(run(command), winCtx).hit).toBe(true);
     });
@@ -209,6 +229,12 @@ describe("massDeleteCheck", () => {
       "Remove-Item @('build', 'dist')",
       "rd /s/q dist",
       "Remove-Item -Path src -Filter *.log -Recurse",
+      'cmd /c "cd && rd /s /q dist"',
+      'cmd /c "echo y | del a.txt"',
+      'cmd /c "call rd /s /q dist"',
+      "powershell -Command \"iex 'Write-Output ok'\"",
+      "Remove-Item -LiteralPath 'logs,(1).txt'",
+      "pwsh /tmp/build.ps1",
     ])("approves wrapped or narrow Windows command: %s", (command) => {
       expect(massDeleteCheck(run(command), winCtx).hit).toBe(false);
     });
