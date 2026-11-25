@@ -261,10 +261,17 @@ export function createMockAgent(script: Script, options: MockAgentOptions = {}):
       agentInfo: { name: script.name, version: "0.0.0" },
       authMethods: [],
     }))
-    .onRequest(methods.agent.session.new, ({ params }) => {
+    .onRequest(methods.agent.session.new, async ({ params, client }) => {
       const sessionId = `mock-${nextSession++}`;
       const mcpServers = stdioServers(params.mcpServers, log);
       sessions.set(sessionId, { turn: 0, abort: null, mcpServers, steers: [] });
+      // A mode the agent reports before any client request (never a confirmation, ADR 0105).
+      if (script.modeReport !== undefined) {
+        await client.notify(methods.client.session.update, {
+          sessionId,
+          update: { sessionUpdate: "current_mode_update", currentModeId: script.modeReport },
+        });
+      }
       if (script.models === undefined) return { sessionId };
       // Grouped like DSH's (ADR 0106): values are the agent's own ids, names are for people.
       return {
@@ -283,6 +290,10 @@ export function createMockAgent(script: Script, options: MockAgentOptions = {}):
     })
     .onRequest(methods.agent.session.load, ({ params }) => {
       if (script.loadSession !== true) throw new Error("session/load is not supported");
+      if (script.failLoad === true) {
+        log(`load refused: ${String(params.sessionId)}`);
+        throw new Error("saved session is gone");
+      }
       log(`load ${params.sessionId}`);
       const mcpServers = stdioServers(params.mcpServers, log);
       sessions.set(params.sessionId, { turn: 0, abort: null, mcpServers, steers: [] });
@@ -290,13 +301,40 @@ export function createMockAgent(script: Script, options: MockAgentOptions = {}):
     })
     .onRequest(methods.agent.session.setConfigOption, ({ params }) => {
       // Like Antigravity (ADR 0104): the session's model is picked by the agent's own name.
-      log(`config ${params.configId}=${String((params as { value?: unknown }).value)}`);
+      const value = String((params as { value?: unknown }).value);
+      if (script.rejectModel === true) {
+        log(`config refused: no model ${value}`);
+        throw new Error(`no such model ${value}`);
+      }
+      log(`config ${params.configId}=${value}`);
       return { configOptions: [] };
+    })
+    .onRequest(methods.agent.session.setMode, async ({ params, client }) => {
+      // Like ZCode (ADR 0105): the mode counts only when the running session reports it back.
+      const behavior = script.setMode;
+      if (behavior === undefined || behavior === "error") {
+        if (behavior === "error") log("set_mode refused: not supported");
+        throw new Error("session/set_mode is not supported");
+      }
+      const modeId = (params as { modeId?: unknown }).modeId;
+      log(`mode ${String(modeId)}`);
+      if (behavior === "confirm" || behavior === "wrong") {
+        await client.notify(methods.client.session.update, {
+          sessionId: params.sessionId,
+          update: {
+            sessionUpdate: "current_mode_update",
+            currentModeId: behavior === "wrong" ? "yolo" : String(modeId),
+          },
+        });
+      }
+      return {};
     })
     .onRequest(methods.agent.session.prompt, async ({ params, client }) => {
       const state = sessions.get(params.sessionId);
       if (state === undefined) throw new Error(`unknown session ${params.sessionId}`);
       if (state.abort !== null) throw new Error("a turn is already running");
+      const text = params.prompt.map((b) => (b.type === "text" ? b.text : "")).join("\n");
+      log(`prompt ${text.slice(0, 60)}`);
       const steps = script.turns[state.turn];
       state.turn += 1;
       const abort = new AbortController();
@@ -311,7 +349,6 @@ export function createMockAgent(script: Script, options: MockAgentOptions = {}):
           );
           return { stopReason: "end_turn" };
         }
-        const text = params.prompt.map((b) => (b.type === "text" ? b.text : "")).join("\n");
         return { stopReason: await play(client, params.sessionId, steps, abort.signal, text) };
       } catch (error) {
         if (error instanceof Cancelled || abort.signal.aborted) return { stopReason: "cancelled" };

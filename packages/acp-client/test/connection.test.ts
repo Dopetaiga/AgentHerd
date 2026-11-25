@@ -315,3 +315,69 @@ describe("setModel (ADR 0104)", () => {
     );
   });
 });
+
+describe("prepareSession (ADR 0105)", () => {
+  it("counts the mode as established when the session confirms it after the request", async () => {
+    const { conn, sessionId } = await start("set_mode: confirm\nturns: []\n");
+    await conn.prepareSession(sessionId, "guarded");
+    const log = conn.stderr().join("\n");
+    expect(log).toContain("mode guarded");
+    // The confirmation came before any work: there is no prompt line yet.
+    expect(log).not.toContain("prompt ");
+  });
+
+  it("fails when the session reports another mode than the one it asked for", async () => {
+    const { conn, sessionId } = await start("set_mode: wrong\nturns: []\n");
+    await expect(conn.prepareSession(sessionId, "guarded")).rejects.toThrow(
+      /reported mode "yolo" instead of "guarded"/,
+    );
+  });
+
+  it("fails when the agent refuses the mode, with the agent's own log", async () => {
+    const { conn, sessionId } = await start("set_mode: error\nturns: []\n");
+    await expect(conn.prepareSession(sessionId, "guarded")).rejects.toThrow(
+      /set_mode refused: not supported/,
+    );
+  });
+
+  it("fails when the agent answers without the session reporting the mode", async () => {
+    const { conn, sessionId } = await start("set_mode: silent\nturns: []\n");
+    await expect(conn.prepareSession(sessionId, "guarded", 300)).rejects.toThrow(
+      /did not confirm mode "guarded"/,
+    );
+  });
+
+  it("a mode the agent reports on its own is not a confirmation", async () => {
+    const { conn, sessionId } = await start("mode_report: guarded\nset_mode: silent\nturns: []\n");
+    await expect(conn.prepareSession(sessionId, "guarded", 300)).rejects.toThrow(
+      /did not confirm mode "guarded"/,
+    );
+  });
+
+  it("fails for an agent that does not take session/set_mode at all", async () => {
+    const { conn, sessionId } = await start("turns: []\n");
+    // The ACP SDK answers an unknown method with a bare "Internal error".
+    await expect(conn.prepareSession(sessionId, "guarded")).rejects.toThrow(/Internal error/);
+  });
+
+  it("fails when the agent exits before confirming", async () => {
+    const { conn, sessionId } = await start("set_mode: silent\nturns:\n  - - crash: 7\n");
+    const prepared = conn.prepareSession(sessionId, "guarded", 10_000);
+    const turn = conn.prompt(sessionId, "go").catch((e: Error) => e);
+    await expect(prepared).rejects.toThrow(/exited \(code 7/);
+    await turn;
+  });
+
+  it("open/load sessions and set a model still work", async () => {
+    const conn = await startAgent(profile("load_session: true\nset_mode: confirm\nturns: []\n"), {
+      cwd: dir,
+    });
+    open.push(conn);
+    const id = await conn.newSession(dir);
+    await conn.prepareSession(id, "guarded");
+    await conn.loadSession(id, dir);
+    await conn.prepareSession(id, "guarded");
+    await conn.setModel(id, "glm-5.3");
+    expect(conn.stderr().join("\n")).toContain("config model=glm-5.3");
+  });
+});

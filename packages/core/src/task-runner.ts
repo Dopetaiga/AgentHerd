@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { type AgentConnection, type StdioMcpServer, startAgent } from "@agentherd/acp-client";
 import type { AgentProfile, MessageRef } from "@agentherd/protocol";
+import { ZCODE_PROFILE } from "@agentherd/protocol";
 import type { OutboundStep } from "@agentherd/rules";
 import {
   type Following,
@@ -140,6 +141,11 @@ export class TaskRunner {
       f.connection = connection;
       f.agentSessionId = await connection.newSession(f.cwd, mcpServers(ctx, f));
       if (own && model !== undefined) await connection.setModel(f.agentSessionId, model);
+      // A profile with a required permission mode (ZCode, ADR 0105) runs nothing before the
+      // running session confirms the mode; the catch below closes the connection otherwise.
+      if (profile.mode !== undefined) {
+        await connection.prepareSession(f.agentSessionId, profile.mode);
+      }
     } catch (error) {
       const message = (error as Error).message;
       await f.connection?.close().catch(() => {});
@@ -436,12 +442,15 @@ export class TaskRunner {
     const now = ctx.clock.now().toISOString();
     for (const saved of ctx.store.tasks(limit).reverse()) {
       if (ctx.following.has(saved.task.id)) continue;
+      // A saved task stays recognizable when its agent is gone (ZCode, ADR 0105): the
+      // placeholder keeps the account choice, so recovery never substitutes another agent.
       const profile = ctx.opts.profiles.find((p) => p.id === saved.profileId) ?? {
         id: saved.profileId,
         name: saved.task.agent,
         command: [],
         env: {},
         exporter: null,
+        ...(saved.profileId === ZCODE_PROFILE ? { ownModels: true } : {}),
       };
       const f: Following = {
         task: saved.task,
@@ -480,7 +489,12 @@ export class TaskRunner {
     return crashed;
   }
 
-  /** Agents to start an ended task again with: its own, then Pi, then the rest. */
+  /**
+   * Agents to start an ended task again with: its own, then Pi, then the rest. A task on the
+   * owner's own account stays on that agent (ZCode, ADR 0105): recovery retries it, and when
+   * it cannot start the owner chooses what happens next. ZCode is never an automatic
+   * substitute for another task.
+   */
   private reopenCandidates(f: Following): AgentProfile[] {
     const profiles = this.ctx.opts.profiles;
     const out: AgentProfile[] = [];
@@ -488,8 +502,18 @@ export class TaskRunner {
       if (p !== undefined && !out.some((o) => o.id === p.id)) out.push(p);
     };
     add(profiles.find((p) => p.id === f.profile.id));
+    if (f.profile.mode !== undefined || f.profile.id === ZCODE_PROFILE) {
+      // The saved agent is gone (its executable was removed): try the saved profile's own
+      // entry, which fails with a clear reason, and stop there — recovery must not switch
+      // the owner's account without an explicit choice.
+      if (!out.some((p) => p.id === f.profile.id)) add(f.profile);
+      return out;
+    }
     add(profiles.find((p) => p.id === "pi"));
-    for (const p of profiles) add(p);
+    for (const p of profiles) {
+      if (p.mode !== undefined || p.id === ZCODE_PROFILE) continue;
+      add(p);
+    }
     return out;
   }
 
@@ -517,6 +541,7 @@ export class TaskRunner {
     }
     for (const base of this.reopenCandidates(f)) {
       try {
+        if (base.command.length === 0) throw new Error(`${base.name} is not installed`);
         const own = base.ownModels === true;
         const model = own ? f.task.model : await this.configuredModel(base.id, f.task.model);
         let profile = base;
@@ -532,11 +557,23 @@ export class TaskRunner {
           f.agentSessionId !== undefined &&
           base.id === f.profile.id
         ) {
+          let loadedOk = false;
           try {
             await connection.loadSession(f.agentSessionId, f.cwd, mcpServers(ctx, f));
+            loadedOk = true;
+            // A loaded session runs only after its mode is verified (ADR 0105). When that
+            // fails, this connection is closed and the attempt fails: no work goes out on it,
+            // and a fresh session on the same account is not a substitute for the saved one.
+            if (profile.mode !== undefined) {
+              await connection.prepareSession(f.agentSessionId, profile.mode);
+            }
             sessionId = f.agentSessionId;
           } catch (error) {
             ctx.store.audit("task.load-failed", { taskId, message: (error as Error).message });
+            if (loadedOk) {
+              await connection.close().catch(() => {});
+              throw error;
+            }
           }
         }
         const loaded = sessionId !== undefined;
@@ -544,6 +581,9 @@ export class TaskRunner {
           try {
             sessionId = await connection.newSession(f.cwd, mcpServers(ctx, f));
             if (own && model !== undefined) await connection.setModel(sessionId, model);
+            if (profile.mode !== undefined) {
+              await connection.prepareSession(sessionId, profile.mode);
+            }
           } catch (error) {
             await connection.close().catch(() => {});
             throw error;

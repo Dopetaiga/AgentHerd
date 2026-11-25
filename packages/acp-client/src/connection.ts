@@ -34,6 +34,8 @@ export const STDERR_LINES = 200;
 export const CLOSE_GRACE_MS = 3000;
 /** How long a failed request waits for the process exit to explain it. */
 const EXIT_GRACE_MS = 1000;
+/** How long a mode confirmation may take after `session/set_mode` (ADR 0105). */
+export const MODE_CONFIRM_TIMEOUT_MS = 30_000;
 
 export interface StartOptions {
   cwd: string;
@@ -44,11 +46,13 @@ export interface StartOptions {
 
 export interface SessionUpdateEvent {
   sessionId: string;
-  type: "message" | "tool_call" | "tool_call_update" | "plan" | "other";
+  type: "message" | "tool_call" | "tool_call_update" | "plan" | "mode" | "other";
   text?: string;
   toolCallId?: string;
   toolCall?: ToolCallInfo;
   status?: string;
+  /** The session's current mode, for `type: "mode"` (ACP `current_mode_update`). */
+  modeId?: string;
 }
 
 export interface PermissionRequest {
@@ -158,6 +162,16 @@ export interface AgentConnection {
    * @throws When the agent refuses, e.g. it has no such model.
    */
   setModel(sessionId: string, model: string): Promise<void>;
+  /**
+   * Establishes a session's permission mode before any work is sent (ZCode, ADR 0105): sends
+   * ACP `session/set_mode` and counts the mode as established only when the running session
+   * itself reports it back (`current_mode_update` with the requested id). A mode the session
+   * merely reports on its own, a pending session, or a report that names another mode is not
+   * confirmation.
+   * @param timeoutMs How long the confirmation may take. Default: `MODE_CONFIRM_TIMEOUT_MS`.
+   * @throws When the agent refuses the mode, reports another one, stays silent or exits.
+   */
+  prepareSession(sessionId: string, mode: string, timeoutMs?: number): Promise<void>;
   /** Sends `session/cancel` and answers the session's open permission requests `cancelled`. */
   cancel(sessionId: string): Promise<void>;
   on<K extends keyof Events>(event: K, listener: Listener<Events[K]>): () => void;
@@ -188,6 +202,12 @@ function toUpdateEvent(n: SessionNotification, tracker: ToolCallTracker): Sessio
     }
     case "plan":
       return { sessionId: n.sessionId, type: "plan" };
+    case "current_mode_update":
+      return {
+        sessionId: n.sessionId,
+        type: "mode",
+        modeId: typeof u.currentModeId === "string" ? u.currentModeId : "",
+      };
     default:
       return { sessionId: n.sessionId, type: "other" };
   }
@@ -264,6 +284,11 @@ export async function startAgent(
   const tracker = new ToolCallTracker();
   // Each session's model choices, to turn a model the owner names into the agent's id (ADR 0106).
   const models = new Map<string, ModelChoice[]>();
+  /** The session a pending `prepareSession` waits to confirm its mode (ADR 0105). */
+  let modeWait: {
+    sessionId: string;
+    resolve: (mode: string | null) => void;
+  } | null = null;
 
   const exited = new Promise<ExitEvent>((resolve) => {
     let done = false;
@@ -271,6 +296,8 @@ export async function startAgent(
       if (done) return;
       done = true;
       for (const request of open.values()) request.cancel();
+      // A pending prepareSession learns of the exit through the exited promise, which reports
+      // the exit and its stderr instead of a bare "not confirmed".
       const event = { code, signal, stderr: ring.snapshot() };
       emitter.emit("exit", event);
       resolve(event);
@@ -284,7 +311,13 @@ export async function startAgent(
 
   const app = client({ name: "agentherd" })
     .onNotification(methods.client.session.update, ({ params }) => {
-      emitter.emit("update", toUpdateEvent(params, tracker));
+      const event = toUpdateEvent(params, tracker);
+      emitter.emit("update", event);
+      if (event.type === "mode" && modeWait !== null && modeWait.sessionId === params.sessionId) {
+        const wait = modeWait;
+        modeWait = null;
+        wait.resolve(event.modeId ?? "");
+      }
     })
     .onRequest(methods.client.session.requestPermission, ({ params }) => {
       const acpOptions: PermissionOption[] = params.options;
@@ -326,6 +359,13 @@ export async function startAgent(
     new Error(
       `agent ${profile.id} exited (code ${e.code}, signal ${e.signal})\n${e.stderr.join("\n")}`,
     );
+  /** A refused request often carries no detail over ACP ("Internal error"); the agent's own
+   * log usually says why (the bridge writes "setMode failed: …" to its stderr). */
+  const requestError = (error: unknown): Error => {
+    const message = (error as Error).message;
+    const stderr = ring.snapshot().slice(-5).join("\n");
+    return new Error(stderr === "" || message.includes(stderr) ? message : `${message}\n${stderr}`);
+  };
   const failOnExit = exited.then((e) => {
     throw exitError(e);
   });
@@ -423,13 +463,51 @@ export async function startAgent(
       }
     },
     async setModel(sessionId, model) {
-      await whileAlive(
-        agent.request(methods.agent.session.setConfigOption, {
-          sessionId,
-          configId: "model",
-          value: modelValue(models.get(sessionId) ?? [], model),
-        }),
-      );
+      try {
+        await whileAlive(
+          agent.request(methods.agent.session.setConfigOption, {
+            sessionId,
+            configId: "model",
+            value: modelValue(models.get(sessionId) ?? [], model),
+          }),
+        );
+      } catch (error) {
+        throw requestError(error);
+      }
+    },
+    async prepareSession(sessionId, mode, timeoutMs = MODE_CONFIRM_TIMEOUT_MS) {
+      // The session confirms by reporting its mode after this request; listen before sending,
+      // because the agent may answer the notification before the RPC response.
+      const confirmed = new Promise<string | null>((resolve) => {
+        modeWait = { sessionId, resolve };
+      });
+      const gone = exited.then((e) => {
+        throw exitError(e);
+      });
+      gone.catch(() => {});
+      try {
+        await whileAlive(agent.request(methods.agent.session.setMode, { sessionId, modeId: mode }));
+      } catch (error) {
+        modeWait?.resolve(null);
+        modeWait = null;
+        throw requestError(error);
+      }
+      let reported: string | null;
+      try {
+        reported = await Promise.race([
+          confirmed,
+          new Promise<null>((resolve) => setTimeout(() => resolve(null), timeoutMs).unref()),
+          gone,
+        ]);
+      } finally {
+        modeWait = null;
+      }
+      if (reported === null) {
+        throw new Error(`the agent did not confirm mode "${mode}" for session ${sessionId}`);
+      }
+      if (reported !== mode) {
+        throw new Error(`the agent reported mode "${reported}" instead of "${mode}"`);
+      }
     },
     async cancel(sessionId) {
       for (const request of [...open.values()]) {
