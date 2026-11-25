@@ -38,6 +38,7 @@ Each milestone is split into plans under [`plans/`](../../plans/README.md).
 | ID | Scenario | Milestone | Test |
 | --- | --- | --- | --- |
 | E2E-APPROVE | Mock agent requests approval; card is sent; owner taps Allow; the agent receives allow; card shows final state | M1 | `packages/core/test/e2e/approval.e2e.test.ts` |
+| E2E-MASS-DELETE-WINDOWS | Windows shell `execute` calls carrying `rawInput.command` (including wrapped `cmd` / `powershell` / `pwsh`, PowerShell pipelines/comma lists, and glued `rd`/`del` switches) escalate mass deletes to the owner in every mode while routine scoped operations follow normal rules | M1 | `packages/core/test/e2e/approval.e2e.test.ts`, `packages/core/test/pipeline.test.ts`, `packages/rules/test/mass-delete.test.ts` |
 | E2E-REMIND | An open item gets one reminder after `remindMinutes` and closes as not done (deny) after `timeoutMinutes`; 「先不管」 closes it at once (ADR 0056) | M1 | `packages/core/test/e2e/approval.e2e.test.ts` |
 | E2E-BATCH | Approvals of two tasks share one card; 「allow 2」 in the chat and 「全部批准」 answer them | M2 | `packages/core/test/e2e/approval.e2e.test.ts` |
 | E2E-LEAVES-MAC | git push and sending mail ask the owner; a step the owner allowed for the task runs without a card | M2 | `packages/core/test/e2e/approval.e2e.test.ts`, `packages/core/test/e2e/mcp.e2e.test.ts` |
