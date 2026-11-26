@@ -133,6 +133,8 @@ later task gets and which counts as the owner allowing that step.
 
 - A failed Herder turn is retried, then run on the next model, then held with a 「重试」 card;
   key, balance and request errors are not retried ([ADR 0037](../adr/0037-herder-retries-and-never-drops.md), spec 08 §5).
+  The card goes out only when the owner's words wait (timers and letters wait quietly), and it is
+  closed once what it held ran, or as out of date after a restart or a tap with nothing waiting.
 - The owner's messages and answers wait in `herd.db` (state `herder.pending`) until their turn is
   done. After a restart the Herder takes up what is left, oldest first, each turn told that it came
   before the restart; what it already did gets `[quiet]`, and what waited more than 24 hours is
