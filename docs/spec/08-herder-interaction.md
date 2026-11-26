@@ -212,7 +212,7 @@ Each kind of message looks different, the same in Feishu and in the app:
 | --- | --- | --- |
 | Network, timeout, 429, 5xx | Retry 3× after 2 s, 10 s, 30 s | Nothing if a retry works |
 | Still failing | Next model by tier (same order as tasks) | Red card "主管换成了 X，原因：…" |
-| Every model fails | The owner's message stays queued and runs when a model works | Red card with the error and 「重试」 |
+| Every model fails | The owner's message stays queued and runs when a model works; a timer or letter waits and is tried again quietly | Red card with the error, the start of the owner's words and 「重试」, once; closed when what it held ran, or as out of date after a restart (ADR 0037) |
 | 401, no balance, 400 | No retry | Red card naming what to change |
 
 The owner's message is never dropped silently: it is handled, or the owner is told why not.
