@@ -5,7 +5,7 @@ Applied ADRs: [0003](../adr/0003-herder-on-pi-agent-core.md), [0007](../adr/0007
 [0018](../adr/0018-one-herder-as-secretary-separate-approvals.md), [0019](../adr/0019-relay-verbatim-board-and-reports.md),
 [0076](../adr/0076-westock-market-quotes-and-research-cli.md),
 [0077](../adr/0077-xueqiu-danjuan-fund-holdings.md),
-[0107](../adr/0108-zcode-the-owners-own-account-behind-zcode-acp.md).
+[0108](../adr/0108-zcode-the-owners-own-account-behind-zcode-acp.md).
 
 AgentHerd has three roles:
 

@@ -4,7 +4,7 @@
 // Antigravity is the owner's own `agy` with its own Google sign-in and models, used only when the
 // owner names it (ADR 0104); DeepSeek Harness is the owner's own DSH app, the same way (ADR 0106).
 // ZCode is the owner's own zcode-acp bridge with its own account and backend, also only on
-// request; AgentHerd verifies its session mode before work (ADR 0107).
+// request; AgentHerd verifies its session mode before work (ADR 0108).
 // Nothing is updated here. 验证 starts one once to prove it works.
 
 import type { AgentCheck, AgentView } from "@agentherd/host/api";
@@ -50,7 +50,7 @@ const GET: Record<string, string> = {
     "你电脑上没找到 zcode-acp 桥。自己安装（npm install -g zcode-acp-server）并登录后，重开 AgentHerd 就能用。它会自己找 ZCode 后端：PATH 上的 zcode，或 ZCode 桌面版自带的那个；也可以用环境变量 ZCODE_BIN 指定。",
 };
 
-/** One-line guidance when a bridge's own backend or sign-in fails (ADR 0107). */
+/** One-line guidance when a bridge's own backend or sign-in fails (ADR 0108). */
 const BACKEND: Record<string, { test: RegExp; hint: string }> = {
   zcode: {
     test: /backend|ZCODE_|zcode\.cjs|ENOENT|spawn/i,
