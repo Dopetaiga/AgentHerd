@@ -65,6 +65,9 @@ export class TaskRunner {
   private readonly ops: TaskOps;
   /** Turns running now, so stopping can wait for their reports. */
   private readonly turns = new Set<Promise<unknown>>();
+  /** Ends started by a notification callback, whose tail must land before a stop closes the
+   * store: the callback cannot await it, so stopping does. */
+  private readonly ending = new Set<Promise<void>>();
 
   constructor(ctx: HerdContext, relay: Relay, ops: TaskOps) {
     this.ctx = ctx;
@@ -666,6 +669,17 @@ export class TaskRunner {
     }
   }
 
+  /**
+   * Ends a task from a notification callback (mode drift, agent exit, idle): the callback cannot
+   * await the end, so the runner tracks it and a stop waits for its tail in {@link settle}.
+   */
+  private endLater(taskId: string, why: string): void {
+    const ending = this.ops.endTask(taskId, why).finally(() => {
+      this.ending.delete(ending);
+    });
+    this.ending.add(ending);
+  }
+
   /** Closes the agent of a task. The task stays on the board. */
   async endTask(taskId: string, why: string): Promise<void> {
     const { ctx } = this;
@@ -834,7 +848,7 @@ export class TaskRunner {
               expected: f.profile.mode,
               actual: u.modeId,
             });
-            void this.ops.endTask(sessionId, `session mode changed to ${u.modeId}`);
+            this.endLater(sessionId, `session mode changed to ${u.modeId}`);
             return;
           }
         }
@@ -847,7 +861,7 @@ export class TaskRunner {
           ctx.watchdog.exited(sessionId, ctx.texts.exited(String(e.code ?? e.signal)));
         }
         if (!f.ended) ctx.registry.set(sessionId, e.code === 0 ? "ended" : "error");
-        if (!f.busy && !f.ended) void this.ops.endTask(sessionId, ctx.texts.agentExited);
+        if (!f.busy && !f.ended) this.endLater(sessionId, ctx.texts.agentExited);
       }),
     ];
   }
@@ -858,10 +872,10 @@ export class TaskRunner {
    * closes, or the outbox sends it a second time after the next start.
    */
   async settle(ms: number): Promise<void> {
-    if (this.turns.size === 0) return;
+    if (this.turns.size === 0 && this.ending.size === 0) return;
     let timer: ReturnType<typeof setTimeout> | undefined;
     await Promise.race([
-      Promise.allSettled([...this.turns]),
+      Promise.allSettled([...this.turns, ...this.ending]),
       new Promise((resolve) => {
         timer = setTimeout(resolve, ms);
       }),
@@ -907,7 +921,7 @@ export class TaskRunner {
     }
     const minutes = this.ctx.opts.sessionIdleMinutes ?? SESSION_IDLE_MINUTES;
     f.idleTimer = this.ctx.clock.after(minutes * 60_000, () => {
-      void this.ops.endTask(f.task.id, `no prompt for ${minutes} minutes`);
+      this.endLater(f.task.id, `no prompt for ${minutes} minutes`);
     });
   }
 
