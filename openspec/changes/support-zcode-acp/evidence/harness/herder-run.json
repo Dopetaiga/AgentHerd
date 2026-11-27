@@ -17,7 +17,7 @@
       "os": "win32",
       "tempRoot": "~\\AppData\\Local\\Temp\\zcode-herder-qqGHEo",
       "proj": "~\\AppData\\Local\\Temp\\zcode-herder-qqGHEo\\proj",
-      "zcodeBin": "D:\\Develop\\Agent\\Zcode\\resources\\glm\\zcode.cjs",
+      "zcodeBin": "%ZCODE_DESKTOP%\\resources\\glm\\zcode.cjs",
       "herderModel": "scripted faux provider (registerFauxProvider), not a live model service",
       "modelServiceList": "empty"
     }

@@ -8,13 +8,21 @@ export const HOME = homedir();
 export const TEMP = tmpdir();
 
 export function redact(text: string): string {
-  return text
-    .split(HOME)
-    .join("~")
-    .split(TEMP)
-    .join("%TEMP%")
-    .replaceAll(/(?:sk|key|token|secret)[_-][A-Za-z0-9_-]{12,}/gi, "<token>")
-    .replaceAll(/[\w.+-]+@[\w.-]+\.\w+/g, "<email>");
+  return (
+    text
+      .split(HOME)
+      .join("~")
+      .split(TEMP)
+      .join("%TEMP%")
+      .replaceAll(/(?:sk|key|token|secret)[_-][A-Za-z0-9_-]{12,}/gi, "<token>")
+      .replaceAll(/[\w.+-]+@[\w.-]+\.\w+/g, "<email>")
+      // The ZCode desktop install root leaks through session-context dumps and the recorded
+      // ZCODE_BIN: it is neither under the user's home nor under TEMP, so name it, don't show it.
+      .replaceAll(/[A-Z]:\\Develop\\Agent\\Zcode/gi, "%ZCODE_DESKTOP%")
+      // A temp dir redirected into the agent host's own data (`~\.t3\...`) shows the host's
+      // private structure; the specific subfolder never matters for the evidence.
+      .replaceAll(/~\.t3\\[A-Za-z0-9_. \\()-]*/g, "~\\.t3\\<redacted>")
+  );
 }
 
 export function redactDeep(value: unknown): unknown {
