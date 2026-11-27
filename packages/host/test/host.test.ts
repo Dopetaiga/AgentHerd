@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { FakeChannel } from "@agentherd/channel-fake";
@@ -164,6 +164,49 @@ describe("Host", () => {
     await t.host.removeService("deepseek");
     expect(t.host.models()).toEqual({ services: [], roles: {} });
     expect(t.events.some((e) => e.topic === "models")).toBe(true);
+  });
+
+  it("finds services other apps hold and adds one with its key, never showing the key (ADR 0107)", async () => {
+    const userHome = mkdtempSync(join(tmpdir(), "ah-"));
+    mkdirSync(join(userHome, ".claude"));
+    writeFileSync(
+      join(userHome, ".claude", "settings.json"),
+      JSON.stringify({
+        env: {
+          ANTHROPIC_AUTH_TOKEN: "sk-relay-0123456789",
+          ANTHROPIC_BASE_URL: "https://relay.example",
+        },
+      }),
+    );
+    const secrets = memorySecrets();
+    const host = new Host({
+      home: mkdtempSync(join(tmpdir(), "ah-")),
+      userHome,
+      secrets,
+      env: {},
+      profiles: () => [],
+      createChannel: () => new FakeChannel(),
+      fetch: (async () =>
+        new Response(JSON.stringify({ data: [{ id: "m1" }, { id: "m2" }] }))) as typeof fetch,
+    });
+    cleanups.push(() => host.stop());
+    const found = host.foundServices();
+    expect(found.services.map((s) => [s.name, s.sources, s.keyHint, s.added])).toEqual([
+      ["relay.example", ["claude-code"], "sk-r…6789", undefined],
+    ]);
+    expect(JSON.stringify(found)).not.toContain("sk-relay-0123456789");
+    const id = found.services[0]?.id ?? "";
+    const models = await host.addFoundService(id);
+    expect(models.services.map((s) => [s.id, s.baseUrl, s.api, s.models, s.hasKey])).toEqual([
+      ["relay-example", "https://relay.example", "anthropic-messages", ["m1", "m2"], true],
+    ]);
+    expect(secrets.get("model:relay-example")).toBe("sk-relay-0123456789");
+    expect(host.foundServices().services[0]?.added).toEqual({
+      id: "relay-example",
+      name: "relay.example",
+    });
+    await expect(host.addFoundService(id)).rejects.toThrow('already added as "relay.example"');
+    await expect(host.addFoundService("nope")).rejects.toThrow("no longer in the list");
   });
 
   it("probes a saved service's models with its saved key unless a new key is typed", async () => {

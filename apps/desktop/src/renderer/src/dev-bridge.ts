@@ -28,6 +28,7 @@ import type {
   DanjuanView,
   DingTalkView,
   FeedView,
+  FoundServicesView,
   HostEvent,
   HostStatus,
   LarkView,
@@ -420,6 +421,45 @@ function installFakeBridge(): void {
   let models: ModelsView = {
     services: sampleServices(),
     roles: herderChosen ? { herder: { serviceId: "deepseek", model: "deepseek-chat" } } : {},
+  };
+
+  // 这台电脑上已有的服务 (ADR 0107): three found, the DeepSeek one already in the list.
+  let found: FoundServicesView = {
+    at: new Date().toISOString(),
+    services: [
+      {
+        id: "f1",
+        name: "杰哥",
+        sources: ["dsh"],
+        kind: "openai-compatible",
+        baseUrl: "https://ai-gw.example",
+        api: "anthropic-messages",
+        models: ["claude-opus-5-5"],
+        keyHint: "sk-7…3fec",
+      },
+      {
+        id: "f2",
+        name: "OpenAI",
+        sources: ["codex", "env"],
+        kind: "builtin",
+        provider: "openai",
+        models: ["gpt-5.5"],
+        keyHint: "sk-2…c487",
+      },
+      {
+        id: "f3",
+        name: "DeepSeek",
+        sources: ["dsh", "pi"],
+        kind: "builtin",
+        provider: "deepseek",
+        models: ["deepseek-flash", "deepseek-v4-pro"],
+        keyHint: "sk-4…0d40",
+        added: { id: "deepseek", name: "DeepSeek" },
+      },
+    ],
+    problems: [
+      { source: "codex", message: "「Relay」只能用 OpenAI Responses 格式，AgentHerd 用不了" },
+    ],
   };
 
   let setup: SetupState = { phase: "idle" };
@@ -1374,6 +1414,37 @@ function installFakeBridge(): void {
         services: [...others, { ...service, hasKey: keys.has(service.id) }],
       };
       return delay(modelsChanged());
+    },
+    foundServices: () => delay(structuredClone(found)),
+    findServices: () => delay(structuredClone({ ...found, at: new Date().toISOString() }), 900),
+    addFoundService: (id) => {
+      const f = found.services.find((s) => s.id === id);
+      if (f === undefined)
+        return Promise.reject(new Error("this service is no longer in the list; look again"));
+      const sid =
+        f.name
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, "-")
+          .replace(/^-|-$/g, "") || `found-${id}`;
+      keys.set(sid, "found");
+      const added = {
+        id: sid,
+        name: f.name,
+        kind: f.kind,
+        models: f.models,
+        hasKey: true,
+        ...(f.provider ? { provider: f.provider } : {}),
+        ...(f.baseUrl ? { baseUrl: f.baseUrl } : {}),
+        ...(f.api ? { api: f.api } : {}),
+      };
+      models = { ...models, services: [...models.services.filter((s) => s.id !== sid), added] };
+      found = {
+        ...found,
+        services: found.services.map((s) =>
+          s.id === id ? { ...s, added: { id: sid, name: f.name } } : s,
+        ),
+      };
+      return delay(modelsChanged(), 600);
     },
     removeService: (serviceId) => {
       keys.delete(serviceId);

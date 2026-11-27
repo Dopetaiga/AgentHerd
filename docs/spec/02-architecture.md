@@ -108,7 +108,9 @@ Rules:
 - Methods now (plan 011): `status`, `tasks` (tasks and open items, read-only; owners decide in
   the channel), `providers`, `models`, `putService`, `removeService`, `setKey`, `chooseModel`,
   `testModel`, `probeModels` (GET `/models` of an OpenAI- or Anthropic-compatible service, so
-  the owner ticks models instead of typing ids), `setupFeishu`, `cancelSetup`, `setupState`,
+  the owner ticks models instead of typing ids), `foundServices`, `findServices`, `addFoundService`
+  (model services other apps on this computer hold, read only and added with their key when the
+  owner taps 添加; ADR 0107), `setupFeishu`, `cancelSetup`, `setupState`,
   `updateSettings`, `transcript` (a task's conversation), `herderActivity` (what the Herder did,
   see 08 §6), `herderContext`, `herderMessages`, `herderContextFold` (what its next request carries,
   its folds as a tree, its requests and token use, read from herd.db alone; ADR 0093, ADR 0096), `pluginCatalog`, `plugins`, `previewPlugin`, `installPlugin`, `setPlugin`, `removePlugin` (plugins, ADR 0094), `mailbox`, `mailboxAdd`, `mailboxSet`, `mailboxRemove`, `mailboxRun`, `mailboxTry` (the 信箱 page, ADR 0099), `pet`, `petSay`, `petPress` (the desktop pet, ADR 0070: what it shows, and the

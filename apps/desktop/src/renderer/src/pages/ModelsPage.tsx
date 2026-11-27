@@ -1,9 +1,11 @@
 // 模型: the Herder's model, the tiers tasks pick from (ADR 0028), and the list of model services
-// with their keys (ADR 0021) or account sign-ins (ADR 0068).
+// with their keys (ADR 0021) or account sign-ins (ADR 0068), and the services other apps on this
+// computer already hold (ADR 0107).
 
 import { Boxes, KeyRound, Plus } from "lucide-react";
 import { useState } from "react";
 import { AddServiceDialog } from "../components/AddServiceDialog";
+import { FoundServices } from "../components/FoundServices";
 import { ModelTiers } from "../components/ModelTiers";
 import { RolePicker } from "../components/RolePicker";
 import { ServiceCard } from "../components/ServiceCard";
@@ -99,6 +101,7 @@ export function ModelsPage() {
       <RolePicker />
       <ModelTiers />
       <ServiceList />
+      <FoundServices />
     </div>
   );
 }

@@ -25,7 +25,8 @@
     "@agentherd/rules": "workspace:*",
     "@huggingface/transformers": "3.7.5",
     "@wecom/cli": "1.3.4",
-    "qrcode": "^1.5.4"
+    "qrcode": "^1.5.4",
+    "yaml": "^2.9.1"
   },
   "devDependencies": {
     "@agentherd/channel-fake": "workspace:*",

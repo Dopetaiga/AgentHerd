@@ -75,7 +75,7 @@ pnpm --filter @agentherd/desktop fetch-agents   # 从源码运行时，下载 Pi
 pnpm --filter @agentherd/desktop start
 ```
 
-第一次打开会一步步带你：告诉主管怎么称呼你、选形象、扫码接飞书、加模型服务和 Key（也可以用 ChatGPT、Claude、Copilot 等订阅账号登录）、给主管选模型。然后点一下桌宠，跟主管说要做什么就行。
+第一次打开会一步步带你：告诉主管怎么称呼你、选形象、扫码接飞书、加模型服务和 Key（电脑上 Claude Code、Codex、CC Switch 等已经配好的会自动找出来，点一下就能加；也可以用 ChatGPT、Claude、Copilot 等订阅账号登录）、给主管选模型。然后点一下桌宠，跟主管说要做什么就行。
 
 <details>
 <summary>Windows、打包、开发和命令行</summary>
