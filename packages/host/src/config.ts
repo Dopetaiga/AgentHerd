@@ -56,6 +56,8 @@ export interface CliConfig {
   pet?: Partial<import("./api.ts").PetSettings>;
   /** The Herder's working window (ADR 0097); missing is DEFAULT_HERDER_WINDOW. */
   herderWindow?: number;
+  /** Found model services the owner put away with × (ADR 0107): marks from `foundMark`. */
+  foundHidden?: string[];
 }
 
 export function agentherdHome(env: NodeJS.ProcessEnv = process.env): string {

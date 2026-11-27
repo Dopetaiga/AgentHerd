@@ -153,7 +153,14 @@ import { dingtalkCapabilities, dingtalkTools } from "./dingtalk-tools.ts";
 import { LocalEmbedder } from "./embedder.ts";
 import { FEED_NAMES, Feeds } from "./feeds.ts";
 import { foldText, herderContextView, herderMessages } from "./herder-context-view.ts";
-import { alreadyAdded, type FoundScan, findServices, keyHint, serviceIdFor } from "./key-finder.ts";
+import {
+  alreadyAdded,
+  type FoundScan,
+  findServices,
+  foundMark,
+  keyHint,
+  serviceIdFor,
+} from "./key-finder.ts";
 import { Lark } from "./lark.ts";
 import { mailboxCheck, type ScriptRun } from "./mailbox-sources.ts";
 import { mcpServerFor } from "./mcp-socket.ts";
@@ -1696,13 +1703,32 @@ export class Host implements HostApi {
     return this.putService(service, found.key);
   }
 
+  hideFoundService(id: string): FoundServicesView {
+    const found = this.found?.scan.services.find((s) => s.id === id);
+    if (found === undefined) throw new Error("this service is no longer in the list; look again");
+    const config = this.config();
+    const hidden = new Set(config.foundHidden ?? []);
+    hidden.add(foundMark(found));
+    writeConfig(this.opts.home, { ...config, foundHidden: [...hidden] });
+    return this.foundView();
+  }
+
+  showFoundServices(): FoundServicesView {
+    const { foundHidden: _, ...config } = this.config();
+    writeConfig(this.opts.home, config);
+    return this.foundView();
+  }
+
   private foundView(): FoundServicesView {
     const found = this.found;
-    if (found === undefined) return { services: [], problems: [] };
+    const hiddenMarks = new Set(this.config().foundHidden ?? []);
+    if (found === undefined) return { services: [], problems: [], hidden: 0 };
     const services = this.settings().services;
+    const shown = found.scan.services.filter((s) => !hiddenMarks.has(foundMark(s)));
     return {
       at: found.at,
-      services: found.scan.services.map((s) => {
+      hidden: found.scan.services.length - shown.length,
+      services: shown.map((s) => {
         const have = alreadyAdded(s, services, this.opts.secrets, this.opts.env);
         return {
           id: s.id,

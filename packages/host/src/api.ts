@@ -522,6 +522,8 @@ export interface FoundServicesView {
   services: FoundServiceView[];
   /** Why something an app holds was left out or could not be read. */
   problems: { source: string; message: string }[];
+  /** How many the owner put away with ×; they stay away across looks and restarts. */
+  hidden: number;
 }
 
 /** What to ask for a model list: a saved service, or the fields of one not saved yet. */
@@ -1135,6 +1137,10 @@ export interface HostApi {
   findServices(): FoundServicesView;
   /** Adds a found service with its key; a custom one without models gets the models it lists. */
   addFoundService(id: string): Promise<ModelsView>;
+  /** Puts a found service away (×); it is not offered again until `showFoundServices`. */
+  hideFoundService(id: string): FoundServicesView;
+  /** Brings back every found service the owner put away. */
+  showFoundServices(): FoundServicesView;
   /** Starts the one-scan Feishu setup; progress comes as "setup" events. */
   setupFeishu(): SetupState;
   cancelSetup(): SetupState;
@@ -1283,6 +1289,8 @@ export const HOST_METHODS: readonly HostMethod[] = [
   "foundServices",
   "findServices",
   "addFoundService",
+  "hideFoundService",
+  "showFoundServices",
   "setupFeishu",
   "cancelSetup",
   "setupState",
