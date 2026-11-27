@@ -34,7 +34,7 @@ export const STDERR_LINES = 200;
 export const CLOSE_GRACE_MS = 3000;
 /** How long a failed request waits for the process exit to explain it. */
 const EXIT_GRACE_MS = 1000;
-/** How long a mode confirmation may take after `session/set_mode` (ADR 0105). */
+/** How long a mode confirmation may take after `session/set_mode` (ADR 0108). */
 export const MODE_CONFIRM_TIMEOUT_MS = 30_000;
 
 export interface StartOptions {
@@ -163,7 +163,7 @@ export interface AgentConnection {
    */
   setModel(sessionId: string, model: string): Promise<void>;
   /**
-   * Establishes a session's permission mode before any work is sent (ZCode, ADR 0105): sends
+   * Establishes a session's permission mode before any work is sent (ZCode, ADR 0108): sends
    * ACP `session/set_mode` and counts the mode as established only when the running session
    * itself reports it back (`current_mode_update` with the requested id). A mode the session
    * merely reports on its own, a pending session, or a report that names another mode is not
@@ -251,6 +251,42 @@ class StderrRing {
   }
 }
 
+function checkSetModeResponse(result: unknown, expectedMode: string): void {
+  if (typeof result !== "object" || result === null || Array.isArray(result)) return;
+  const r = result as {
+    settings?: { mode?: { current?: unknown }; permission?: { mode?: unknown } };
+    projection?: { mode?: unknown; sessionId?: unknown };
+    session?: { mode?: unknown; sessionId?: unknown };
+  };
+  const projSid = typeof r.projection?.sessionId === "string" ? r.projection.sessionId : undefined;
+  const sessSid = typeof r.session?.sessionId === "string" ? r.session.sessionId : undefined;
+  if (projSid !== undefined && sessSid !== undefined && projSid !== sessSid) {
+    throw new Error(`the agent returned mismatched session ids (${projSid} vs ${sessSid})`);
+  }
+  const settingsMode =
+    typeof r.settings?.mode?.current === "string" ? r.settings.mode.current : undefined;
+  if (settingsMode !== undefined && settingsMode !== expectedMode) {
+    throw new Error(`the agent reported mode "${settingsMode}" instead of "${expectedMode}"`);
+  }
+  const permMode =
+    typeof r.settings?.permission?.mode === "string" ? r.settings.permission.mode : undefined;
+  if (permMode !== undefined && permMode !== expectedMode) {
+    throw new Error(`the agent reported mode "${permMode}" instead of "${expectedMode}"`);
+  }
+  // When settings.mode.current is absent, fall back to session.mode / projection.mode if present.
+  if (settingsMode === undefined) {
+    const fallback =
+      typeof r.session?.mode === "string"
+        ? r.session.mode
+        : typeof r.projection?.mode === "string"
+          ? r.projection.mode
+          : undefined;
+    if (fallback !== undefined && fallback !== expectedMode) {
+      throw new Error(`the agent reported mode "${fallback}" instead of "${expectedMode}"`);
+    }
+  }
+}
+
 export async function startAgent(
   profile: AgentProfile,
   options: StartOptions,
@@ -284,7 +320,7 @@ export async function startAgent(
   const tracker = new ToolCallTracker();
   // Each session's model choices, to turn a model the owner names into the agent's id (ADR 0106).
   const models = new Map<string, ModelChoice[]>();
-  /** The session a pending `prepareSession` waits to confirm its mode (ADR 0105). */
+  /** The session a pending `prepareSession` waits to confirm its mode (ADR 0108). */
   let modeWait: {
     sessionId: string;
     resolve: (mode: string | null) => void;
@@ -477,36 +513,70 @@ export async function startAgent(
     },
     async prepareSession(sessionId, mode, timeoutMs = MODE_CONFIRM_TIMEOUT_MS) {
       // The session confirms by reporting its mode after this request; listen before sending,
-      // because the agent may answer the notification before the RPC response.
+      // because the agent may answer the notification before the RPC response. One shared
+      // timeout covers the whole window from sending `session/set_mode` to confirmation.
+      let wait: { sessionId: string; resolve: (mode: string | null) => void } | undefined;
+      if (modeWait !== null) {
+        const prev = modeWait;
+        modeWait = null;
+        prev.resolve(null);
+      }
       const confirmed = new Promise<string | null>((resolve) => {
-        modeWait = { sessionId, resolve };
+        wait = { sessionId, resolve };
+        modeWait = wait;
       });
       const gone = exited.then((e) => {
         throw exitError(e);
       });
       gone.catch(() => {});
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      let timedOut = false;
+      const timeout = new Promise<null>((resolve) => {
+        timer = setTimeout(() => {
+          timedOut = true;
+          resolve(null);
+        }, timeoutMs);
+        timer.unref();
+      });
+      const rpc = whileAlive(
+        agent.request(methods.agent.session.setMode, { sessionId, modeId: mode }),
+      );
+      rpc.catch(() => {});
       try {
-        await whileAlive(agent.request(methods.agent.session.setMode, { sessionId, modeId: mode }));
-      } catch (error) {
-        modeWait?.resolve(null);
-        modeWait = null;
-        throw requestError(error);
-      }
-      let reported: string | null;
-      try {
-        reported = await Promise.race([
-          confirmed,
-          new Promise<null>((resolve) => setTimeout(() => resolve(null), timeoutMs).unref()),
-          gone,
-        ]);
+        let rpcResult: unknown;
+        try {
+          const outcome = await Promise.race([
+            rpc.then((res) => ({ kind: "ok" as const, res })),
+            timeout.then(() => ({ kind: "timeout" as const })),
+            gone,
+          ]);
+          if (outcome.kind === "timeout") {
+            throw new Error(`the agent did not confirm mode "${mode}" for session ${sessionId}`);
+          }
+          rpcResult = outcome.res;
+        } catch (error) {
+          if (
+            timedOut ||
+            (error instanceof Error && error.message.startsWith(`agent ${profile.id} exited`))
+          ) {
+            throw error;
+          }
+          throw requestError(error);
+        }
+        checkSetModeResponse(rpcResult, mode);
+        const reported = await Promise.race([confirmed, timeout, gone]);
+        if (reported === null || timedOut) {
+          throw new Error(`the agent did not confirm mode "${mode}" for session ${sessionId}`);
+        }
+        if (reported !== mode) {
+          throw new Error(`the agent reported mode "${reported}" instead of "${mode}"`);
+        }
       } finally {
-        modeWait = null;
-      }
-      if (reported === null) {
-        throw new Error(`the agent did not confirm mode "${mode}" for session ${sessionId}`);
-      }
-      if (reported !== mode) {
-        throw new Error(`the agent reported mode "${reported}" instead of "${mode}"`);
+        clearTimeout(timer);
+        if (wait !== undefined && modeWait === wait) {
+          modeWait = null;
+        }
+        wait?.resolve(null);
       }
     },
     async cancel(sessionId) {

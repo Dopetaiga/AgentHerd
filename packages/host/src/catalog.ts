@@ -50,7 +50,7 @@ export interface AgentDef {
   ownModels?: boolean;
   /**
    * The permission mode AgentHerd establishes and verifies before the first prompt of a new or
-   * restored session (ZCode, ADR 0105). The task does not start without that confirmation.
+   * restored session (ZCode, ADR 0108). The task does not start without that confirmation.
    */
   mode?: string;
 }
@@ -293,7 +293,7 @@ export const AGENTS: AgentDef[] = [
     id: "zcode",
     name: "ZCode",
     envVar: "AGENTHERD_ZCODE",
-    // The owner's own zcode-acp bridge (npm zcode-acp-server, ADR 0105): it speaks ACP over
+    // The owner's own zcode-acp bridge (npm zcode-acp-server, ADR 0108): it speaks ACP over
     // stdio with the explicit `server` argument and drives the owner's own ZCode backend and
     // account. Not shipped or downloaded. Backend discovery is the bridge's own — an explicit
     // ZCODE_BIN or ZCODE_NODE passes through (agentEnv), an unset one stays unset. Before the

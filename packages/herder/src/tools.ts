@@ -605,7 +605,7 @@ export function herderTools(
         if (named !== undefined && !ids.includes(named)) {
           throw new Error(`unknown profile "${named}"`);
         }
-        // An agent with its own sign-in and models (Antigravity, ADR 0104; ZCode, ADR 0105):
+        // An agent with its own sign-in and models (Antigravity, ADR 0104; ZCode, ADR 0108):
         // AgentHerd's model list is not used; the model the owner named goes to the agent by
         // its own name.
         const own =

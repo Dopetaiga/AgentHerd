@@ -54,6 +54,7 @@ export type Step =
   /** Calls a tool on the session's first stdio MCP server; the result becomes a message. */
   | { type: "mcp_call"; tool: string; arguments: Record<string, unknown> }
   | { type: "crash"; code: number }
+  | { type: "mode_update"; modeId: string }
   | { type: "end_turn"; stopReason: "end_turn" | "refusal" | "max_tokens" };
 
 export interface Script {
@@ -69,12 +70,18 @@ export interface Script {
    */
   models?: ScriptModel[];
   /**
-   * How `session/set_mode` behaves (ZCode's confirmation, ADR 0105). Absent: the agent does
+   * How `session/set_mode` behaves (ZCode's confirmation, ADR 0108). Absent: the agent does
    * not take `session/set_mode` and answers it with an error. `confirm`: answers, then the
    * session reports the requested mode (`current_mode_update`). `silent`: answers without a
-   * report. `wrong`: answers, then the session reports another mode. `error`: refuses.
+   * report. `wrong`: answers, then the session reports another mode. `error`: refuses. `hang`:
+   * never answers the RPC. `mismatch_response`: emits `current_mode_update` matching the request
+   * while returning a conflicting mode in `settings.mode.current`.
    */
-  setMode?: "confirm" | "silent" | "wrong" | "error";
+  setMode?: "confirm" | "silent" | "wrong" | "error" | "hang" | "mismatch_response";
+  /** Optional delay (ms) inside `session/set_mode` before answering the RPC. */
+  setModeDelayMs?: number;
+  /** Optional delay (ms) after answering `session/set_mode` before emitting `current_mode_update`. */
+  setModeNotifyDelayMs?: number;
   /**
    * A mode the agent reports on its own right after `session/new`, before any request from
    * the client (the default a bridge may project for a session it has not started yet).
@@ -226,6 +233,8 @@ function step(v: unknown, where: string): Step {
       if (typeof code !== "number") throw new ScriptError(`${w}: expected an exit code`);
       return { type: "crash", code };
     }
+    case "mode_update":
+      return { type: "mode_update", modeId: str(body, w) };
     case "end_turn": {
       const reason = body === null || body === undefined ? "end_turn" : body;
       return {
@@ -265,9 +274,24 @@ export function parseScript(text: string): Script {
   const setMode = doc.set_mode;
   if (
     setMode !== undefined &&
-    (typeof setMode !== "string" || !["confirm", "silent", "wrong", "error"].includes(setMode))
+    (typeof setMode !== "string" ||
+      !["confirm", "silent", "wrong", "error", "hang", "mismatch_response"].includes(setMode))
   ) {
-    throw new ScriptError("set_mode: expected confirm, silent, wrong or error");
+    throw new ScriptError(
+      "set_mode: expected confirm, silent, wrong, error, hang or mismatch_response",
+    );
+  }
+  if (
+    doc.set_mode_delay_ms !== undefined &&
+    (typeof doc.set_mode_delay_ms !== "number" || doc.set_mode_delay_ms < 0)
+  ) {
+    throw new ScriptError("set_mode_delay_ms: expected ms >= 0");
+  }
+  if (
+    doc.set_mode_notify_delay_ms !== undefined &&
+    (typeof doc.set_mode_notify_delay_ms !== "number" || doc.set_mode_notify_delay_ms < 0)
+  ) {
+    throw new ScriptError("set_mode_notify_delay_ms: expected ms >= 0");
   }
   if (doc.mode_report !== undefined && typeof doc.mode_report !== "string") {
     throw new ScriptError("mode_report: expected a string");
@@ -283,6 +307,10 @@ export function parseScript(text: string): Script {
     ...(doc.load_session === true ? { loadSession: true } : {}),
     ...(doc.steer === true ? { steer: true } : {}),
     ...(typeof setMode === "string" ? { setMode: setMode as Script["setMode"] & string } : {}),
+    ...(typeof doc.set_mode_delay_ms === "number" ? { setModeDelayMs: doc.set_mode_delay_ms } : {}),
+    ...(typeof doc.set_mode_notify_delay_ms === "number"
+      ? { setModeNotifyDelayMs: doc.set_mode_notify_delay_ms }
+      : {}),
     ...(typeof doc.mode_report === "string" ? { modeReport: doc.mode_report } : {}),
     ...(doc.reject_model === true ? { rejectModel: true } : {}),
     ...(doc.fail_load === true ? { failLoad: true } : {}),

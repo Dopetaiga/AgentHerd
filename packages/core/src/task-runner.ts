@@ -141,10 +141,14 @@ export class TaskRunner {
       f.connection = connection;
       f.agentSessionId = await connection.newSession(f.cwd, mcpServers(ctx, f));
       if (own && model !== undefined) await connection.setModel(f.agentSessionId, model);
-      // A profile with a required permission mode (ZCode, ADR 0105) runs nothing before the
+      // A profile with a required permission mode (ZCode, ADR 0108) runs nothing before the
       // running session confirms the mode; the catch below closes the connection otherwise.
       if (profile.mode !== undefined) {
-        await connection.prepareSession(f.agentSessionId, profile.mode);
+        await connection.prepareSession(
+          f.agentSessionId,
+          profile.mode,
+          ctx.opts.modeConfirmTimeoutMs,
+        );
       }
     } catch (error) {
       const message = (error as Error).message;
@@ -442,7 +446,7 @@ export class TaskRunner {
     const now = ctx.clock.now().toISOString();
     for (const saved of ctx.store.tasks(limit).reverse()) {
       if (ctx.following.has(saved.task.id)) continue;
-      // A saved task stays recognizable when its agent is gone (ZCode, ADR 0105): the
+      // A saved task stays recognizable when its agent is gone (ZCode, ADR 0108): the
       // placeholder keeps the account choice, so recovery never substitutes another agent.
       const profile = ctx.opts.profiles.find((p) => p.id === saved.profileId) ?? {
         id: saved.profileId,
@@ -491,7 +495,7 @@ export class TaskRunner {
 
   /**
    * Agents to start an ended task again with: its own, then Pi, then the rest. A task on the
-   * owner's own account stays on that agent (ZCode, ADR 0105): recovery retries it, and when
+   * owner's own account stays on that agent (ZCode, ADR 0108): recovery retries it, and when
    * it cannot start the owner chooses what happens next. ZCode is never an automatic
    * substitute for another task.
    */
@@ -561,11 +565,15 @@ export class TaskRunner {
           try {
             await connection.loadSession(f.agentSessionId, f.cwd, mcpServers(ctx, f));
             loadedOk = true;
-            // A loaded session runs only after its mode is verified (ADR 0105). When that
+            // A loaded session runs only after its mode is verified (ADR 0108). When that
             // fails, this connection is closed and the attempt fails: no work goes out on it,
             // and a fresh session on the same account is not a substitute for the saved one.
             if (profile.mode !== undefined) {
-              await connection.prepareSession(f.agentSessionId, profile.mode);
+              await connection.prepareSession(
+                f.agentSessionId,
+                profile.mode,
+                ctx.opts.modeConfirmTimeoutMs,
+              );
             }
             sessionId = f.agentSessionId;
           } catch (error) {
@@ -582,7 +590,11 @@ export class TaskRunner {
             sessionId = await connection.newSession(f.cwd, mcpServers(ctx, f));
             if (own && model !== undefined) await connection.setModel(sessionId, model);
             if (profile.mode !== undefined) {
-              await connection.prepareSession(sessionId, profile.mode);
+              await connection.prepareSession(
+                sessionId,
+                profile.mode,
+                ctx.opts.modeConfirmTimeoutMs,
+              );
             }
           } catch (error) {
             await connection.close().catch(() => {});
@@ -809,6 +821,22 @@ export class TaskRunner {
           ctx.watchdog.toolCall(sessionId, key, u.toolCall.command ?? u.toolCall.title);
         } else {
           ctx.watchdog.event(sessionId);
+          if (
+            u.type === "mode" &&
+            f.profile.mode !== undefined &&
+            u.modeId !== undefined &&
+            u.modeId !== "" &&
+            u.modeId !== f.profile.mode &&
+            u.modeId !== "plan"
+          ) {
+            ctx.store.audit("session.mode-drift", {
+              sessionId,
+              expected: f.profile.mode,
+              actual: u.modeId,
+            });
+            void this.ops.endTask(sessionId, `session mode changed to ${u.modeId}`);
+            return;
+          }
         }
         const state = ctx.registry.get(sessionId)?.state;
         if (state !== "waiting-approval" && f.busy) ctx.registry.set(sessionId, "working");

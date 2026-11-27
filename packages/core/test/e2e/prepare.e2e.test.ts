@@ -1,4 +1,4 @@
-// E2E for ADR 0105: a profile with a required permission mode (ZCode) prepares every session
+// E2E for ADR 0108: a profile with a required permission mode (ZCode) prepares every session
 // before work — `session/set_mode`, confirmed by the running session itself — before the first
 // prompt, before a replay, and again on the replacement session. The owner's account choice
 // survives recovery: ZCode is never an automatic substitute, and a ZCode task never falls back.
@@ -7,9 +7,10 @@ import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { FakeChannel } from "@agentherd/channel-fake";
-import type { AgentProfile, ReportView } from "@agentherd/protocol";
+import { FakeChannel, type SentMessage } from "@agentherd/channel-fake";
+import type { AgentProfile, ItemView, Mode, ReportView } from "@agentherd/protocol";
 import { afterEach, describe, expect, it } from "vitest";
+import { FakeClock } from "../../src/clock.ts";
 import { Herd } from "../../src/herd.ts";
 import { Store } from "../../src/store.ts";
 
@@ -91,6 +92,7 @@ function logLines(log: string): string[] {
 async function boot(
   home: string,
   profiles: AgentProfile[],
+  opts: { mode?: Mode; clock?: FakeClock; modeConfirmTimeoutMs?: number } = {},
 ): Promise<{ herd: Herd; store: Store; channel: FakeChannel }> {
   const store = Store.open(join(home, "herd.db"));
   const channel = new FakeChannel("owner");
@@ -99,11 +101,15 @@ async function boot(
     userHome: "/Users/me",
     channel,
     binding: { channelId: "fake", ownerId: "owner", data: {} },
-    mode: "assist",
+    mode: opts.mode ?? "assist",
     locale: "en",
     profiles,
     store,
     boardDebounceMs: 10,
+    ...(opts.clock === undefined ? {} : { clock: opts.clock }),
+    ...(opts.modeConfirmTimeoutMs === undefined
+      ? {}
+      : { modeConfirmTimeoutMs: opts.modeConfirmTimeoutMs }),
   });
   const o = { herd, store, channel };
   herds.push(o);
@@ -123,7 +129,7 @@ turns:
     - end_turn: end_turn
 `;
 
-describe("session preparation before work (ADR 0105)", () => {
+describe("session preparation before work (ADR 0108)", () => {
   it("confirms the profile's mode before the first prompt", async () => {
     const home = mkdtempSync(join(tmpdir(), "agentherd-prepare-"));
     const log = join(home, "confirm.log");
@@ -225,9 +231,292 @@ describe("session preparation before work (ADR 0105)", () => {
     ).rejects.toThrow(/config refused: no model no-such-model/);
     expect(logLines(log).some((l) => l.startsWith("prompt "))).toBe(false);
   });
+
+  it("does not dispatch work when session/set_mode RPC hangs past timeout", async () => {
+    const home = mkdtempSync(join(tmpdir(), "agentherd-prepare-"));
+    const log = join(home, "hang.log");
+    const { herd, channel } = await boot(
+      home,
+      [zcodeProfile(home, "set_mode: hang\nturns: []\n", log)],
+      { modeConfirmTimeoutMs: 250 },
+    );
+    await expect(herd.startTask("zcode", home, "Fix it")).rejects.toThrow(
+      /did not confirm mode "build"/,
+    );
+    expect(logLines(log).some((l) => l.startsWith("prompt "))).toBe(false);
+    expect(
+      channel.ofKind("report").some((m) => JSON.stringify(m.view).includes("did not confirm")),
+    ).toBe(true);
+    expect(herd.openTasks()).toEqual([]);
+  });
+
+  it("does not dispatch work when set_mode response contradicts current_mode_update", async () => {
+    const home = mkdtempSync(join(tmpdir(), "agentherd-prepare-"));
+    const log = join(home, "mismatch.log");
+    const { herd } = await boot(home, [
+      zcodeProfile(home, "set_mode: mismatch_response\nturns: []\n", log),
+    ]);
+    await expect(herd.startTask("zcode", home, "Fix it")).rejects.toThrow(
+      /reported mode "yolo" instead of "build"/,
+    );
+    expect(logLines(log).some((l) => l.startsWith("prompt "))).toBe(false);
+  });
+
+  it("does not replay or replace when prepareSession times out on a loaded session", async () => {
+    const home = mkdtempSync(join(tmpdir(), "agentherd-prepare-"));
+    const log = join(home, "load-timeout.log");
+    const profile = zcodeProfile(home, `load_session: true\nset_mode: confirm\n${ONE_TURN}`, log);
+    const scriptPath = join(home, "reopen-script.yaml");
+    writeFileSync(scriptPath, `load_session: true\nset_mode: confirm\n${ONE_TURN}`);
+    // Reuse the wrapper by rewriting its referenced script between initial start and reopen.
+    const wrapperPath = profile.command[1] as string;
+    writeFileSync(
+      wrapperPath,
+      readFileSync(wrapperPath, "utf8").replace(
+        /parseScript\(readFileSync\([^)]+\)\)/,
+        `parseScript(readFileSync(${JSON.stringify(scriptPath)}, "utf8"))`,
+      ),
+    );
+    const { herd, channel } = await boot(home, [profile], { modeConfirmTimeoutMs: 250 });
+    const { taskId, turn } = await herd.startTask("zcode", home, "Fix it");
+    await turn;
+    await herd.endTask(taskId, "done");
+    // Second connection loads the saved session, then hangs during set_mode.
+    writeFileSync(scriptPath, `load_session: true\nset_mode: hang\n${ONE_TURN}`);
+    await expect(herd.promptTask(taskId, "go on")).rejects.toThrow(/did not confirm mode "build"/);
+    const order = logLines(log);
+    expect(order.filter((l) => l.startsWith("load "))).toHaveLength(1);
+    expect(order.filter((l) => l.startsWith("prompt "))).toHaveLength(1);
+    expect(herd.store.auditRows("task.load-failed")).toHaveLength(1);
+    expect(herd.openTasks()).toEqual([]);
+    expect(JSON.stringify(channel.ofKind("report").at(-1)?.view)).toContain("did not confirm mode");
+  });
+
+  it("does not replay when prepareSession fails on a replacement session", async () => {
+    const home = mkdtempSync(join(tmpdir(), "agentherd-prepare-"));
+    const log = join(home, "replace-fail.log");
+    const profile = zcodeProfile(
+      home,
+      `load_session: true\nfail_load: true\nset_mode: confirm\n${ONE_TURN}`,
+      log,
+    );
+    const scriptPath = join(home, "replace-script.yaml");
+    writeFileSync(
+      scriptPath,
+      `load_session: true\nfail_load: true\nset_mode: confirm\n${ONE_TURN}`,
+    );
+    const wrapperPath = profile.command[1] as string;
+    writeFileSync(
+      wrapperPath,
+      readFileSync(wrapperPath, "utf8").replace(
+        /parseScript\(readFileSync\([^)]+\)\)/,
+        `parseScript(readFileSync(${JSON.stringify(scriptPath)}, "utf8"))`,
+      ),
+    );
+    const { herd } = await boot(home, [profile], { modeConfirmTimeoutMs: 250 });
+    const { taskId, turn } = await herd.startTask("zcode", home, "Fix it");
+    await turn;
+    await herd.endTask(taskId, "done");
+    writeFileSync(scriptPath, `load_session: true\nfail_load: true\nset_mode: silent\n${ONE_TURN}`);
+    await expect(herd.promptTask(taskId, "go on")).rejects.toThrow(/did not confirm mode "build"/);
+    const order = logLines(log);
+    expect(order.some((l) => l.startsWith("load refused:"))).toBe(true);
+    expect(order.filter((l) => l.startsWith("mode "))).toHaveLength(2);
+    expect(order.filter((l) => l.startsWith("prompt "))).toHaveLength(1);
+  });
 });
 
-describe("the owner's account choice survives recovery (ADR 0105)", () => {
+const isOpenItem = (m: SentMessage) =>
+  m.view.kind === "item" && (m.view as ItemView).final === undefined;
+
+describe("guard, external tool, denial, timeout and report on ZCode-shaped profile (mock, side-effect-free)", () => {
+  it("denies a guarded Windows delete stand-in without side effects and delivers the report", async () => {
+    const home = mkdtempSync(join(tmpdir(), "agentherd-zcode-guard-"));
+    const log = join(home, "deny.log");
+    const script = `
+set_mode: confirm
+turns:
+  - - tool_call:
+        id: c1
+        title: "execute_command: cmd /c del /f /s /q outside"
+        kind: delete
+        command: "cmd /c del /f /s /q C:\\\\outside\\\\target"
+        paths: ["C:\\\\outside\\\\target"]
+        status: pending
+    - request_permission:
+        toolCall:
+          id: c1
+          title: "execute_command: cmd /c del /f /s /q outside"
+          kind: delete
+          command: "cmd /c del /f /s /q C:\\\\outside\\\\target"
+          paths: ["C:\\\\outside\\\\target"]
+        expect: deny
+        on_reject: end_turn
+    - message: "EXECUTED"
+    - end_turn: end_turn
+`;
+    const { herd, channel } = await boot(home, [zcodeProfile(home, script, log)]);
+    const { taskId, turn } = await herd.startTask("zcode", home, "Clean outside");
+    const card = await channel.waitFor(isOpenItem);
+    const view = card.view as ItemView;
+    expect(view.body).toContain("cmd /c del /f /s /q");
+    await channel.tap(view.itemId, "deny");
+    const result = await turn;
+    expect(result.stopReason).toBe("end_turn");
+    expect((card.view as ItemView).final).toBe("Denied by you");
+    expect(herd.transcript(taskId).entries.some((e) => e.text.includes("EXECUTED"))).toBe(false);
+    const report = channel.ofKind("report").at(-1)?.view as ReportView | undefined;
+    expect(report?.subtitle).toContain("ZCode");
+  });
+
+  it("denies an external-action stand-in in observe mode without side effects and delivers the report", async () => {
+    const home = mkdtempSync(join(tmpdir(), "agentherd-zcode-ext-"));
+    const log = join(home, "ext.log");
+    const script = `
+set_mode: confirm
+turns:
+  - - tool_call:
+        id: f1
+        title: "WebFetch: https://example.com"
+        kind: fetch
+        status: pending
+    - request_permission:
+        toolCall:
+          id: f1
+          title: "WebFetch: https://example.com"
+          kind: fetch
+        expect: deny
+        on_reject: end_turn
+    - message: "FETCHED"
+    - end_turn: end_turn
+`;
+    const { herd, channel } = await boot(home, [zcodeProfile(home, script, log)], {
+      mode: "observe",
+    });
+    const { taskId, turn } = await herd.startTask("zcode", home, "Fetch example");
+    const card = await channel.waitFor(isOpenItem);
+    const view = card.view as ItemView;
+    expect(view.title).toContain("WebFetch");
+    await channel.tap(view.itemId, "deny");
+    await turn;
+    expect((card.view as ItemView).final).toBe("Denied by you");
+    expect(herd.transcript(taskId).entries.some((e) => e.text.includes("FETCHED"))).toBe(false);
+    expect(channel.ofKind("report").at(-1)?.view).toMatchObject({
+      subtitle: expect.stringContaining("ZCode"),
+    });
+  });
+
+  it("approval timeout denies a guarded action, leaves no side effect, and sends the report", async () => {
+    const home = mkdtempSync(join(tmpdir(), "agentherd-zcode-timeout-"));
+    const log = join(home, "timeout.log");
+    const clock = new FakeClock();
+    const script = `
+set_mode: confirm
+turns:
+  - - tool_call:
+        id: t1
+        title: "Bash: rm -rf ./*"
+        kind: execute
+        command: "rm -rf ./*"
+        status: pending
+    - request_permission:
+        toolCall:
+          id: t1
+          title: "Bash: rm -rf ./*"
+          kind: execute
+          command: "rm -rf ./*"
+        expect: deny
+        on_reject: end_turn
+    - message: "EXECUTED"
+    - end_turn: end_turn
+`;
+    const { herd, store, channel } = await boot(home, [zcodeProfile(home, script, log)], {
+      clock,
+    });
+    const { taskId, turn } = await herd.startTask("zcode", home, "Wipe");
+    const card = await channel.waitFor(isOpenItem);
+    const itemId = (card.view as ItemView).itemId;
+    await clock.advance(31 * 60_000);
+    await new Promise((r) => setImmediate(r));
+    expect(channel.ofKind("text").some((m) => m.view.text.includes("Still waiting for you"))).toBe(
+      true,
+    );
+    await clock.advance(30 * 60_000);
+    const result = await turn;
+    expect(result.stopReason).toBe("end_turn");
+    expect(store.decisionsFor(itemId)[0]).toMatchObject({
+      action: "deny",
+      reason: "no answer in time",
+    });
+    expect((card.view as ItemView).final).toBe("No answer in 1 hour; the step was not done");
+    expect(herd.transcript(taskId).entries.some((e) => e.text.includes("EXECUTED"))).toBe(false);
+    expect(channel.ofKind("report").at(-1)?.view).toMatchObject({
+      subtitle: expect.stringContaining("ZCode"),
+    });
+  });
+
+  it("a separately allowed outbound stand-in uses allow_once and delivers the report", async () => {
+    const home = mkdtempSync(join(tmpdir(), "agentherd-zcode-allow-"));
+    const log = join(home, "allow.log");
+    const script = `
+set_mode: confirm
+turns:
+  - - tool_call:
+        id: p1
+        title: "Bash: git push origin main"
+        kind: execute
+        command: "git push origin main"
+        status: pending
+    - request_permission:
+        toolCall:
+          id: p1
+          title: "Bash: git push origin main"
+          kind: execute
+          command: "git push origin main"
+        expect: allow
+        on_reject: end_turn
+    - message: "PUSH_SIMULATED"
+    - end_turn: end_turn
+`;
+    const { herd, channel } = await boot(home, [zcodeProfile(home, script, log)]);
+    const { turn } = await herd.startTask("zcode", home, "Push");
+    const card = await channel.waitFor(isOpenItem);
+    await channel.tap((card.view as ItemView).itemId, "allow");
+    await turn;
+    expect((card.view as ItemView).final).toBe("Allowed by you");
+    const report = channel.ofKind("report").at(-1)?.view as ReportView | undefined;
+    expect(report?.subtitle).toContain("ZCode");
+    expect(report?.body).toContain("PUSH_SIMULATED");
+    expect(logLines(log).some((l) => l.includes('"optionId":"allow"'))).toBe(true);
+    expect(logLines(log).some((l) => l.includes('"optionId":"always"'))).toBe(false);
+  });
+
+  it("stops the task immediately when a running session drifts to an unguarded mode", async () => {
+    const home = mkdtempSync(join(tmpdir(), "agentherd-zcode-drift-"));
+    const log = join(home, "drift.log");
+    const script = `
+set_mode: confirm
+turns:
+  - - mode_update: yolo
+    - sleep: 5000
+    - message: "AFTER_DRIFT"
+`;
+    const { herd, channel } = await boot(home, [zcodeProfile(home, script, log)]);
+    const { taskId, turn } = await herd.startTask("zcode", home, "Run");
+    await expect(turn).rejects.toThrow();
+    expect(herd.store.auditRows("session.mode-drift")).toHaveLength(1);
+    expect(herd.store.auditRows("session.mode-drift")[0]?.data).toMatchObject({
+      expected: "build",
+      actual: "yolo",
+    });
+    expect(herd.transcript(taskId).entries.some((e) => e.text.includes("AFTER_DRIFT"))).toBe(false);
+    expect(JSON.stringify(channel.ofKind("report").at(-1)?.view)).toContain(
+      "session mode changed to yolo",
+    );
+  });
+});
+
+describe("the owner's account choice survives recovery (ADR 0108)", () => {
   it("an ordinary task never falls back to ZCode, not even when reopening", async () => {
     const home = mkdtempSync(join(tmpdir(), "agentherd-prepare-"));
     const zlog = join(home, "ordinary-zcode.log");

@@ -393,7 +393,7 @@ export function agentEnv(
     return cli === undefined ? {} : { [CLAUDE_EXECUTABLE_ENV]: cli };
   }
   if (id === "zcode") {
-    // The bridge owns backend discovery (ADR 0105): an explicit ZCODE_BIN or ZCODE_NODE the
+    // The bridge owns backend discovery (ADR 0108): an explicit ZCODE_BIN or ZCODE_NODE the
     // owner set passes through; when one is unset it stays unset, so the bridge looks on its
     // own (the CLI on its PATH, then the ZCode Desktop bundle).
     const out: Record<string, string> = {};

@@ -1,4 +1,4 @@
-# ADR 0105: ZCode, the owner's own account behind the zcode-acp bridge
+# ADR 0108: ZCode, the owner's own account behind the zcode-acp bridge
 
 - Status: Accepted
 - Date: 2026-11-24
@@ -21,16 +21,23 @@
   session on the first operation. Its mode defaults to `yolo` (unrestricted), taken from the
   user's `session.mode` setting before `ZCODE_ACP_MODE` — no launch environment can establish the
   effective mode.
-- Checked live (Windows 10.0.26200, bridge 0.88.0, desktop backend ≥ 3.18 wire shape; evidence in
+- Checked live (Windows 10.0.26200, initial runs on bridge `0.88.0` and re-verified on `0.95.1`
+  with desktop backend ≥ 3.18 / 4.0 wire shape; evidence in
   `openspec/changes/support-zcode-acp/evidence/`): `session/set_mode` materializes the session,
-  and the bridge then re-reads the authoritative mode from the backend and reports it as
-  `current_mode_update`. A pending session, a backend it cannot read, or the mode reported at
-  `session/new` (the default) is not such a confirmation. Permission requests arrive as ACP
+  and the bridge emits `current_mode_update` before answering the RPC (and returns the backend's
+  `session/setMode` response). Bridge `0.95.1` (`#425`, `#432`) omits `current_mode_update` when a
+  materialized session's `session/read` fails instead of falling back to `initialSessionMode()`,
+  and broadcasts confirmed mode changes on backend reload. Permission requests arrive as ACP
   `session/request_permission` after a `tool_call` update, with `allow_once`/`reject_once` kinds
   and the full command in `rawInput`.
-- Mode behavior on the same setup: `build` asks for file writes and commands; `guarded` and `edit`
-  run writes themselves and ask only for shell commands the backend recognizes as dangerous
-  (`rm -rf` asked; a Windows `cmd /c del /f /s /q` did not).
+- Mode behavior on the same setup: in `build`, outside-workspace `Write`, bash `rm -rf ./*`, Windows
+  `cmd //c del /f /s /q`, `powershell Remove-Item`, `sudo`, `git push`, and `WebFetch` (both `deny`
+  and `allow_once`) asked over ACP (and `curl | sh` was refused by the model before calling `Bash`),
+  while `echo`, `ls`, and ZCode 4.0.0's built-in `Read` tool (both in-workspace `.env` and
+  outside-workspace `outside-secret.txt`) ran without asking (`permissionRequests: 0`, accepted as
+  ZCode's upstream read-tool boundary; outbound writes/network/push stay gated and reports/logs are
+  redacted); `guarded` and `edit` ran outside-workspace `Write` without asking (and `guarded` ran
+  `cmd /c del` and `WebFetch` without asking).
 
 ## Decision
 
@@ -46,10 +53,14 @@
    `mode: "build"`. Before the first prompt of a new, loaded or replaced session — replayed task
    history included — the ACP client sends `session/set_mode` and counts the mode as established
    only when the running session itself reports it back (`current_mode_update` naming the
-   requested mode). On refusal, silence, a report naming another mode, or an exit, the connection
-   closes and the task fails with the reason; nothing is dispatched. `build` is the mode whose
-   behavior the qualification demonstrates: writes and commands ask over ACP, denial leaves the
-   target untouched, and a separate approval lets a separate action run.
+   requested mode, and any returned `settings` mode fields agree) within one shared timeout
+   covering both the `session/set_mode` RPC and the confirmation notification. On refusal,
+   silence, timeout, a report naming another mode, or an exit, the connection closes and the task
+   fails with the reason; nothing is dispatched or replayed. `build` is the mode whose tested
+   behavior matches the scoped approval boundary: writes, gated commands (`rm -rf ./*`, `cmd //c del`,
+   `powershell Remove-Item`, `sudo`, `git push`), and `WebFetch` ask over ACP, denial leaves the
+   target untouched, separate approval lets the action run, and ZCode 4.0.0's unforwarded built-in
+   `Read` tool (`permissionRequests: 0`) is accepted as its upstream read boundary.
 4. **Only when the owner names it.** It spends the owner's ZCode quota, so AgentHerd never picks
    it: the Herder passes `profile zcode` when the owner asks for ZCode or zcode, an unnamed task
    fails rather than starting ZCode (even when it is the only installed agent), and recovery
@@ -86,14 +97,17 @@
 
 ## Tests
 
-- `packages/acp-client/test/connection.test.ts` "prepareSession (ADR 0105)": confirmed, refused,
-  wrong report, silent, self-reported mode, exit, and that open/load/setModel still work;
-  `mapping.test.ts` "ZCode permission requests".
-- `packages/core/test/e2e/prepare.e2e.test.ts`: mode confirmed before the first prompt; refused
-  or mismatched mode dispatches nothing; load re-verifies; failed load replaces and prepares; a
-  rejected named model fails with the agent's own reason; ordinary tasks never fall back to
-  ZCode; a ZCode task whose agent is gone waits for the owner.
-- `packages/host/test/agents.test.ts` "ZCode (ADR 0105)": found on `PATH`, `server` argument,
+- `packages/acp-client/test/connection.test.ts` "prepareSession (ADR 0108)": confirmed, refused,
+  wrong report, silent, self-reported mode, RPC hang timeout, shared RPC+notification timeout,
+  conflicting RPC response, exit, and that open/load/setModel still work; `mapping.test.ts` "ZCode
+  permission requests".
+- `packages/core/test/e2e/prepare.e2e.test.ts`: mode confirmed before the first prompt; refused,
+  hung, mismatched or mismatched-RPC mode dispatches nothing; load re-verifies and aborts without
+  replay/replacement on timeout/failure; failed load replaces and prepares (and aborts without
+  replay on failure/timeout); a rejected named model fails with the agent's own reason; side-effect-free
+  mock guard/external-tool/outbound denial, approval timeout, `allow_once`, and report delivery;
+  ordinary tasks never fall back to ZCode; a ZCode task whose agent is gone waits for the owner.
+- `packages/host/test/agents.test.ts` "ZCode (ADR 0108)": found on `PATH`, `server` argument,
   `ownModels` + `mode`, `ZCODE_BIN`/`ZCODE_NODE` passthrough and absence of model env;
   `profiles.test.ts` known-profile list.
 - Live: the qualification runs in `openspec/changes/support-zcode-acp/evidence/` and the PR's

@@ -1115,7 +1115,7 @@ describe("task_read (ADR 0062)", () => {
   });
 });
 
-describe("ZCode runs when the owner names it (ADR 0105)", () => {
+describe("ZCode runs when the owner names it (ADR 0108)", () => {
   const dir = tmpdir();
   const base = (ownerText: string, name: string) => ({ name, project: dir, ownerText });
 

@@ -218,7 +218,7 @@ describe("ToolCallTracker", () => {
   });
 });
 
-describe("ZCode permission requests (ADR 0105)", () => {
+describe("ZCode permission requests (ADR 0108)", () => {
   // The shape zcode-acp 0.88.0 sends on `session/request_permission`: a tool call named
   // "<tool>: <detail>" with the full input as rawInput, the paths it touches, and options
   // in ACP kinds (observed in the qualification, openspec/changes/support-zcode-acp).

@@ -44,13 +44,13 @@ export interface AgentProfile {
   ownModels?: boolean;
   /**
    * The permission mode AgentHerd establishes and verifies before the first prompt of a new or
-   * restored session (ZCode, ADR 0105): `session/set_mode`, confirmed by the running session
+   * restored session (ZCode, ADR 0107): `session/set_mode`, confirmed by the running session
    * itself, or the task does not start.
    */
   mode?: string;
 }
 
-/** The owner-installed ZCode bridge profile (ADR 0105): AgentHerd picks it only by name. */
+/** The owner-installed ZCode bridge profile (ADR 0107): AgentHerd picks it only by name. */
 export const ZCODE_PROFILE = "zcode";
 
 /** Channel-neutral description of what an agent wants to do. */

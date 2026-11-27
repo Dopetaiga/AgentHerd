@@ -316,7 +316,7 @@ describe("setModel (ADR 0104)", () => {
   });
 });
 
-describe("prepareSession (ADR 0105)", () => {
+describe("prepareSession (ADR 0108)", () => {
   it("counts the mode as established when the session confirms it after the request", async () => {
     const { conn, sessionId } = await start("set_mode: confirm\nturns: []\n");
     await conn.prepareSession(sessionId, "guarded");
@@ -379,5 +379,36 @@ describe("prepareSession (ADR 0105)", () => {
     await conn.prepareSession(id, "guarded");
     await conn.setModel(id, "glm-5.3");
     expect(conn.stderr().join("\n")).toContain("config model=glm-5.3");
+  });
+
+  it("times out within timeoutMs when session/set_mode RPC hangs", async () => {
+    const { conn, sessionId } = await start("set_mode: hang\nturns: []\n");
+    const started = Date.now();
+    await expect(conn.prepareSession(sessionId, "guarded", 250)).rejects.toThrow(
+      /did not confirm mode "guarded"/,
+    );
+    expect(Date.now() - started).toBeLessThan(2000);
+  });
+
+  it("applies one shared timeout across set_mode RPC and confirmation notification", async () => {
+    const { conn, sessionId } = await start(
+      "set_mode: confirm\nset_mode_delay_ms: 150\nset_mode_notify_delay_ms: 200\nturns: []\n",
+    );
+    await expect(conn.prepareSession(sessionId, "guarded", 250)).rejects.toThrow(
+      /did not confirm mode "guarded"/,
+    );
+    const second = await start(
+      "set_mode: confirm\nset_mode_delay_ms: 150\nset_mode_notify_delay_ms: 200\nturns: []\n",
+    );
+    await expect(
+      second.conn.prepareSession(second.sessionId, "guarded", 2000),
+    ).resolves.toBeUndefined();
+  });
+
+  it("fails when set_mode RPC response disagrees with current_mode_update", async () => {
+    const { conn, sessionId } = await start("set_mode: mismatch_response\nturns: []\n");
+    await expect(conn.prepareSession(sessionId, "guarded")).rejects.toThrow(
+      /reported mode "yolo" instead of "guarded"/,
+    );
   });
 });

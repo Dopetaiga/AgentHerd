@@ -213,7 +213,7 @@ describe("catalog", () => {
       ["antigravity", undefined],
       // The owner's own DeepSeek Harness desktop app (ADR 0106).
       ["dsh", undefined],
-      // The owner's own zcode-acp bridge (ADR 0105): no version of AgentHerd's.
+      // The owner's own zcode-acp bridge (ADR 0108): no version of AgentHerd's.
       ["zcode", undefined],
     ]);
     // Claude Code is never in the app (ADR 0069).
@@ -245,6 +245,7 @@ describe("catalog", () => {
       PI_VERSION,
       CODEX_ACP_VERSION,
       CLAUDE_ACP_VERSION,
+      undefined,
       undefined,
       undefined,
     ]);
@@ -416,6 +417,7 @@ describe("Agents (ADR 0067)", () => {
       "missing",
       "missing",
       "missing",
+      "missing",
     ]);
     // An explicit CLI wins over the copy in the app.
     const named = new Agents({
@@ -539,7 +541,7 @@ describe("verifyProfile", () => {
     expect(check).toMatchObject({ ok: false, error: expect.stringMatching(/no answer within/) });
   });
 
-  it("verifies a profile with a required mode through the same preparation (ADR 0105)", async () => {
+  it("verifies a profile with a required mode through the same preparation (ADR 0108)", async () => {
     const scripts = mkdtempSync(join(tmpdir(), "ah-check-"));
     const scriptOf = (body: string) => {
       const file = join(scripts, `${Math.random().toString(36).slice(2)}.yaml`);
@@ -671,7 +673,7 @@ describe("DeepSeek Harness (ADR 0106)", () => {
   });
 });
 
-describe("ZCode (ADR 0105)", () => {
+describe("ZCode (ADR 0108)", () => {
   it("runs the owner's own bridge with the explicit server argument and its own account", () => {
     const home = mkdtempSync(join(tmpdir(), "ah-zcode-"));
     // npm's global .cmd shim on Windows; a plain executable elsewhere.

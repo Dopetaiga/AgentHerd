@@ -9,6 +9,7 @@ import {
   type PermissionOptionKind,
   PROTOCOL_VERSION,
   type RequestPermissionRequest,
+  type SetSessionModeResponse,
   type StopReason,
   type ToolCallUpdate,
 } from "@agentclientprotocol/sdk";
@@ -244,6 +245,12 @@ export function createMockAgent(script: Script, options: MockAgentOptions = {}):
           log(`crash with code ${step.code}`);
           exit(step.code);
           return "refusal";
+        case "mode_update":
+          await client.notify(methods.client.session.update, {
+            sessionId,
+            update: { sessionUpdate: "current_mode_update", currentModeId: step.modeId },
+          });
+          break;
         case "end_turn":
           return step.stopReason;
       }
@@ -265,7 +272,7 @@ export function createMockAgent(script: Script, options: MockAgentOptions = {}):
       const sessionId = `mock-${nextSession++}`;
       const mcpServers = stdioServers(params.mcpServers, log);
       sessions.set(sessionId, { turn: 0, abort: null, mcpServers, steers: [] });
-      // A mode the agent reports before any client request (never a confirmation, ADR 0105).
+      // A mode the agent reports before any client request (never a confirmation, ADR 0108).
       if (script.modeReport !== undefined) {
         await client.notify(methods.client.session.update, {
           sessionId,
@@ -310,7 +317,7 @@ export function createMockAgent(script: Script, options: MockAgentOptions = {}):
       return { configOptions: [] };
     })
     .onRequest(methods.agent.session.setMode, async ({ params, client }) => {
-      // Like ZCode (ADR 0105): the mode counts only when the running session reports it back.
+      // Like ZCode (ADR 0108): the mode counts only when the running session reports it back.
       const behavior = script.setMode;
       if (behavior === undefined || behavior === "error") {
         if (behavior === "error") log("set_mode refused: not supported");
@@ -318,14 +325,31 @@ export function createMockAgent(script: Script, options: MockAgentOptions = {}):
       }
       const modeId = (params as { modeId?: unknown }).modeId;
       log(`mode ${String(modeId)}`);
-      if (behavior === "confirm" || behavior === "wrong") {
-        await client.notify(methods.client.session.update, {
-          sessionId: params.sessionId,
-          update: {
-            sessionUpdate: "current_mode_update",
-            currentModeId: behavior === "wrong" ? "yolo" : String(modeId),
-          },
-        });
+      if (behavior === "hang") {
+        await new Promise<never>(() => {});
+      }
+      if (script.setModeDelayMs !== undefined && script.setModeDelayMs > 0) {
+        await new Promise((r) => setTimeout(r, script.setModeDelayMs));
+      }
+      if (behavior === "confirm" || behavior === "wrong" || behavior === "mismatch_response") {
+        const reported = behavior === "wrong" ? "yolo" : String(modeId);
+        const notify = () =>
+          client.notify(methods.client.session.update, {
+            sessionId: params.sessionId,
+            update: {
+              sessionUpdate: "current_mode_update",
+              currentModeId: reported,
+            },
+          });
+        if (script.setModeNotifyDelayMs !== undefined && script.setModeNotifyDelayMs > 0) {
+          setTimeout(() => void notify(), script.setModeNotifyDelayMs).unref();
+        } else {
+          await notify();
+        }
+      }
+      if (behavior === "mismatch_response") {
+        // zcode-acp forwards backend session/setMode fields outside the strict ACP schema.
+        return { settings: { mode: { current: "yolo" } } } as unknown as SetSessionModeResponse;
       }
       return {};
     })
