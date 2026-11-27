@@ -675,10 +675,11 @@ describe("DeepSeek Harness (ADR 0106)", () => {
 
 describe("ZCode (ADR 0108)", () => {
   it("runs the owner's own bridge with the explicit server argument and its own account", () => {
+    // npm's global shim: a `.cmd` on Windows (PATHEXT lookup), a plain executable elsewhere.
+    const win = process.platform === "win32";
     const home = mkdtempSync(join(tmpdir(), "ah-zcode-"));
-    // npm's global .cmd shim on Windows; a plain executable elsewhere.
     const npmBin = join(home, "AppData", "Roaming", "npm");
-    const bin = join(npmBin, "zcode-acp.cmd");
+    const bin = join(npmBin, win ? "zcode-acp.cmd" : "zcode-acp");
     const agents = new Agents({
       env: { PATH: npmBin },
       exists: (p) => p === bin,
@@ -686,6 +687,18 @@ describe("ZCode (ADR 0108)", () => {
       onChange() {},
     });
     expect(agents.find("zcode")).toEqual({ path: bin, source: "system" });
+    // The Windows shim is found by the PATHEXT lookup even when the profile runs there.
+    const onWin = new Agents({
+      env: { PATH: join(home, "AppData", "Roaming", "npm") },
+      exists: (p) => p === join(npmBin, "zcode-acp.cmd"),
+      platform: "win32",
+      userHome: home,
+      onChange() {},
+    });
+    expect(onWin.find("zcode")).toEqual({
+      path: join(npmBin, "zcode-acp.cmd"),
+      source: "system",
+    });
     const def = AGENTS.find((d) => d.id === "zcode");
     if (def === undefined) throw new Error("no zcode");
     const p = agentProfile(def, bin);
