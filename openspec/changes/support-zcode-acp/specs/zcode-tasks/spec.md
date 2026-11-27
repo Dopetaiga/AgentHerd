@@ -66,6 +66,12 @@ AgentHerd MUST verify the effective ZCode session mode (`build`) before sending 
 - **THEN** ZCode receives the matching one-time decision and can finish the task
 - **AND** a non-owner response cannot grant permission
 
+#### Scenario: The session drifts to another mode mid-turn
+
+- **WHEN** a running session reports a mode other than the established `build`
+- **THEN** AgentHerd ends the task instead of continuing under an unverified mode
+- **EXCEPT** a drift to `plan`, the one mode a live probe (2026-11-27) showed to execute no mutation and issue no permission request, so the approval property holds and the task may continue
+
 ### Requirement: Preserve the account choice across recovery
 
 AgentHerd SHALL exclude ZCode from automatic fallback for other tasks. When a ZCode task cannot continue on ZCode, AgentHerd SHALL inform the owner and require an explicit choice before starting work on a different agent or account.

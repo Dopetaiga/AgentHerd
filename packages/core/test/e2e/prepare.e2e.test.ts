@@ -514,6 +514,26 @@ turns:
       "session mode changed to yolo",
     );
   });
+
+  it("keeps the task running when the session drifts to plan, which runs no mutation", async () => {
+    // Live evidence (plan-probe-run.json, 2026-11-27): in `plan`, write and delete attempts
+    // executed nothing and issued no permission request — the agent mutates nothing. A drift to
+    // the read-only mode therefore keeps the approval property, and the task continues.
+    const home = mkdtempSync(join(tmpdir(), "agentherd-zcode-plan-drift-"));
+    const log = join(home, "plan-drift.log");
+    const script = `
+set_mode: confirm
+turns:
+  - - mode_update: plan
+    - message: "AFTER_DRIFT"
+    - end_turn: end_turn
+`;
+    const { herd, channel } = await boot(home, [zcodeProfile(home, script, log)]);
+    const { taskId, turn } = await herd.startTask("zcode", home, "Run");
+    await turn;
+    expect(herd.store.auditRows("session.mode-drift")).toHaveLength(0);
+    expect(herd.transcript(taskId).entries.some((e) => e.text.includes("AFTER_DRIFT"))).toBe(true);
+  });
 });
 
 describe("the owner's account choice survives recovery (ADR 0108)", () => {

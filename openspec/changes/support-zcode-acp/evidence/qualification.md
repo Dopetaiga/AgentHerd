@@ -148,7 +148,35 @@ Covered in `packages/core/test/e2e/prepare.e2e.test.ts` with `mock-agent` (`mode
 - Separate approval of an outbound stand-in (`git push origin main`) selects `allow_once` (never
   `allow_always`) and delivers the completion report.
 
+### D. The `plan` mode probe (drift carve-out evidence, 2026-11-27)
+
+The task runner ends a task whose running session drifts away from `build` — except to `plan`,
+which had no recorded evidence and is not in the modes the earlier probes exercised
+(`guarded`/`edit`/`build`). The carve-out needed a live answer to one question: in `plan`, does
+ZCode execute a mutation without a permission request? [`harness/qualify-plan.ts`](harness/qualify-plan.ts)
+([`harness/plan-probe-run.json`](harness/plan-probe-run.json), `0.95.1` + desktop backend) probed
+it on a disposable project:
+
+- `session/set_mode` to `plan` was confirmed by the session's own `current_mode_update`.
+  Notably the RPC response's `settings.mode.current` echo said `yolo` while the confirmation
+  update said `plan` — one more live instance of an echo contradicting the session, which is why
+  AgentHerd counts only the session's own report.
+- `echo` (harmless command) ran with no permission request.
+- An in-workspace file **write** and a file **delete**: **no `session/request_permission` and no
+  execution** — no `Write`/mutating `Bash` `tool_call` was even emitted; the target file never
+  appeared and the victim file stayed intact.
+- A read of an in-workspace file ran as expected.
+
+Reading: in `plan` the agent mutates nothing, so a mid-turn drift to `plan` keeps the approval
+property and the task may continue; the unsafe branch (an unguarded mutation) did not occur.
+Boundary: what the probe observed is the agent declining to mutate (no mutation `tool_call` at
+all), not a backend gate rejecting one — a future backend that forwards mutations in `plan` mode
+would need re-probing before AgentHerd relies on this carve-out. Covered by the mock test
+"keeps the task running when the session drifts to plan" in `packages/core/test/e2e/prepare.e2e.test.ts`.
+
 ## Conclusion
 
 - **Task 1.2 (`[x]`):** resolved by `zcode-acp@0.95.1` (`#425`, `#432`: unconfirmable materialized state no longer falls back to `initialSessionMode()` over ACP, and `reloadBackendSession` publishes confirmed mode changes) together with AgentHerd's `prepareSession` checks and runtime `session.mode-drift` abort (`TaskRunner.listen`).
 - **Task 1.3 (`[x]` under updated spec):** `build-probe-run.json` (`0.95.1`) verified live that `build` asks for `cmd //c del`, `powershell Remove-Item`, `sudo`, `git push`, and `WebFetch` (both `deny` and separate `allow_once`), `live-run.json` verified `rm -rf ./*` deny/allow/continue end-to-end, `modes-run.json` verified outside-workspace `Write` ask/deny, and `curl | sh` was refused by the model without calling `Bash`. ZCode 4.0.0 running its built-in `Read` tool (both inside and outside `cwd`) with `permissionRequests: 0` is documented and accepted as its upstream read boundary in [../specs/zcode-tasks/spec.md](../specs/zcode-tasks/spec.md).
+- **The `plan` drift carve-out is evidence-backed (2026-11-27):** `plan-probe-run.json` shows `plan` executes no mutation (a write and a delete attempt neither ran nor asked); the task runner keeps a task running on a drift to `plan` and ends it on any other drift. See §D for the boundary of that claim.
+- **Redaction (2026-11-27):** the committed evidence JSONs were re-run through an extended `redact()` — it now also maps the ZCode desktop install root (`…\Develop\Agent\Zcode…`) to `%ZCODE_DESKTOP%` and collapses any `~\.t3\…` subtree to `~\.t3\<redacted>`; long dumped strings (system prompts, transcript context) are truncated at 600 characters with a `…<trimmed>` marker, which is where most of the raw JSON's bulk came from. The harness sources carry the same rules, so future runs stay clean.
