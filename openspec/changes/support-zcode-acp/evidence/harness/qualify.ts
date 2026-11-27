@@ -567,13 +567,19 @@ async function main(): Promise<void> {
         }
         const loadedMode = await wait;
         record("load_reported_mode", { mode: loadedMode });
+        const waitAfterLoad = waitModeUpdate(savedId, 20_000);
         const set = await agent.request(methods.agent.session.setMode, {
           sessionId: savedId,
           modeId: "guarded",
         });
         record("set_mode_response_after_load", set);
-        const confirmed = await waitModeUpdate(savedId, 20_000);
+        const confirmed = await waitAfterLoad;
         record("mode_confirmation_after_load", { requested: "guarded", confirmed });
+        if (confirmed !== "guarded") {
+          throw new Error(
+            `mode after load not confirmed: requested guarded, confirmed ${JSON.stringify(confirmed)}`,
+          );
+        }
         const turn = await promptTurn(agent, savedId, "none", "Reply with exactly: OK", 120_000);
         record("turn_after_load", { ...turn });
       },

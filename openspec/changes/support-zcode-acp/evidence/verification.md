@@ -1,11 +1,11 @@
 # Live verification record: the owner experience (tasks 5.1–5.2)
 
-Date: 2026-11-25. Machine: Windows 10.0.26200 x64. Harnesses under Node v24.22.2. Both live runs
+Date: 2026-11-25 (run A re-verified 2026-11-27 on `zcode-acp-server@0.95.1`). Machine: Windows 10.0.26200 x64. Harnesses under Node v24.22.2. Both live runs
 drove AgentHerd's own pipeline (`Herd` + task runner + ACP client) with the **fake channel**
 playing the owner (recorded), while the agent, approvals and reports were **real**: the installed
-bridge `zcode-acp-server` **0.88.0** (npm shim `zcode-acp server`, as in
-[qualification.md](qualification.md)) and, behind it, the ZCode desktop backend selected by the
-explicit `ZCODE_BIN` (the desktop entry; the production selection, qualification case B). The
+bridge `zcode-acp-server` (**0.88.0** in the 2026-11-25 runs, **0.95.1** in the 2026-11-27 `live-run.json` re-run, npm shim `zcode-acp server`, as in
+[qualification.md](qualification.md)) and, behind it, the ZCode desktop backend (selected by
+explicit `ZCODE_BIN` in 2026-11-25; auto-discovered desktop backend in 2026-11-27 `live-run.json`). The
 desktop version was not re-read in this run; the proposal's earlier resolver checks recorded
 ZCode Desktop `4.0.0.10870`. Every saved value is redacted (user home → `~`, temp root →
 `%TEMP%`, e-mail and token-like strings removed). Raw evidence:
@@ -56,6 +56,14 @@ warnings/infos that `main` shows as well; after fixing the harness files, `pnpm 
 (line counts, Biome, all package typechecks), exit 0. The harness writes its JSON evidence with
 two-space indent now, so a re-run stays check-clean.
 
+**Follow-up hardening & re-run (2026-11-25, after fixing `prepareSession` timeout and adding
+controlled mock fault / side-effect-free guard tests):**
+- Targeted suite (`pnpm exec vitest run packages/acp-client/test packages/mock-agent/test packages/host/test/agents.test.ts packages/herder/test/tools.test.ts packages/herder/test/agent-models.test.ts packages/core/test/e2e/prepare.e2e.test.ts packages/core/test/e2e/approval.e2e.test.ts packages/core/test/e2e/model.e2e.test.ts`): **11 of 11 files, 219 of 219 tests passed** (18.29 s on Windows 10.0.26200, Node v24.22.2). Note: the remaining `packages/core/test/e2e` files outside those 3 were not re-run in this follow-up.
+- `pnpm check` (after the final code edit): **passed** (exit 0; line counts, Biome, script + all 14 workspace typechecks).
+- These additions are **mock / test-double** checks (`mock-agent`, `FakeChannel`, `FakeClock`),
+  separate from the real-bridge observations in [qualification.md](qualification.md) and runs A/B
+  below.
+
 ## Task 5.2, run A — a disposable task through `/run zcode`
 
 A temp project with two entries (`zc-root.txt`, `zc-sub/inside.txt`); the task text asked ZCode
@@ -67,7 +75,7 @@ Three turns on one task, one real session:
    report says the call "was declined by the permission system, so nothing was removed"
    (`Done · proj · ZCode · 57s`).
 2. **A separately approved action.** A second prompt on the **same task**: the pipeline reopened
-   the ended task on the saved ZCode profile (the recovery path of ADR 0105), the same card
+   the ended task on the saved ZCode profile (the recovery path of ADR 0108), the same card
    arrived again, and allowing it let the deletion run (`zc-sub` gone), followed by the task
    report (`Done · proj · ZCode · 1m`).
 3. **A continued task.** One more prompt on the same task; the agent answered `OK`.
@@ -101,7 +109,7 @@ Herder loop and its tools, the profile selection, and everything after the dispa
    profile; the agent received the text labeled "[Message from the Herder, not from the owner]"
    and answered `OK`; a second report arrived with `fullReply: "OK"`, `fullReplyBy: "ZCode"`.
 
-## Quota attribution and unverified claims
+## Quota attribution, evidence boundary, and unverified claims
 
 - **Quota attribution remains unverified.** Neither run surfaced a non-secret usage or quota
   indicator; the account indicator from the qualification (`session/new` `_meta.zcode.providers`)
@@ -111,5 +119,31 @@ Herder loop and its tools, the profile selection, and everything after the dispa
   and the core E2E scenarios recorded in [07-delivery](../../../docs/spec/07-delivery.md).
 - **A non-owner answer cannot grant permission** is covered by the mapping and pipeline tests,
   not re-exercised live (the live channel only ever spoke as the owner).
-- The web tool's live deny/allow round trip stays unverified from the qualification.
-- The three stopped-mid-turn E2E timing observations are recorded under task 5.1 below.
+- **Qualification 1.2 & 1.3 checked (`[x]`) on `zcode-acp@0.95.1`:**
+  - `build-probe-run.json` (2026-11-27, `zcode-acp@0.95.1`) confirmed `build` on new and loaded
+    sessions with matching `rpcSettingsMode: "build"` and `rpcBackendSid` (`sess_c25fd565-…`), and
+    verified that `build` asks for `cmd //c del`, `powershell Remove-Item`, `sudo`, `git push`, and
+    `WebFetch` (`deny` blocked each; separate `allow_once` ran `WebFetch`), while `curl | sh` was
+    refused by the model without calling `Bash`; `live-run.json` (2026-11-27, `0.95.1`) re-verified
+    `/run zcode` end-to-end (`rm -rf ./*` deny → reopen allow → continued `OK`).
+  - Upstream `0.95.1` (`#425`, `#432`) no longer falls back to `initialSessionMode()` on a
+    materialized `sessionRead` failure (it skips emitting `current_mode_update`), and `reloadBackendSession`
+    broadcasts confirmed runtime mode changes so `TaskRunner.listen` aborts on drift. Live
+    corrupted `session/read` injection against the desktop binary was not staged (covered by
+    `0.95.1` source/tests and `mock-agent`).
+  - In `build`, ZCode 4.0.0's built-in `Read` tool (both in-workspace `.env` and
+    outside-workspace `outside-secret.txt`) ran with `permissionRequests: 0`; this upstream read
+    boundary is accepted and recorded in [../specs/zcode-tasks/spec.md](../specs/zcode-tasks/spec.md)
+    and [03-agents.md](../../../docs/spec/03-agents.md).
+- **What is mock vs real here:**
+  - **Real bridge (`0.88.0` initial / `0.95.1` re-run) + desktop backend (fake channel):** qualification runs in
+    [qualification.md](qualification.md) (including `build-probe-run.json`), live run A
+    (`live-run.json` on `0.95.1`: `rm -rf ./*` deny/allow/report/continue), and live run B
+    (`herder-run.json` on `0.88.0`: `echo herd-zcode-herder` + `session_prompt` reopen with
+    scripted faux Herder).
+  - **Mock / test-double (`mock-agent` + `FakeChannel` + `FakeClock`):** `prepareSession` timeout
+    and fault tests (RPC hang, shared RPC+notification timeout, mismatch response, load/replace
+    no-replay, mid-turn mode drift) and side-effect-free guard/external-tool/denial/timeout/report
+    E2E tests in `packages/acp-client/test/connection.test.ts` and
+    `packages/core/test/e2e/prepare.e2e.test.ts`.
+- The three stopped-mid-turn E2E timing observations are recorded under task 5.1 above.

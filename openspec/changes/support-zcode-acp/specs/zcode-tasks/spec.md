@@ -47,7 +47,7 @@ AgentHerd SHALL use the ZCode profile only when selected by the owner for the ta
 
 ### Requirement: Verify approval behavior before work
 
-AgentHerd MUST verify the effective ZCode session mode before sending the first task prompt on a new or restored session. Actions covered by AgentHerd approvals MUST reach its existing pipeline before execution. If the mode or permission decision is unavailable, ambiguous or times out, the action MUST NOT proceed.
+AgentHerd MUST verify the effective ZCode session mode (`build`) before sending the first task prompt on a new or restored session. File writes, gated shell commands (including `rm -rf`, Windows wrapped deletes such as `cmd //c del` and `powershell Remove-Item`, `sudo`, and `git push`), and external-action tools (`WebFetch`) forwarded by ZCode's `build` mode MUST reach AgentHerd's existing approval pipeline before execution. By upstream ZCode 4.0.0 design (accepted for `zcode`), ZCode runs its built-in `Read` tool (both inside and outside `cwd`) and harmless read-only commands (`ls`, `echo`) without issuing `session/request_permission`; those unforwarded reads do not enter AgentHerd's `guard` pipeline, while outbound tools and writes stay gated. If the mode or a forwarded permission decision is unavailable, ambiguous or times out, the action MUST NOT proceed.
 
 #### Scenario: A session starts or resumes in an unrestricted mode
 
