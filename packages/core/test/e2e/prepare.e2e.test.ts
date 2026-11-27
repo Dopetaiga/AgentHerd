@@ -534,6 +534,47 @@ turns:
     expect(herd.store.auditRows("session.mode-drift")).toHaveLength(0);
     expect(herd.transcript(taskId).entries.some((e) => e.text.includes("AFTER_DRIFT"))).toBe(true);
   });
+
+  it("still gates a guarded action through the pipeline after a drift to plan", async () => {
+    // The carve-out only keeps the task running; the approval pipeline must keep gating
+    // actions in the drifted-to mode exactly as it does in `build`.
+    const home = mkdtempSync(join(tmpdir(), "agentherd-zcode-plan-gate-"));
+    const log = join(home, "plan-gate.log");
+    const script = `
+set_mode: confirm
+turns:
+  - - mode_update: plan
+    - tool_call:
+        id: g1
+        title: "Bash: rm -rf ./*"
+        kind: execute
+        command: "rm -rf ./*"
+        status: pending
+    - request_permission:
+        toolCall:
+          id: g1
+          title: "Bash: rm -rf ./*"
+          kind: execute
+          command: "rm -rf ./*"
+        expect: deny
+        on_reject: end_turn
+    - message: "EXECUTED"
+    - end_turn: end_turn
+`;
+    const { herd, channel } = await boot(home, [zcodeProfile(home, script, log)]);
+    const { taskId, turn } = await herd.startTask("zcode", home, "Wipe");
+    const card = await channel.waitFor(isOpenItem);
+    const view = card.view as ItemView;
+    expect(view.body).toContain("rm -rf ./*");
+    await channel.tap(view.itemId, "deny");
+    await turn;
+    expect((card.view as ItemView).final).toBe("Denied by you");
+    expect(herd.store.auditRows("session.mode-drift")).toHaveLength(0);
+    expect(herd.transcript(taskId).entries.some((e) => e.text.includes("EXECUTED"))).toBe(false);
+    expect(channel.ofKind("report").at(-1)?.view).toMatchObject({
+      subtitle: expect.stringContaining("ZCode"),
+    });
+  });
 });
 
 describe("the owner's account choice survives recovery (ADR 0108)", () => {
