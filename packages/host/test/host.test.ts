@@ -179,8 +179,9 @@ describe("Host", () => {
       }),
     );
     const secrets = memorySecrets();
+    const home = mkdtempSync(join(tmpdir(), "ah-"));
     const host = new Host({
-      home: mkdtempSync(join(tmpdir(), "ah-")),
+      home,
       userHome,
       secrets,
       env: {},
@@ -207,6 +208,12 @@ describe("Host", () => {
     });
     await expect(host.addFoundService(id)).rejects.toThrow('already added as "relay.example"');
     await expect(host.addFoundService("nope")).rejects.toThrow("no longer in the list");
+    // ×: put away, stays away after another look, and comes back on request.
+    const hiddenView = host.hideFoundService(id);
+    expect([hiddenView.services.length, hiddenView.hidden]).toEqual([0, 1]);
+    expect([host.findServices().services.length, host.findServices().hidden]).toEqual([0, 1]);
+    expect(readFileSync(join(home, "config.json"), "utf8")).not.toContain("sk-relay");
+    expect(host.showFoundServices().services.map((s) => s.name)).toEqual(["relay.example"]);
   });
 
   it("probes a saved service's models with its saved key unless a new key is typed", async () => {

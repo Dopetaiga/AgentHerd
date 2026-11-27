@@ -460,6 +460,12 @@ function installFakeBridge(): void {
     problems: [
       { source: "codex", message: "「Relay」只能用 OpenAI Responses 格式，AgentHerd 用不了" },
     ],
+    hidden: 0,
+  };
+  const foundMarks = new Set<string>();
+  const foundShown = (): FoundServicesView => {
+    const services = found.services.filter((s) => !foundMarks.has(s.id));
+    return structuredClone({ ...found, services, hidden: found.services.length - services.length });
   };
 
   let setup: SetupState = { phase: "idle" };
@@ -1415,8 +1421,16 @@ function installFakeBridge(): void {
       };
       return delay(modelsChanged());
     },
-    foundServices: () => delay(structuredClone(found)),
-    findServices: () => delay(structuredClone({ ...found, at: new Date().toISOString() }), 900),
+    foundServices: () => delay(foundShown()),
+    findServices: () => delay({ ...foundShown(), at: new Date().toISOString() }, 400),
+    hideFoundService: (id) => {
+      foundMarks.add(id);
+      return delay(foundShown());
+    },
+    showFoundServices: () => {
+      foundMarks.clear();
+      return delay(foundShown());
+    },
     addFoundService: (id) => {
       const f = found.services.find((s) => s.id === id);
       if (f === undefined)

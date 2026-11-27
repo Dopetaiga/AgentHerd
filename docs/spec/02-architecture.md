@@ -108,7 +108,7 @@ Rules:
 - Methods now (plan 011): `status`, `tasks` (tasks and open items, read-only; owners decide in
   the channel), `providers`, `models`, `putService`, `removeService`, `setKey`, `chooseModel`,
   `testModel`, `probeModels` (GET `/models` of an OpenAI- or Anthropic-compatible service, so
-  the owner ticks models instead of typing ids), `foundServices`, `findServices`, `addFoundService`
+  the owner ticks models instead of typing ids), `foundServices`, `findServices`, `addFoundService`, `hideFoundService`, `showFoundServices`
   (model services other apps on this computer hold, read only and added with their key when the
   owner taps 添加; ADR 0107), `setupFeishu`, `cancelSetup`, `setupState`,
   `updateSettings`, `transcript` (a task's conversation), `herderActivity` (what the Herder did,

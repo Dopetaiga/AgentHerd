@@ -555,3 +555,20 @@ function list(value: unknown): unknown[] {
 function str(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
 }
+
+/**
+ * A mark that stays the same across looks and restarts for one place and key, so a service the
+ * owner put away stays away. Only a short hash goes into the config, never the key.
+ */
+export function foundMark(
+  s: Pick<FoundService, "kind" | "provider" | "baseUrl" | "api" | "key">,
+): string {
+  const where =
+    s.kind === "builtin"
+      ? `p:${s.provider ?? ""}`
+      : `u:${(s.baseUrl ?? "").replace(/\/+$/, "")}|${s.api ?? ""}`;
+  return createHash("sha256")
+    .update(`agentherd-found|${where}|${s.key}`)
+    .digest("hex")
+    .slice(0, 16);
+}

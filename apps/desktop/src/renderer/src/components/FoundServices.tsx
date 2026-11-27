@@ -1,115 +1,161 @@
-// 这台电脑上已有的服务 (ADR 0107): model services other apps here are already set up with. The
-// host looks once by itself; 探测 looks again. A service is added only when the owner taps 添加,
-// and its key never comes to this page (only its first and last characters).
+// 这台电脑上已有的服务 (ADR 0107), kept small: one line of chips under the services. Tap a chip to
+// add it with its key, × to put it away (it stays away until 恢复). 探测 looks again and says what
+// it found. Services already in AgentHerd are not offered.
 
 import type { FoundServicesView } from "@agentherd/host/api";
 import { FOUND_SOURCE_NAMES } from "@agentherd/host/api";
-import { Check, Plus, RefreshCw, ScanSearch } from "lucide-react";
-import { useEffect, useState } from "react";
-import { foundLine, foundOrder, sourcesText } from "../found-services";
+import { Loader2, Plus, RefreshCw, Sparkles, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { chipNote, foundLine, lookResult, offered } from "../found-services";
 import { applyModels, call } from "../store";
-import { Badge, Button, Group, IconTile, Row, Section } from "./ui";
+
+const LOOK_MIN_MS = 700;
+const SAID_MS = 4000;
 
 export function FoundServices() {
   const [view, setView] = useState<FoundServicesView | undefined>();
   const [looking, setLooking] = useState(false);
-  const [adding, setAdding] = useState<string | undefined>();
+  const [busy, setBusy] = useState<string | undefined>();
+  const [said, setSaid] = useState<string | undefined>();
+  const [fresh, setFresh] = useState<ReadonlySet<string>>(new Set());
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   useEffect(() => {
     void call((h) => h.foundServices()).then((v) => v !== undefined && setView(v));
+    return () => clearTimeout(timer.current);
   }, []);
 
-  const look = async () => {
-    setLooking(true);
-    const v = await call((h) => h.findServices());
-    if (v !== undefined) setView(v);
-    setLooking(false);
+  const say = (text: string) => {
+    setSaid(text);
+    clearTimeout(timer.current);
+    timer.current = setTimeout(() => {
+      setSaid(undefined);
+      setFresh(new Set());
+    }, SAID_MS);
   };
 
-  const add = async (id: string) => {
-    setAdding(id);
+  const look = async () => {
+    const before = new Set(offered(view?.services ?? []).map((s) => s.id));
+    setLooking(true);
+    const [v] = await Promise.all([
+      call((h) => h.findServices()),
+      new Promise((r) => setTimeout(r, LOOK_MIN_MS)),
+    ]);
+    setLooking(false);
+    if (v === undefined) return;
+    setView(v);
+    setFresh(
+      new Set(
+        offered(v.services)
+          .filter((s) => !before.has(s.id))
+          .map((s) => s.id),
+      ),
+    );
+    say(lookResult(before, v.services));
+  };
+
+  const add = async (id: string, name: string) => {
+    setBusy(id);
     const models = await call((h) => h.addFoundService(id));
-    applyModels(models);
+    if (models !== undefined) {
+      applyModels(models);
+      say(`已添加「${name}」`);
+    }
     const v = await call((h) => h.foundServices());
     if (v !== undefined) setView(v);
-    setAdding(undefined);
+    setBusy(undefined);
   };
 
-  const list = foundOrder(view?.services ?? []);
-  const fresh = list.filter((s) => s.added === undefined).length;
-  const probe = (
-    <Button size="sm" onClick={() => void look()} disabled={looking}>
-      <RefreshCw size={13} className={looking ? "animate-spin" : ""} />{" "}
-      {looking ? "正在找…" : "探测"}
-    </Button>
-  );
+  const hide = async (id: string) => {
+    const v = await call((h) => h.hideFoundService(id));
+    if (v !== undefined) setView(v);
+  };
+
+  const unhide = async () => {
+    const v = await call((h) => h.showFoundServices());
+    if (v !== undefined) setView(v);
+  };
+
+  if (view === undefined) return null;
+  const list = offered(view.services);
+  const problems = view.problems;
 
   return (
-    <Section
-      title="这台电脑上已有的服务"
-      hint={
-        view === undefined
-          ? "正在看 Claude Code、Codex、CC Switch 等 App 里配好的服务…"
-          : list.length === 0
-            ? "在 Claude Code、Codex、CC Switch、DeepSeek Harness、Pi、OpenCode 和环境变量里都没找到配好的服务"
-            : fresh === 0
-              ? "找到的都已经加上了"
-              : `从别的 App 里找到 ${fresh} 个还没加的服务，点「添加」就能用，Key 会一起带过来`
-      }
-      actions={probe}
-    >
+    <div className="flex flex-col gap-2 rounded-card border border-line border-dashed px-3 py-2.5">
+      <div className="flex items-center gap-2 text-sm">
+        <Sparkles size={13} className="shrink-0 text-accent-text" />
+        <span className="min-w-0 flex-1 truncate text-ink-2">
+          {list.length === 0
+            ? "这台电脑上没有别的可以直接加的服务"
+            : `这台电脑上还有 ${list.length} 个服务，点一下连 Key 一起加进来`}
+        </span>
+        {said !== undefined && <span className="shrink-0 text-ink-muted text-xs">{said}</span>}
+        <button
+          type="button"
+          onClick={() => void look()}
+          disabled={looking}
+          title="再看一遍 Claude Code、Codex、CC Switch 等 App 里配好的服务"
+          className="flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-ink-2 text-xs hover:bg-hover hover:text-ink disabled:opacity-60"
+        >
+          <RefreshCw size={12} className={looking ? "animate-spin" : ""} />
+          {looking ? "正在看…" : "探测"}
+        </button>
+      </div>
       {list.length > 0 && (
-        <Group>
+        <div className="flex flex-wrap gap-1.5">
           {list.map((s) => (
-            <Row
+            <span
               key={s.id}
-              icon={
-                <IconTile tone={s.added === undefined ? "blue" : "green"}>
-                  {s.added === undefined ? <ScanSearch size={14} /> : <Check size={14} />}
-                </IconTile>
-              }
-              title={
-                <span className="flex items-center gap-2">
-                  {s.name}
-                  <Badge>{sourcesText(s.sources)}</Badge>
-                </span>
-              }
-              description={
-                <span className="flex flex-col">
-                  <span className="truncate">{foundLine(s)}</span>
-                  <span className="font-mono text-xs">Key {s.keyHint}</span>
-                </span>
-              }
-              trailing={
-                s.added === undefined ? (
-                  <Button
-                    size="sm"
-                    variant="primary"
-                    disabled={adding !== undefined}
-                    onClick={() => void add(s.id)}
-                  >
-                    <Plus size={13} /> {adding === s.id ? "添加中…" : "添加"}
-                  </Button>
+              className={`group inline-flex h-7 items-center rounded-full bg-control-hover text-xs transition-shadow ${
+                fresh.has(s.id) ? "ring-2 ring-accent" : ""
+              }`}
+            >
+              <button
+                type="button"
+                disabled={busy !== undefined}
+                onClick={() => void add(s.id, s.name)}
+                title={`${foundLine(s)}\nKey ${s.keyHint}\n来自 ${s.sources.map((x) => FOUND_SOURCE_NAMES[x] ?? x).join("、")}`}
+                className="inline-flex h-full items-center gap-1.5 rounded-l-full pr-1 pl-2.5 hover:bg-hover disabled:opacity-60"
+              >
+                {busy === s.id ? (
+                  <Loader2 size={12} className="animate-spin" />
                 ) : (
-                  <span className="text-ink-muted text-sm">已加为「{s.added.name}」</span>
-                )
-              }
-            />
+                  <Plus size={12} />
+                )}
+                <span className="font-medium text-ink">{s.name}</span>
+                <span className="text-ink-muted">{chipNote(s)}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => void hide(s.id)}
+                aria-label={`不再提示「${s.name}」`}
+                title="不再提示这个"
+                className="inline-flex h-full items-center rounded-r-full pr-2 pl-1 text-ink-muted hover:bg-hover hover:text-ink"
+              >
+                <X size={12} />
+              </button>
+            </span>
           ))}
-        </Group>
+        </div>
       )}
-      {(view?.problems.length ?? 0) > 0 && (
-        <details className="mt-2 text-ink-muted text-sm">
-          <summary className="cursor-pointer">有 {view?.problems.length} 个没能带过来</summary>
-          <ul className="mt-1 list-disc pl-5">
-            {view?.problems.map((p) => (
-              <li key={`${p.source}:${p.message}`}>
-                {FOUND_SOURCE_NAMES[p.source] ?? p.source}：{p.message}
-              </li>
-            ))}
-          </ul>
-        </details>
+      {(view.hidden > 0 || problems.length > 0) && (
+        <div className="flex gap-3 text-ink-muted text-xs">
+          {view.hidden > 0 && (
+            <button type="button" onClick={() => void unhide()} className="hover:text-ink">
+              已隐藏 {view.hidden} 个 · 恢复
+            </button>
+          )}
+          {problems.length > 0 && (
+            <span
+              title={problems
+                .map((p) => `${FOUND_SOURCE_NAMES[p.source] ?? p.source}：${p.message}`)
+                .join("\n")}
+            >
+              {problems.length} 个用不了
+            </span>
+          )}
+        </div>
       )}
-    </Section>
+    </div>
   );
 }

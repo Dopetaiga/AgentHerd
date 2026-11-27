@@ -83,6 +83,7 @@ export function ServiceList() {
           ))}
         </div>
       )}
+      <FoundServices />
       {signingIn && <SubscriptionDialog onClose={() => setSigningIn(false)} />}
       {adding && (
         <AddServiceDialog
@@ -101,7 +102,6 @@ export function ModelsPage() {
       <RolePicker />
       <ModelTiers />
       <ServiceList />
-      <FoundServices />
     </div>
   );
 }

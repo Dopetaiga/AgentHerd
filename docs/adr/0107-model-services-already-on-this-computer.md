@@ -26,6 +26,11 @@ magpie (`internal/provider/importapps.go`) and agentrecall (`core/agent-model-im
 3. **What can be used.** A provider pi-ai knows becomes a built-in service; an address speaking OpenAI chat completions or Anthropic messages becomes a custom one. A service only offered in OpenAI's Responses format is left out with a note, because AgentHerd's custom services do not speak it.
 4. **One service per address and key.** The same key at the same address is one row however many apps use it. A row matching a service already in AgentHerd (same vendor or address and format, same key) is marked 「已加为…」.
 5. **On by default, plus 探测.** The first time the 模型 page (or the first run's service step) asks, the host looks. The section 「这台电脑上已有的服务」 then shows what was found, and 「探测」 looks again. Nothing is added until the owner taps 添加.
+
+   *Changed 2026-11-27.* The owner said of the first version: 「点击这个探测的感觉很奇怪，没有交互，然后就是我这里探测到的，我不希望一直列这么大，我希望可以小一点……然后我是可以x掉的」. Now, like agentrecall's discovery bar:
+   - What can still be added shows as one small dashed box of chips under the services (name · first model · where from), not a list of big rows. Services already in AgentHerd are not shown.
+   - 探测 turns while it looks (at least 0.7 s), then says what it found for a few seconds (「看完了，多了 2 个可以加的」 or 「没有新的」), and new chips get a ring.
+   - Every chip has a ×. A service put away stays away across looks and restarts: the config keeps a short hash of its place and key (`foundHidden`, never the key), and 「已隐藏 N 个 · 恢复」 brings them all back.
 6. **Adding.** The service gets an id from its name that is not in use, the key goes into AgentHerd's own secrets as for a typed key, and the models the app named are ticked. A custom service the app named no models for is asked for its list (`GET /models`). If it lists up to 30 models, all are ticked; if more, only the first, and the owner ticks the rest. A known vendor named without a model gets pi-ai's first model.
 7. **Keys stay in the host.** The app sees only `sk-a…9f2c`. Found rows have ids salted per start, so an id is never a fingerprint of a key.
 

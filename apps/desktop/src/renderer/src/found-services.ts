@@ -28,3 +28,33 @@ export function foundOrder(list: readonly FoundServiceView[]): FoundServiceView[
       Number(a.added !== undefined) - Number(b.added !== undefined) || a.name.localeCompare(b.name),
   );
 }
+
+/** Only the ones not in AgentHerd yet, by name: what the bar offers. */
+export function offered(list: readonly FoundServiceView[]): FoundServiceView[] {
+  return foundOrder(list).filter((s) => s.added === undefined);
+}
+
+/** The short second half of a chip: 「claude-opus-5-5 · DSH」. */
+export function chipNote(s: FoundServiceView): string {
+  const short: Record<string, string> = {
+    dsh: "DSH",
+    "claude-code": "Claude Code",
+    "cc-switch": "CC Switch",
+  };
+  const from = s.sources.map((x) => short[x] ?? FOUND_SOURCE_NAMES[x] ?? x).join("/");
+  const model = s.models[0];
+  return model === undefined ? from : `${model} · ${from}`;
+}
+
+/** What 探测 found, said for a few seconds after it: 「看完了，多了 2 个可以加的」. */
+export function lookResult(
+  before: ReadonlySet<string>,
+  after: readonly FoundServiceView[],
+): string {
+  const now = offered(after);
+  const fresh = now.filter((s) => !before.has(s.id)).length;
+  if (now.length === 0) return "看完了，没有可以加的";
+  return fresh > 0
+    ? `看完了，多了 ${fresh} 个可以加的`
+    : `看完了，没有新的（还是这 ${now.length} 个）`;
+}
