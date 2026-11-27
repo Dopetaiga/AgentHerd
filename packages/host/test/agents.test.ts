@@ -7,7 +7,7 @@ import { chmodSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, win32 } from "node:path";
 import { fileURLToPath } from "node:url";
 import { FakeChannel } from "@agentherd/channel-fake";
 import { afterEach, describe, expect, it } from "vitest";
@@ -676,6 +676,9 @@ describe("DeepSeek Harness (ADR 0106)", () => {
 describe("ZCode (ADR 0108)", () => {
   it("runs the owner's own bridge with the explicit server argument and its own account", () => {
     // npm's global shim: a `.cmd` on Windows (PATHEXT lookup), a plain executable elsewhere.
+    // The win32 lookup joins with backslashes (path.win32 inside commandCandidates), so the
+    // simulated folder must be built with the same joiner the lookup itself uses — otherwise
+    // `exists` compares a posix-shaped path against a win32-shaped one (what CI showed).
     const win = process.platform === "win32";
     const home = mkdtempSync(join(tmpdir(), "ah-zcode-"));
     const npmBin = join(home, "AppData", "Roaming", "npm");
@@ -687,16 +690,18 @@ describe("ZCode (ADR 0108)", () => {
       onChange() {},
     });
     expect(agents.find("zcode")).toEqual({ path: bin, source: "system" });
-    // The Windows shim is found by the PATHEXT lookup even when the profile runs there.
+    // The Windows shim resolution, pinned on every runner: the simulated folder is a literal
+    // win32 path, so the lookup's own win32 joiner produces matching strings on any host OS.
+    const winNpm = win32.join("C:", "Users", "me", "AppData", "Roaming", "npm");
     const onWin = new Agents({
-      env: { PATH: join(home, "AppData", "Roaming", "npm") },
-      exists: (p) => p === join(npmBin, "zcode-acp.cmd"),
+      env: { PATH: winNpm },
+      exists: (p) => p === win32.join(winNpm, "zcode-acp.cmd"),
       platform: "win32",
-      userHome: home,
+      userHome: "C:\\Users\\me",
       onChange() {},
     });
     expect(onWin.find("zcode")).toEqual({
-      path: join(npmBin, "zcode-acp.cmd"),
+      path: win32.join(winNpm, "zcode-acp.cmd"),
       source: "system",
     });
     const def = AGENTS.find((d) => d.id === "zcode");
