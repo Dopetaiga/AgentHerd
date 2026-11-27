@@ -75,7 +75,7 @@ pnpm --filter @agentherd/desktop fetch-agents   # from source: download Pi and C
 pnpm --filter @agentherd/desktop start
 ```
 
-The first run walks you through it: what the Herder should call you, its figure, a QR scan for Feishu, a model service and key (or a ChatGPT, Claude, Copilot or other plan), and the Herder's model. Then click the pet and tell the Herder what you want.
+The first run walks you through it: what the Herder should call you, its figure, a QR scan for Feishu, a model service and key (those already set up in Claude Code, Codex, CC Switch and similar apps are found for you, one tap to add; or a ChatGPT, Claude, Copilot or other plan), and the Herder's model. Then click the pet and tell the Herder what you want.
 
 <details>
 <summary>Windows, packaging, development and the command line</summary>

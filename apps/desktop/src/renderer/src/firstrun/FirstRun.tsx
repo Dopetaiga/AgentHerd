@@ -7,6 +7,7 @@ import { ArrowRight, Loader2 } from "lucide-react";
 import { type FormEvent, type ReactNode, useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { useFeishuSetup } from "../components/FeishuSetup";
+import { FoundServices } from "../components/FoundServices";
 import { Logo } from "../components/Logo";
 import { useServiceDraft } from "../components/ServiceDraft";
 import { ServiceChooser, ServiceForm } from "../components/ServiceForm";
@@ -15,6 +16,7 @@ import { devOpen } from "../dev-bridge";
 import { isMac } from "../platform";
 import { call, useApp } from "../store";
 import {
+  BODY,
   DoneBody,
   FeishuBody,
   FigureBody,
@@ -189,7 +191,12 @@ export function FirstRun() {
       if (part === "list") {
         title = "添加模型服务";
         hint = "已添加的模型服务。可以直接继续，也可以再加一个。";
-        body = <ServiceListBody onAdd={() => goPart("pick")} />;
+        body = (
+          <div className={`${BODY} flex flex-col gap-5`}>
+            <ServiceListBody onAdd={() => goPart("pick")} />
+            <FoundServices />
+          </div>
+        );
       } else if (part === "pick") {
         title = "添加模型服务";
         hint = "主管要用一个大模型来读懂任务。选择你有 Key 的服务。";

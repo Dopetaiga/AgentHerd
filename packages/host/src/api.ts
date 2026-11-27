@@ -488,6 +488,42 @@ export interface SetupState {
 
 export type ModelTest = { ok: true; reply: string } | { ok: false; message: string };
 
+/** Apps AgentHerd looks in for model services already set up on this computer (ADR 0107). */
+export const FOUND_SOURCE_NAMES: Record<string, string> = {
+  "claude-code": "Claude Code",
+  "cc-switch": "CC Switch",
+  codex: "Codex",
+  dsh: "DeepSeek Harness",
+  pi: "Pi",
+  opencode: "OpenCode",
+  env: "环境变量",
+};
+
+/** A model service another app on this computer is set up with; its key stays in the host. */
+export interface FoundServiceView {
+  id: string;
+  name: string;
+  /** Ids of FOUND_SOURCE_NAMES. */
+  sources: string[];
+  kind: "builtin" | "openai-compatible";
+  provider?: string;
+  baseUrl?: string;
+  api?: CustomApi;
+  models: string[];
+  /** `sk-a…9f2c`. */
+  keyHint: string;
+  /** The AgentHerd service it already is, if any. */
+  added?: { id: string; name: string };
+}
+
+export interface FoundServicesView {
+  /** When the apps were last read; unset before the first look. */
+  at?: string;
+  services: FoundServiceView[];
+  /** Why something an app holds was left out or could not be read. */
+  problems: { source: string; message: string }[];
+}
+
 /** What to ask for a model list: a saved service, or the fields of one not saved yet. */
 export interface ProbeTarget {
   /** A saved service: its address, API and key are the defaults for the fields below. */
@@ -1090,6 +1126,15 @@ export interface HostApi {
   cancelLogin(id: string): LoginView;
   /** Asks an OpenAI- or Anthropic-compatible service which models it offers (GET /models). */
   probeModels(target: ProbeTarget): Promise<ModelProbe>;
+  /**
+   * Model services other apps on this computer are set up with (ADR 0107). The first call looks;
+   * later calls give what was found until `findServices` looks again.
+   */
+  foundServices(): FoundServicesView;
+  /** Looks again in every app (the 「探测」 button). */
+  findServices(): FoundServicesView;
+  /** Adds a found service with its key; a custom one without models gets the models it lists. */
+  addFoundService(id: string): Promise<ModelsView>;
   /** Starts the one-scan Feishu setup; progress comes as "setup" events. */
   setupFeishu(): SetupState;
   cancelSetup(): SetupState;
@@ -1235,6 +1280,9 @@ export const HOST_METHODS: readonly HostMethod[] = [
   "answerLogin",
   "cancelLogin",
   "probeModels",
+  "foundServices",
+  "findServices",
+  "addFoundService",
   "setupFeishu",
   "cancelSetup",
   "setupState",

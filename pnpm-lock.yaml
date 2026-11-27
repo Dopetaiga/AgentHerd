@@ -227,6 +227,9 @@ importers:
       qrcode:
         specifier: ^1.5.4
         version: 1.5.4
+      yaml:
+        specifier: ^2.9.1
+        version: 2.9.1
     devDependencies:
       '@agentherd/channel-fake':
         specifier: workspace:*

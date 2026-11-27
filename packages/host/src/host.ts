@@ -78,6 +78,7 @@ import type {
   DingTalkView,
   FeedSource,
   FeedView,
+  FoundServicesView,
   HerderActivityView,
   HerderContextSame,
   HerderContextView,
@@ -152,6 +153,7 @@ import { dingtalkCapabilities, dingtalkTools } from "./dingtalk-tools.ts";
 import { LocalEmbedder } from "./embedder.ts";
 import { FEED_NAMES, Feeds } from "./feeds.ts";
 import { foldText, herderContextView, herderMessages } from "./herder-context-view.ts";
+import { alreadyAdded, type FoundScan, findServices, keyHint, serviceIdFor } from "./key-finder.ts";
 import { Lark } from "./lark.ts";
 import { mailboxCheck, type ScriptRun } from "./mailbox-sources.ts";
 import { mcpServerFor } from "./mcp-socket.ts";
@@ -260,6 +262,8 @@ export class Host implements HostApi {
   private herderRef: string | undefined;
   /** The running or last subscription sign-in (ADR 0068). */
   private loginRun: LoginRun | undefined;
+  /** What other apps on this computer hold (ADR 0107); read on first ask and by the 探测 button. */
+  private found: { scan: FoundScan; at: string } | undefined;
   /** Socket tokens Pi uses to ask for a subscription token, by the service they may ask for. */
   private readonly modelGrants = new Map<string, string>();
   private readonly modelChecks = new Map<
@@ -1640,6 +1644,83 @@ export class Host implements HostApi {
     });
   }
 
+  foundServices(): FoundServicesView {
+    if (this.found === undefined) return this.findServices();
+    return this.foundView();
+  }
+
+  findServices(): FoundServicesView {
+    const env = this.opts.env ?? process.env;
+    this.found = {
+      scan: findServices(this.opts.userHome ?? homedir(), env),
+      at: new Date().toISOString(),
+    };
+    return this.foundView();
+  }
+
+  async addFoundService(id: string): Promise<ModelsView> {
+    const found = this.found?.scan.services.find((s) => s.id === id);
+    if (found === undefined) throw new Error("this service is no longer in the list; look again");
+    const settings = this.settings();
+    const have = alreadyAdded(found, settings.services, this.opts.secrets, this.opts.env);
+    if (have !== undefined) throw new Error(`already added as "${have.name}"`);
+    let models = found.models;
+    if (models.length === 0 && found.kind === "openai-compatible" && found.baseUrl !== undefined) {
+      const probe = await probeModels({
+        baseUrl: found.baseUrl,
+        key: found.key,
+        ...(found.api === undefined ? {} : { api: found.api }),
+        ...(this.opts.fetch === undefined ? {} : { fetch: this.opts.fetch }),
+      });
+      if (!probe.ok) throw new Error(`could not list its models: ${probe.message}`);
+      // A gateway listing hundreds of models gets one ticked; the owner ticks the rest on its card.
+      const ids = probe.models.map((m) => m.id);
+      models = ids.length <= FOUND_PROBE_KEEP ? ids : ids.slice(0, 1);
+    }
+    if (models.length === 0 && found.provider !== undefined) {
+      // A provider pi-ai knows, found without a model: its first listed one, as Pi would pick.
+      const first = builtinProviders().find((p) => p.provider === found.provider)?.models[0]?.id;
+      if (first !== undefined) models = [first];
+    }
+    if (models.length === 0) throw new Error("no models found for this service");
+    const service: ModelService = {
+      id: serviceIdFor(found, new Set(settings.services.map((s) => s.id))),
+      name: found.name,
+      kind: found.kind,
+      models,
+    };
+    if (found.provider !== undefined) service.provider = found.provider;
+    if (found.baseUrl !== undefined) service.baseUrl = found.baseUrl;
+    if (found.api !== undefined) service.api = found.api;
+    this.log(`[models] added ${service.id} found in ${found.sources.join(", ")}`);
+    return this.putService(service, found.key);
+  }
+
+  private foundView(): FoundServicesView {
+    const found = this.found;
+    if (found === undefined) return { services: [], problems: [] };
+    const services = this.settings().services;
+    return {
+      at: found.at,
+      services: found.scan.services.map((s) => {
+        const have = alreadyAdded(s, services, this.opts.secrets, this.opts.env);
+        return {
+          id: s.id,
+          name: s.name,
+          sources: s.sources,
+          kind: s.kind,
+          ...(s.provider === undefined ? {} : { provider: s.provider }),
+          ...(s.baseUrl === undefined ? {} : { baseUrl: s.baseUrl }),
+          ...(s.api === undefined ? {} : { api: s.api }),
+          models: s.models,
+          keyHint: keyHint(s.key),
+          ...(have === undefined ? {} : { added: { id: have.id, name: have.name } }),
+        };
+      }),
+      problems: found.scan.problems,
+    };
+  }
+
   private writeKey(serviceId: string, key: string): void {
     const account = modelKeyAccount(serviceId);
     if (key.trim() === "") this.opts.secrets.delete(account);
@@ -1863,6 +1944,9 @@ export class Host implements HostApi {
     return this.modelTiers();
   }
 }
+
+/** A found gateway listing more models than this gets none ticked; the owner picks. */
+const FOUND_PROBE_KEEP = 30;
 
 function cleanService(s: ModelService): ModelService {
   const base: ModelService = {
